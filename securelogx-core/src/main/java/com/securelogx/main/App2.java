@@ -7,7 +7,7 @@ import com.securelogx.slf4j.SecureSlf4jLogger;
 
 public class App2 {
     public static void main(String[] args) throws InterruptedException {
-        int totalLogs = 2000;
+        int totalLogs = 200;
         int threads = 1; // 🔁 Change to 4 or 8 for multi-core testing
 
         SecureSlf4jLogger logger = new SecureSlf4jLogger("App");
@@ -20,9 +20,11 @@ public class App2 {
             workers[t] = new Thread(() -> {
                 int logsPerThread = totalLogs / threads;
                 for (int i = 0; i < logsPerThread; i++) {
-                    String jsonLog = String.format("User data: {\"email\":\"john.doe%d@test.com\", \"ssn\":\"123-45-6789\", \"meta\":{\"ip\":\"192.168.1.%d\"}}", i, i % 255);
-                    logger.secure(jsonLog, false);
+              //      String jsonLog = String.format("User data: {\"email\":\"john.doe%d@test.com\", \"ssn\":\"123-45-6789\", \"meta\":{\"ip\":\"192.168.1.%d\"}}", i, i % 255);
+              //      logger.info(jsonLog, false);
                     logger.info("Disk warning at operation index: " + i);
+               //     logger.info("SSN=123-45-6789");
+
                     logger.error( "StackTrace at index " + i + ":\n\tat com.fake.Main.method(Main.java:42)\n\tat java.base/java.lang.Thread.run(Thread.java:829)");
                 }
             }, "LogProducer-" + threadIndex);

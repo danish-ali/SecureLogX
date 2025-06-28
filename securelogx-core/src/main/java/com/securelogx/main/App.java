@@ -1,3 +1,4 @@
+package com.securelogx.main;
 import com.securelogx.slf4j.SecureSlf4jLogger;
 import com.securelogx.api.SecureLogger;
 
@@ -9,8 +10,8 @@ public class App {
         logger.info("User logged in.");
         logger.debug("Debugging authentication flow.");
         logger.warn("Disk space running low.");
-        logger.error("System failure!");
-
+     //   logger.error("System failure!");
+      //  logger.info("User SSN: 123-45-6789");
         // Secure logs with different types of sensitive data
         logger.secure("User SSN: 123-45-6789", true);
         logger.secure("User email: john.doe@example.com", false);
