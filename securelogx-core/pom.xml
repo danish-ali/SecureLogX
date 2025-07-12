@@ -6,7 +6,7 @@
 
   <groupId>com.securelogx</groupId>
   <artifactId>securelogx-core</artifactId>
-  <version>1.0-SNAPSHOT</version>
+  <version>1.0.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
 
@@ -24,19 +24,20 @@
   </properties>
 
   <dependencies>
-    <dependency>
+ <!--   <dependency>
       <groupId>com.securelogx</groupId>
       <artifactId>securelogx-processor</artifactId>
       <version>1.0.0-SNAPSHOT</version>
       <scope>provided</scope>
-    </dependency>
+    </dependency> -->
 
 
     <!-- ✅ SLF4J Logging API -->
-    <dependency>
+   <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
       <version>2.0.7</version>
+       <scope>compile</scope>
     </dependency>
 
     <!-- ✅ ONNX Runtime for Java Inference -->
@@ -71,6 +72,13 @@
       <version>3.7.0</version> <!-- Latest stable as of mid-2025 -->
     </dependency>
 
+      <dependency>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-nop</artifactId>
+          <version>2.0.7</version>
+          <scope>runtime</scope>
+      </dependency>
+
   </dependencies>
 
   <build>
@@ -84,6 +92,13 @@
           <encoding>UTF-8</encoding>
           <source>17</source>
           <target>17</target>
+     <!--     <annotationProcessorPaths>
+            <path>
+              <groupId>com.securelogx</groupId>
+              <artifactId>securelogx-processor</artifactId>
+              <version>${project.version}</version>
+            </path>
+          </annotationProcessorPaths> -->
         </configuration>
       </plugin>
     </plugins>

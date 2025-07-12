@@ -1,77 +1,62 @@
 package com.securelogx.config;
 
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Properties;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
- * Loads and manages environment-based config settings.
- * This class reads and holds configuration for SecureLogX.
- * It loads properties from a file like securelogx-dev.properties or securelogx-prod.properties,
- * depending on the environment.
+ * Configuration loader for SecureLogX.
+ * Reads properties from classpath: securelogx-<env>.properties
  */
-
-
 public class SecureLogXConfig {
-    private Properties props;
+    private final Properties props;
 
-    public SecureLogXConfig(String env) {
-        String configPath = "/securelogx-" + env + ".properties";
+
+    public SecureLogXConfig(String env) throws IOException {
         props = new Properties();
-        try (InputStream in = getClass().getResourceAsStream(configPath)) {
-            props.load(in);
-        } catch (IOException e) {
-            throw new RuntimeException("Could not load config: " + configPath, e);
+        String resource = String.format("securelogx-%s.properties", env);
+
+        // 1) Try loading from classpath
+        InputStream in = getClass().getClassLoader().getResourceAsStream(resource);
+
+        // 2) If not found there, fall back to the working directory
+        if (in == null) {
+            Path path = Paths.get(resource);
+            if (Files.exists(path)) {
+                in = Files.newInputStream(path);
+            }
+        }
+
+        // 3) Bail if still null
+        if (in == null) {
+            throw new IOException("Configuration file not found: " + resource);
+        }
+
+        // 4) Load and close
+        try (InputStream input = in) {
+            props.load(input);
         }
     }
 
-    /**
-     * 	Enable/disable masking for the whole app
-     * @return
-     */
+    public String getMode() {
+        return props.getProperty("securelogx.mode", "CPU_SINGLE");
+    }
+
+    public int getMaxCpuThreads() {
+        return Integer.parseInt(props.getProperty("securelogx.maxCpuThreads", "8"));
+    }
+
     public boolean isMaskingEnabled() {
         return Boolean.parseBoolean(props.getProperty("securelogx.enableMasking", "true"));
     }
 
-    public boolean isShowLastFourEnabled() {
-        return Boolean.parseBoolean(props.getProperty("securelogx.showLastFour", "false"));
-    }
-
-    /**
-     * Points to ONNX  files (e.g., resources/models)
-     * @return
-     */
-    public String getModelPath() {
-        return props.getProperty("securelogx.modelPath", "onnx-model/securelogx-ner.onnx");
-    }
-
-    /**
-     * Points to tokenizer files (e.g., resources/models)
-     * @return
-     */
-    public String getTokenizerPath() {
-        return props.getProperty("securelogx.tokenizerPath", "onnx-model/tokenizer.json");
-    }
-
-    /**
-     * Controls where your masked logs are written
-     * @return
-     */
-    public String getLogFilePath() {
-        return props.getProperty("securelogx.logFile", "logs/securelogx.log");
-    }
-
-    public String getEnvironment() {
-        return props.getProperty("securelogx.environment", "dev");
-    }
-
-    /**
-     * Prevent masking in dev, enable only in prod
-     * @return
-     */
     public boolean shouldMaskInCurrentEnv() {
-        String onlyIn = props.getProperty("securelogx.masking.onlyIn", "prod");
-        return getEnvironment().equalsIgnoreCase(onlyIn);
+        return Boolean.parseBoolean(props.getProperty("securelogx.maskInEnvironments", "true"));
     }
 
     public boolean isCpuMultithreadingEnabled() {
@@ -82,29 +67,26 @@ public class SecureLogXConfig {
         return Boolean.parseBoolean(props.getProperty("securelogx.gpu.inference.enabled", "false"));
     }
 
-    public boolean isKafkaEnabled() {
-        return Boolean.parseBoolean(props.getProperty("securelogx.kafka", "false"));
+    public String getTokenizerPath() {
+        return props.getProperty("securelogx.tokenizerPath");
     }
 
-    /**
-     * Expose all loaded properties so that Kafka producer/consumer
-     * can pull out the kafka.* and ssl.* settings.
-     */
-    public Properties getKafkaProperties() {
-        // Option A: just return everything (producer will only use kafka.* keys)
-      //  return this.props;
+    public String getModelPath() {
+        return props.getProperty("securelogx.modelPath");
+    }
 
-        // Option B: if you want to be strict, filter only kafka.* and ssl.* keys:
+    public String getLogFilePath() {
+        return props.getProperty("securelogx.log.file", "application.log");
+    }
 
-    Properties kafkaProps = new Properties();
-    for (String key : props.stringPropertyNames()) {
-        if (key.startsWith("kafka.") || key.startsWith("ssl.")) {
-            kafkaProps.setProperty(key, props.getProperty(key));
+    public Map<String, Object> getKafkaProperties() {
+        Map<String, Object> map = new HashMap<>();
+        for (String name : props.stringPropertyNames()) {
+            if (name.startsWith("securelogx.kafka.")) {
+                String key = name.substring("securelogx.kafka.".length());
+                map.put(key, props.getProperty(name));
+            }
         }
+        return map;
     }
-    return kafkaProps;
-
-    }
-
-
 }

@@ -42,6 +42,10 @@ public class App2 {
         SecureLogger.getEngine().shutdownExecutor();
         SecureLogger.getEngine().shutdownAppender();
 
+      //  SecureLogger.shutdownExecutor();
+      //  SecureLogger.shutdownAppender();
+
+
         long end = System.nanoTime();
         double seconds = (end - start) / 1_000_000_000.0;
 

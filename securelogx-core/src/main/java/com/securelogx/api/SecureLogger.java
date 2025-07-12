@@ -52,4 +52,25 @@ public class SecureLogger {
     public static SecureLogX getEngine() {
         return getEngineInstance();
     }
+
+    public static void shutdownExecutor() {
+        SecureLogX engine = getEngineInstance();
+        if (engine != null) {
+            try { engine.shutdownExecutor();
+            System.out.println("shutdown executor completed");
+            }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+    }
+
+    public static void shutdownAppender() {
+        SecureLogX engine = getEngineInstance();
+        if (engine != null) {
+            try { engine.shutdownAppender();
+                System.out.println("shutdown appender completed");
+            }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+    }
+
 }

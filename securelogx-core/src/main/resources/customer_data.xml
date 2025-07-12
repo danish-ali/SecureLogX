@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomerData>
+    <Customer id="CUST001">
+        <PersonalInfo>
+            <FirstName>Jane</FirstName>
+            <LastName>Smith</LastName>
+            <DateOfBirth>1985-04-12</DateOfBirth>
+            <SSN>987-65-4321</SSN>
+            <Email>jane.smith@example.com</Email>
+            <Phone>+1-303-555-0198</Phone>
+        </PersonalInfo>
+        <AccountInfo>
+            <AccountNumber>ACC-1002345</AccountNumber>
+            <Balance currency="USD">12500.75</Balance>
+            <CreditCard>
+                <CardType>VISA</CardType>
+                <CardNumber>4012-8888-8888-1881</CardNumber>
+                <Expiry>2027-11</Expiry>
+            </CreditCard>
+        </AccountInfo>
+        <Address>
+            <Street>123 Maple Avenue</Street>
+            <City>Denver</City>
+            <State>CO</State>
+            <PostalCode>80203</PostalCode>
+            <Country>USA</Country>
+        </Address>
+    </Customer>
+
+    <Customer id="CUST002">
+        <PersonalInfo>
+            <FirstName>Robert</FirstName>
+            <LastName>Johnson</LastName>
+            <DateOfBirth>1972-09-30</DateOfBirth>
+            <SSN>123-45-6789</SSN>
+            <Email>robert.johnson@domain.org</Email>
+            <Phone>+1-212-555-0123</Phone>
+        </PersonalInfo>
+        <AccountInfo>
+            <AccountNumber>ACC-1006789</AccountNumber>
+            <Balance currency="USD">780.00</Balance>
+            <CreditCard>
+                <CardType>MASTERCARD</CardType>
+                <CardNumber>5500-0000-0000-0004</CardNumber>
+                <Expiry>2026-06</Expiry>
+            </CreditCard>
+        </AccountInfo>
+        <Address>
+            <Street>456 Oak Street</Street>
+            <City>New York</City>
+            <State>NY</State>
+            <PostalCode>10001</PostalCode>
+            <Country>USA</Country>
+        </Address>
+    </Customer>
+
+    <!-- Add more <Customer> elements as needed for bulk testing -->
+</CustomerData>

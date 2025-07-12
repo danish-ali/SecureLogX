@@ -3,6 +3,9 @@ package com.securelogx.model;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.securelogx.model.LogLevel;
 import com.securelogx.util.CachedClock;
+import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 public class LogEvent {
     private final String message;
@@ -24,6 +27,10 @@ public class LogEvent {
         this.id = level + "-" + timestamp + "-" + sequenceNumber; // Stable unique ID
 
     }
+
+    private static final Pattern RAW_PATTERN = Pattern.compile(
+            "timestamp=\\S+ level=(\\S+) traceId=(\\S+) seq=(\\d+) message=\\\"(.*)\\\""
+    );
 
     public String getMessage() {
         return message;
@@ -66,6 +73,26 @@ public class LogEvent {
             return MAPPER.readValue(json, LogEvent.class);
         } catch (Exception e) {
             throw new RuntimeException("Failed to deserialize LogEvent", e);
+        }
+    }
+
+    public static LogEvent fromRaw(String raw) {
+        Matcher m = RAW_PATTERN.matcher(raw);
+        if (m.matches()) {
+            LogLevel lvl = LogLevel.valueOf(m.group(1));
+            String trace = m.group(2);
+            int seq = Integer.parseInt(m.group(3));
+            String msg = m.group(4);
+            return new LogEvent(msg, lvl, false, trace, seq);
+        } else {
+            // Fallback: treat the entire raw string as the message
+            return new LogEvent(
+                    raw,
+                    LogLevel.INFO,
+                    false,
+                    UUID.randomUUID().toString(),
+                    0
+            );
         }
     }
 

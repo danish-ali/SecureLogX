@@ -2,8 +2,14 @@ package com.securelogx.main;
 import com.securelogx.slf4j.SecureSlf4jLogger;
 import com.securelogx.api.SecureLogger;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
 public class App {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         SecureSlf4jLogger logger = new SecureSlf4jLogger("App");
 
         // Standard log levels
@@ -23,8 +29,33 @@ public class App {
         // Secure log with no sensitive content (should be unchanged if NER is correct)
         logger.secure("User clicked the submit button.", false);
 
-        SecureLogger.getEngine().shutdownExecutor();
-        SecureLogger.getEngine().shutdownAppender();
+        // 2) Read your full XML payload from file or stream
+        String xmlPayload = null;
+        try (InputStream in =
+                     Thread.currentThread()
+                             .getContextClassLoader()
+                             .getResourceAsStream("customer_data.xml")) {
+            if (in == null) {
+                throw new IllegalStateException("Resource not found: customer_data.xml");
+            }
+
+            xmlPayload = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+// 3) Mask everything in one go
+            logger.secure(xmlPayload, true);
+        }
+
+        InputStream in = Thread.currentThread()
+                .getContextClassLoader()
+                .getResourceAsStream("customer_data.json");
+        String jsonPayload = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        logger.secure(jsonPayload, true);
+//to validate that inference threads stop cleanly before your application exits, good for testing only
+      //  SecureLogger.getEngine().shutdownExecutor();
+      //  SecureLogger.getEngine().shutdownAppender();
+        // generic
+       SecureLogger.shutdownExecutor();
+       SecureLogger.shutdownAppender();
+
         System.exit(0);
     }
 }

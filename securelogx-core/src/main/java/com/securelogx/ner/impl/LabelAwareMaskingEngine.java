@@ -13,12 +13,13 @@ import java.util.regex.Pattern;
 public class LabelAwareMaskingEngine {
 
     private final String[] labelMap;
-
+    private final boolean enableFallback;
     // Fallback regex patterns
     private static final Pattern SSN_PATTERN = Pattern.compile("\\b\\d{3}-\\d{2}-\\d{4}\\b");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("\\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}\\b");
 
-    public LabelAwareMaskingEngine() {
+    public LabelAwareMaskingEngine(boolean enableFallback) {
+        this.enableFallback = enableFallback;
         this.labelMap = new String[]{
                 "O", "B-EMAIL", "I-EMAIL", "B-SSN", "I-SSN",
                 "B-NPI", "I-NPI", "B-ADDRESS", "I-ADDRESS",
@@ -26,15 +27,29 @@ public class LabelAwareMaskingEngine {
         };
     }
 
-    public String mask(String originalText, int[] inputIds, float[][][] logits, List<int[]> offsets, boolean showLastFour) {
-        // Step 1: Fallback regex masking first
-        String fallbackMasked = fallbackMask(originalText);
+    /** Default: fallback enabled */
+    public LabelAwareMaskingEngine() {
+        this(false);
+    }
 
-        // Step 2: Apply AI model masking on fallbackMasked
-        StringBuilder maskedText = new StringBuilder(fallbackMasked);
-        Set<Integer> maskedPositions = new HashSet<>();
+    /**
+     * @param originalText   the raw log text (plain, XML or JSON)
+     * @param inputIds       token IDs from your HF tokenizer
+     * @param logits         ONNX model outputs
+     * @param offsets        token→char offsets
+     * @param showLastFour   whether to reveal last-4 digits
+     */
+        public String mask(String originalText, int[] inputIds, float[][][] logits, List<int[]> offsets, boolean showLastFour) {
+            // 1) optionally apply regex fallback
+            String textForAI = enableFallback
+                    ? fallbackMask(originalText)
+                    : originalText;
 
-        int totalTokens = Math.min(logits[0].length, offsets.size());
+            // 2) AI-driven masking on textForAI
+            StringBuilder maskedText = new StringBuilder(textForAI);
+            Set<Integer> maskedPositions = new HashSet<>();
+
+            int totalTokens = Math.min(logits[0].length, offsets.size());
 
         List<int[]> spans = new ArrayList<>();
         int i = 0;

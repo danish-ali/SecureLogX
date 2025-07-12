@@ -8,6 +8,8 @@ import com.securelogx.ner.TokenizedInput;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.Arrays;
+
 
 public class ONNXDynamicInferenceEngine {
     private final OrtEnvironment env;
@@ -34,60 +36,85 @@ public class ONNXDynamicInferenceEngine {
 
     public List<String> runBatch(TokenizerEngine tokenizer, List<LogEvent> batch) {
         System.out.println("[DEBUG] Running ONNX batch inference for batch size: " + batch.size());
+        final int MAX_SEQ_LEN = 512;
         List<String> output = new ArrayList<>();
 
         try {
+            // 1) Tokenize each message
             List<TokenizedInput> encoded = batch.stream()
                     .map(e -> tokenizer.tokenize(e.getMessage()))
                     .collect(Collectors.toList());
 
-            int maxLength = encoded.stream().mapToInt(t -> t.getInputIds().length).max().orElse(0);
+            // 2) Determine seqLen ≤ MAX_SEQ_LEN
+            int rawMax = encoded.stream()
+                    .mapToInt(t -> t.getInputIds().length)
+                    .max().orElse(0);
+            int seqLen = Math.min(rawMax, MAX_SEQ_LEN);
             int batchSize = encoded.size();
 
-            long[][] inputIds = new long[batchSize][maxLength];
-            long[][] attentionMask = new long[batchSize][maxLength];
-            long[][] tokenTypeIds = new long[batchSize][maxLength];
+            // 3) Allocate batch tensors
+            long[][] inputIds      = new long[batchSize][seqLen];
+            long[][] attentionMask = new long[batchSize][seqLen];
+            long[][] tokenTypeIds  = new long[batchSize][seqLen];
 
+            // 4) Copy with truncation
             for (int i = 0; i < batchSize; i++) {
-                int[] ids = encoded.get(i).getInputIds();
+                int[] ids  = encoded.get(i).getInputIds();
                 int[] mask = encoded.get(i).getAttentionMask();
-                for (int j = 0; j < ids.length; j++) {
-                    inputIds[i][j] = ids[j];
+
+                for (int j = 0; j < Math.min(ids.length, seqLen); j++) {
+                    inputIds[i][j]      = ids[j];
                     attentionMask[i][j] = mask[j];
-                    tokenTypeIds[i][j] = 0;
+                    tokenTypeIds[i][j]  = 0;
                 }
             }
 
-            Map<String, OnnxTensor> inputs = new HashMap<>();
-            inputs.put("input_ids", OnnxTensor.createTensor(env, inputIds));
-            inputs.put("attention_mask", OnnxTensor.createTensor(env, attentionMask));
-            inputs.put("token_type_ids", OnnxTensor.createTensor(env, tokenTypeIds));
+            // 5) Build ONNX inputs
+            Map<String, OnnxTensor> inputs = Map.of(
+                    "input_ids",      OnnxTensor.createTensor(env, inputIds),
+                    "attention_mask", OnnxTensor.createTensor(env, attentionMask),
+                    "token_type_ids", OnnxTensor.createTensor(env, tokenTypeIds)
+            );
 
+            // 6) Run the session
             try (OrtSession.Result result = session.run(inputs)) {
                 float[][][] logits = (float[][][]) result.get(0).getValue();
+
+                // 7) Mask and format each message
                 for (int i = 0; i < batchSize; i++) {
+                    // Pull the original offsets list
+                    List<int[]> rawOffsets = encoded.get(i).getOffsets();
+                    // Truncate it locally to seqLen
+                    List<int[]> truncatedOffsets = rawOffsets.size() > seqLen
+                            ? rawOffsets.subList(0, seqLen)
+                            : rawOffsets;
+
+                    // Call your mask method
                     String masked = maskingEngine.mask(
                             batch.get(i).getMessage(),
                             encoded.get(i).getInputIds(),
                             new float[][][]{logits[i]},
-                            encoded.get(i).getOffsets(),
+                            truncatedOffsets,
                             batch.get(i).shouldShowLastFour()
                     );
+
                     String timestamp = java.time.LocalDateTime.now().toString();
-                    String formatted = String.format("timestamp=%s level=%s traceId=%s seq=%d message=\"%s\"",
+                    String formatted = String.format(
+                            "timestamp=%s level=%s traceId=%s seq=%d message=\"%s\"",
                             timestamp,
                             batch.get(i).getLevel().name(),
                             batch.get(i).getTraceId(),
                             batch.get(i).getSequenceNumber(),
-                            masked);
+                            masked
+                    );
                     output.add(formatted);
                 }
             }
 
-         /*   System.out.println("[DEBUG] Masked outputs generated: " + output.size());
+            System.out.println("[DEBUG] Masked outputs generated: " + output.size());
             if (!output.isEmpty()) {
                 System.out.println("[DEBUG] First masked output: " + output.get(0));
-            } */
+            }
 
         } catch (Exception e) {
             System.err.println("[ERROR] Batch inference failed for batch size: " + batch.size());
