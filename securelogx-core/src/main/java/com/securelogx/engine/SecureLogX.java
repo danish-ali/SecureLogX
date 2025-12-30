@@ -42,8 +42,8 @@ public class SecureLogX {
     private volatile boolean running = true;
     private Thread batchThread;
 
-    private static final int BATCH_SIZE = 8;
-    private static final int INFERENCE_QUEUE_CAPACITY = 10_000;
+    private static final int BATCH_SIZE = 32;
+    private static final int INFERENCE_QUEUE_CAPACITY = 100_000;
     private static final ThreadLocal<RequestContext> requestContext = ThreadLocal.withInitial(RequestContext::new);
 
     /**
@@ -106,11 +106,14 @@ public class SecureLogX {
                 boolean multiCpu = (mode == Mode.CPU_MULTI);
                 boolean useGpu   = (mode == Mode.GPU);
                 int cores = Runtime.getRuntime().availableProcessors();
-                int threads = useGpu ? 1 : (multiCpu ? Math.min(config.getMaxCpuThreads(), cores) : 1);
+                // Reduce thread count for GPU mode to avoid contention
+                int threads = useGpu ? Math.min(4, cores) : (multiCpu ? Math.min(config.getMaxCpuThreads(), cores) : 1);
                 this.WRITER_THREAD_COUNT = threads;
 
                 this.executor = multiCpu ? Executors.newFixedThreadPool(threads) : null;
-                this.inferenceQueue = new ArrayBlockingQueue<>(INFERENCE_QUEUE_CAPACITY);
+                // Only create inference queue for multi-threaded modes
+                this.inferenceQueue = (WRITER_THREAD_COUNT > 1) ? new ArrayBlockingQueue<>(INFERENCE_QUEUE_CAPACITY) : null;
+
 
                 for (int i = 0; i < WRITER_THREAD_COUNT; i++) {
                     writerBuffers.add(new ArrayBlockingQueue<>(INFERENCE_QUEUE_CAPACITY));
@@ -140,9 +143,59 @@ public class SecureLogX {
         process(new LogEvent(message, level, showLastFour, ctx.traceId, seq));
     }
 
+/*    public void process(LogEvent log) {
+        System.out.println("[DEBUG] Entering process(), mode=" + mode);
+        String ts = LocalDateTime.now().toString();
+        if (mode == Mode.KAFKA) {
+            System.out.println("[DEBUG] In KAFKA branch, about to sendRaw");
+            kafkaProducer.sendRaw(formatLog(log, ts, log.getMessage()));
+            System.out.println("[DEBUG] After sendRaw, returning");
+            return;
+        }
+        // Multi-threaded: enqueue for the batcher
+        else {
+            // Monitor queue health
+            int queueSize = inferenceQueue.size();
+            if (queueSize > INFERENCE_QUEUE_CAPACITY * 0.8) {
+                System.err.println("[SecureLogX] WARNING: Inference queue " + queueSize + "/" + INFERENCE_QUEUE_CAPACITY + " (80%+ full)");
+            }
+
+            try {
+                inferenceQueue.put(log);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("[SecureLogX] Interrupted while queueing log for inference");
+            }
+        }
+
+
+        boolean needMask = log.requiresNER()
+                && config.isMaskingEnabled()
+                && config.shouldMaskInCurrentEnv();
+
+        // No masking → immediate write
+        if (!needMask) {
+            writeLine(formatLog(log, ts, log.getMessage()));
+            return;
+        }
+
+        // Single-threaded: do inference synchronously
+        if (WRITER_THREAD_COUNT <= 1) {
+            List<String> masked = inferenceEngine.runBatch(tokenizer, List.of(log));
+            writeLine(masked.get(0));
+        }
+        // Multi-threaded: enqueue for the batcher
+        else {
+            inferenceQueue.offer(log);
+        }
+    } */
+
+
+
     public void process(LogEvent log) {
         System.out.println("[DEBUG] Entering process(), mode=" + mode);
         String ts = LocalDateTime.now().toString();
+
         if (mode == Mode.KAFKA) {
             System.out.println("[DEBUG] In KAFKA branch, about to sendRaw");
             kafkaProducer.sendRaw(formatLog(log, ts, log.getMessage()));
@@ -167,10 +220,20 @@ public class SecureLogX {
         }
         // Multi-threaded: enqueue for the batcher
         else {
-            inferenceQueue.offer(log);
+            // Monitor queue health
+            int queueSize = inferenceQueue.size();
+            if (queueSize > INFERENCE_QUEUE_CAPACITY * 0.8) {
+                System.err.println("[SecureLogX] WARNING: Inference queue " + queueSize + "/" + INFERENCE_QUEUE_CAPACITY + " (80%+ full)");
+            }
+
+            try {
+                inferenceQueue.put(log);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("[SecureLogX] Interrupted while queueing log for inference");
+            }
         }
     }
-
 
     private void startBatchInferenceThread() {
         batchThread = new Thread(() -> {
@@ -221,12 +284,18 @@ public class SecureLogX {
         }
     }
 
+
     private void writeLine(String line) {
         if (WRITER_THREAD_COUNT <= 1) {
             writerAppenders.get("writer0").write(line);
         } else {
             int idx = writerIndex.getAndIncrement() % WRITER_THREAD_COUNT;
-            writerBuffers.get(idx).offer(line);
+            try {
+                writerBuffers.get(idx).put(line);  // ✅ Blocks instead of dropping
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("[SecureLogX] Interrupted while writing log: " + line);
+            }
         }
     }
 
@@ -254,6 +323,11 @@ public class SecureLogX {
 
     public boolean isQueueEmpty() {
         if (mode == Mode.KAFKA) return true;
+
+        // For single-threaded mode, no queues are used
+        if (WRITER_THREAD_COUNT <= 1) return true;
+
+        // For multi-threaded modes, check all queues
         return inferenceQueue.isEmpty() && writerBuffers.stream().allMatch(Queue::isEmpty);
     }
 

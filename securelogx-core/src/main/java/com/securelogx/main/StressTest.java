@@ -10,8 +10,8 @@ import java.util.UUID;
 
 public class StressTest {
     public static void main(String[] args) throws Exception {
-        int totalLogs = 300_000;
-        int threads = 1; // 🔁 Change to 4 or 8 for multi-core testing
+        int totalLogs = 300_0000;
+        int threads = 100; // 🔁 Change to 4 or 8 for multi-core testing
 
         boolean usePerThreadFiles = true; // 🔁 Toggle this for benchmarking
 
@@ -33,12 +33,12 @@ public class StressTest {
                     // ⚙️ Simulate computational overhead (SHA-256 hash of payload)
                     String payload = "{" +
                             "\"email\":\"john.doe" + i + "@test.com\"," +
-                      //      "\"ssn\":\"123-45-6789\"," +
+                           "\"ssn\":\"123-45-6789\"," +
                             "\"address\":\"123 Main St, NY\"}";
 
                     String heavyPayload = hash(payload) + payload.replaceAll("[aeiou]", "*");
 
-                 //   SecureLogger.log(LogLevel.INFO, heavyPayload);
+                    SecureLogger.log(LogLevel.INFO, heavyPayload);
                     SecureLogger.log(LogLevel.WARN, "<warning index='" + i + "'>Low Disk</warning>");
                     SecureLogger.log(LogLevel.ERROR, "<error><msg>Failure " + i + "</msg><trace>...</trace></error>");
 
