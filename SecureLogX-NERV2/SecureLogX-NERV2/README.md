@@ -1,2 +1,0 @@
-# SecureLogX-NERV2
-
