@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv311/
+.env/
+data/kaggle_pii
+
+# ONNX model outputs (regenerate via export script)
+onnx-model/
+models/
+
+# Data folders, logs, intermediate files
+training-data/
+
+#  Python fine-tuned model dir
+securelogx-hf-ner/
+
+
+hf_ready/
+
+# Virtual-envs
+venv/
+venv311/

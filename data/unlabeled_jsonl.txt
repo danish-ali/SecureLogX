@@ -1,0 +1,100 @@
+{"timestamp": "2025-10-12T20:23:28.154287Z", "level": "SECURE", "traceId": "85a85de9-116a-4850-ae89-afd927a6e345", "seq": 1, "message": "Patient NPI: 3218196001"}
+{"timestamp": "2025-10-12T20:23:28.284287Z", "level": "SECURE", "traceId": "85a85de9-116a-4850-ae89-afd927a6e345", "seq": 2, "message": "Patient NPI: 8637940265"}
+{"timestamp": "2025-10-12T20:23:28.340287Z", "level": "SECURE", "traceId": "85a85de9-116a-4850-ae89-afd927a6e345", "seq": 3, "message": "Phone: (161) 559-4078"}
+{"timestamp": "2025-10-12T20:23:28.437287Z", "level": "SECURE", "traceId": "85a85de9-116a-4850-ae89-afd927a6e345", "seq": 4, "message": "Customer address: 5935 Maple Blvd, Raleigh"}
+{"timestamp": "2025-10-12T20:23:28.607287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 1, "message": "Customer address: 1317 Maple Blvd, NY"}
+{"timestamp": "2025-10-12T20:23:28.724287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 2, "message": "Phone: 553-419-2832"}
+{"timestamp": "2025-10-12T20:23:28.794287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 3, "message": "Patient NPI: 5030564139"}
+{"timestamp": "2025-10-12T20:23:28.875287Z", "level": "INFO", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 4, "message": "payload"}
+{"timestamp": "2025-10-12T20:23:28.993287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 5, "message": "Credit Card: 4111 1111 1111 1111", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:29.131287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 6, "message": "Customer name: Ravi Williams"}
+{"timestamp": "2025-10-12T20:23:29.167287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 7, "message": "User email: fatima.doe@example.com"}
+{"timestamp": "2025-10-12T20:23:29.208287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 8, "message": "Customer name: Ravi Smith"}
+{"timestamp": "2025-10-12T20:23:29.361287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 9, "message": "Customer address: 9074 Main St, Raleigh"}
+{"timestamp": "2025-10-12T20:23:29.536287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 10, "message": "Customer address: 5583 Oak Ave, Austin"}
+{"timestamp": "2025-10-12T20:23:29.653287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 11, "message": "Customer address: 8211 Pine Rd, Seattle"}
+{"timestamp": "2025-10-12T20:23:29.814287Z", "level": "SECURE", "traceId": "8b2e0700-60b1-4b6f-a100-d6aa512185f9", "seq": 12, "message": "Patient NPI: 2528809570", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:29.907287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 1, "message": "Customer address: 3933 Main St, Charlotte"}
+{"timestamp": "2025-10-12T20:23:29.928287Z", "level": "DEBUG", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 2, "message": "payload"}
+{"timestamp": "2025-10-12T20:23:30.065287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 3, "message": "Credit Card: 4111111111111111"}
+{"timestamp": "2025-10-12T20:23:30.206287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 4, "message": "Customer name: Sam Johnson"}
+{"timestamp": "2025-10-12T20:23:30.383287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 5, "message": "Customer address: 6547 Cedar Ct, San Jose"}
+{"timestamp": "2025-10-12T20:23:30.499287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 6, "message": "Patient NPI: 1509839301", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:30.515287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 7, "message": "User SSN: 438-19-9423", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:30.687287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 8, "message": "Credit Card: 4111111111111111"}
+{"timestamp": "2025-10-12T20:23:30.834287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 9, "message": "Patient NPI: 7631165667"}
+{"timestamp": "2025-10-12T20:23:30.848287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 10, "message": "User email: john.williams@corp.local"}
+{"timestamp": "2025-10-12T20:23:30.876287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 11, "message": "Patient NPI: 8726247317", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:31.017287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 12, "message": "User SSN: 195-40-3724", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:31.141287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 13, "message": "Customer name: John Patel"}
+{"timestamp": "2025-10-12T20:23:31.241287Z", "level": "INFO", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 14, "message": "payload"}
+{"timestamp": "2025-10-12T20:23:31.429287Z", "level": "INFO", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 15, "message": "payload"}
+{"timestamp": "2025-10-12T20:23:31.444287Z", "level": "SECURE", "traceId": "358bfe0f-0dca-41d3-96f1-bb537a821ef4", "seq": 16, "message": "User SSN: 865-50-1936"}
+{"timestamp": "2025-10-12T20:23:31.567287Z", "level": "SECURE", "traceId": "57a7a8a9-e491-433b-8b5b-ad6c31d1f6c8", "seq": 1, "message": "Credit Card: 4111 1111 1111 1111"}
+{"timestamp": "2025-10-12T20:23:31.588287Z", "level": "SECURE", "traceId": "57a7a8a9-e491-433b-8b5b-ad6c31d1f6c8", "seq": 2, "message": "User email: danish.smith@mail.test"}
+{"timestamp": "2025-10-12T20:23:31.734287Z", "level": "SECURE", "traceId": "57a7a8a9-e491-433b-8b5b-ad6c31d1f6c8", "seq": 3, "message": "User SSN: 734-20-7868", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:31.879287Z", "level": "SECURE", "traceId": "57a7a8a9-e491-433b-8b5b-ad6c31d1f6c8", "seq": 4, "message": "Customer address: 3356 Cedar Ct, Charlotte"}
+{"timestamp": "2025-10-12T20:23:31.913287Z", "level": "SECURE", "traceId": "57a7a8a9-e491-433b-8b5b-ad6c31d1f6c8", "seq": 5, "message": "Customer address: 7501 Cedar Ct, NY"}
+{"timestamp": "2025-10-12T20:23:32.073287Z", "level": "SECURE", "traceId": "8f3491b5-d57b-4f78-af39-885f762c6a5b", "seq": 1, "message": "User email: jane.johnson@mail.test"}
+{"timestamp": "2025-10-12T20:23:32.107287Z", "level": "SECURE", "traceId": "8f3491b5-d57b-4f78-af39-885f762c6a5b", "seq": 2, "message": "User email: sam.singh@corp.local"}
+{"timestamp": "2025-10-12T20:23:32.247287Z", "level": "SECURE", "traceId": "8f3491b5-d57b-4f78-af39-885f762c6a5b", "seq": 3, "message": "User SSN: 783-80-5905"}
+{"timestamp": "2025-10-12T20:23:32.274287Z", "level": "SECURE", "traceId": "8f3491b5-d57b-4f78-af39-885f762c6a5b", "seq": 4, "message": "Credit Card: 5555-5555-5555-4444"}
+{"timestamp": "2025-10-12T20:23:32.302287Z", "level": "SECURE", "traceId": "a2574758-ca6e-4f82-801c-7cf66a9cd071", "seq": 1, "message": "Credit Card: 5555-5555-5555-4444"}
+{"timestamp": "2025-10-12T20:23:32.356287Z", "level": "SECURE", "traceId": "a2574758-ca6e-4f82-801c-7cf66a9cd071", "seq": 2, "message": "Patient NPI: 4874016400"}
+{"timestamp": "2025-10-12T20:23:32.390287Z", "level": "SECURE", "traceId": "a2574758-ca6e-4f82-801c-7cf66a9cd071", "seq": 3, "message": "Customer address: 2657 Elm St, Seattle"}
+{"timestamp": "2025-10-12T20:23:32.534287Z", "level": "SECURE", "traceId": "a2574758-ca6e-4f82-801c-7cf66a9cd071", "seq": 4, "message": "User email: noor.patel@test.net"}
+{"timestamp": "2025-10-12T20:23:32.629287Z", "level": "SECURE", "traceId": "fb81d935-981a-4459-b240-fe40e237b511", "seq": 1, "message": "Credit Card: 5555-5555-5555-4444"}
+{"timestamp": "2025-10-12T20:23:32.708287Z", "level": "SECURE", "traceId": "fb81d935-981a-4459-b240-fe40e237b511", "seq": 2, "message": "User SSN: 466-36-5088"}
+{"timestamp": "2025-10-12T20:23:32.799287Z", "level": "SECURE", "traceId": "fb81d935-981a-4459-b240-fe40e237b511", "seq": 3, "message": "Customer name: Ravi Patel"}
+{"timestamp": "2025-10-12T20:23:32.860287Z", "level": "SECURE", "traceId": "fb81d935-981a-4459-b240-fe40e237b511", "seq": 4, "message": "Credit Card: 5555-5555-5555-4444"}
+{"timestamp": "2025-10-12T20:23:33.049287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 1, "message": "Customer name: Noor Ng"}
+{"timestamp": "2025-10-12T20:23:33.229287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 2, "message": "User SSN: 581-38-4269", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:33.347287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 3, "message": "Patient NPI: 3036541458", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:33.485287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 4, "message": "User SSN: 218-43-3925", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:33.553287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 5, "message": "Customer name: Lee Singh"}
+{"timestamp": "2025-10-12T20:23:33.684287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 6, "message": "Patient NPI: 4060883561", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:33.769287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 7, "message": "User email: noor.ali@test.net"}
+{"timestamp": "2025-10-12T20:23:33.874287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 8, "message": "Customer address: 9093 Pine Rd, Charlotte"}
+{"timestamp": "2025-10-12T20:23:33.972287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 9, "message": "Credit Card: 4111111111111111"}
+{"timestamp": "2025-10-12T20:23:34.076287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 10, "message": "User SSN: 411-46-4443"}
+{"timestamp": "2025-10-12T20:23:34.225287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 11, "message": "Phone: 773.872.1489"}
+{"timestamp": "2025-10-12T20:23:34.418287Z", "level": "SECURE", "traceId": "0f191ef4-b60c-4b51-b95e-bcba9b05effc", "seq": 12, "message": "Customer address: 3690 Maple Blvd, Charlotte"}
+{"timestamp": "2025-10-12T20:23:34.481287Z", "level": "SECURE", "traceId": "ad46af0a-2781-4090-9497-9f3881b6c91c", "seq": 1, "message": "User email: pat.williams@test.net"}
+{"timestamp": "2025-10-12T20:23:34.660287Z", "level": "SECURE", "traceId": "ad46af0a-2781-4090-9497-9f3881b6c91c", "seq": 2, "message": "Customer name: Sam Patel"}
+{"timestamp": "2025-10-12T20:23:34.662287Z", "level": "SECURE", "traceId": "ad46af0a-2781-4090-9497-9f3881b6c91c", "seq": 3, "message": "User email: fatima.williams@mail.test"}
+{"timestamp": "2025-10-12T20:23:34.841287Z", "level": "SECURE", "traceId": "ad46af0a-2781-4090-9497-9f3881b6c91c", "seq": 4, "message": "User SSN: 670-41-2988"}
+{"timestamp": "2025-10-12T20:23:34.960287Z", "level": "SECURE", "traceId": "ad46af0a-2781-4090-9497-9f3881b6c91c", "seq": 5, "message": "Phone: 986.872.7743"}
+{"timestamp": "2025-10-12T20:23:35.031287Z", "level": "INFO", "traceId": "ad46af0a-2781-4090-9497-9f3881b6c91c", "seq": 6, "message": "payload"}
+{"timestamp": "2025-10-12T20:23:35.051287Z", "level": "SECURE", "traceId": "ad46af0a-2781-4090-9497-9f3881b6c91c", "seq": 7, "message": "Patient NPI: 4558122362"}
+{"timestamp": "2025-10-12T20:23:35.068287Z", "level": "SECURE", "traceId": "ad46af0a-2781-4090-9497-9f3881b6c91c", "seq": 8, "message": "Phone: 603.669.0967"}
+{"timestamp": "2025-10-12T20:23:35.159287Z", "level": "SECURE", "traceId": "021d11fc-9e27-46d2-8a01-1e5e0d6797a2", "seq": 1, "message": "Customer name: Kim Johnson"}
+{"timestamp": "2025-10-12T20:23:35.299287Z", "level": "SECURE", "traceId": "021d11fc-9e27-46d2-8a01-1e5e0d6797a2", "seq": 2, "message": "Patient NPI: 7346706562"}
+{"timestamp": "2025-10-12T20:23:35.332287Z", "level": "SECURE", "traceId": "021d11fc-9e27-46d2-8a01-1e5e0d6797a2", "seq": 3, "message": "User SSN: 503-85-1444"}
+{"timestamp": "2025-10-12T20:23:35.442287Z", "level": "INFO", "traceId": "9ab6c69e-94a6-41bd-99f5-d94250c21b6a", "seq": 1, "message": "payload"}
+{"timestamp": "2025-10-12T20:23:35.526287Z", "level": "SECURE", "traceId": "9ab6c69e-94a6-41bd-99f5-d94250c21b6a", "seq": 2, "message": "Phone: +1-646-417-0805"}
+{"timestamp": "2025-10-12T20:23:35.544287Z", "level": "SECURE", "traceId": "9ab6c69e-94a6-41bd-99f5-d94250c21b6a", "seq": 3, "message": "User SSN: 872-13-5051"}
+{"timestamp": "2025-10-12T20:23:35.550287Z", "level": "SECURE", "traceId": "9ab6c69e-94a6-41bd-99f5-d94250c21b6a", "seq": 4, "message": "Patient NPI: 2719374529"}
+{"timestamp": "2025-10-12T20:23:35.742287Z", "level": "SECURE", "traceId": "9ab6c69e-94a6-41bd-99f5-d94250c21b6a", "seq": 5, "message": "Credit Card: 5555-5555-5555-4444"}
+{"timestamp": "2025-10-12T20:23:35.749287Z", "level": "SECURE", "traceId": "44553775-68ec-4b45-834e-99307e4b3a60", "seq": 1, "message": "Customer name: Kim Ng"}
+{"timestamp": "2025-10-12T20:23:35.926287Z", "level": "SECURE", "traceId": "e448e616-bcd9-4b94-85fc-e3acbdbb4299", "seq": 1, "message": "Patient NPI: 1491905865"}
+{"timestamp": "2025-10-12T20:23:36.092287Z", "level": "SECURE", "traceId": "b7fad6d3-12e1-47fd-9945-5937fbc91f86", "seq": 1, "message": "Customer name: Pat Smith"}
+{"timestamp": "2025-10-12T20:23:36.185287Z", "level": "DEBUG", "traceId": "b7fad6d3-12e1-47fd-9945-5937fbc91f86", "seq": 2, "message": "payload"}
+{"timestamp": "2025-10-12T20:23:36.373287Z", "level": "SECURE", "traceId": "b7fad6d3-12e1-47fd-9945-5937fbc91f86", "seq": 3, "message": "Customer address: 8827 Elm St, San Jose"}
+{"timestamp": "2025-10-12T20:23:36.561287Z", "level": "SECURE", "traceId": "b7fad6d3-12e1-47fd-9945-5937fbc91f86", "seq": 4, "message": "Phone: 147-379-9650"}
+{"timestamp": "2025-10-12T20:23:36.645287Z", "level": "SECURE", "traceId": "b7fad6d3-12e1-47fd-9945-5937fbc91f86", "seq": 5, "message": "Patient NPI: 5454948083", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:36.830287Z", "level": "SECURE", "traceId": "137b4a75-5a75-4e5a-871e-81b276ba7908", "seq": 1, "message": "Patient NPI: 7770143634"}
+{"timestamp": "2025-10-12T20:23:36.925287Z", "level": "SECURE", "traceId": "137b4a75-5a75-4e5a-871e-81b276ba7908", "seq": 2, "message": "Phone: 855.744.4313"}
+{"timestamp": "2025-10-12T20:23:37.116287Z", "level": "SECURE", "traceId": "137b4a75-5a75-4e5a-871e-81b276ba7908", "seq": 3, "message": "Credit Card: 4111 1111 1111 1111"}
+{"timestamp": "2025-10-12T20:23:37.240287Z", "level": "SECURE", "traceId": "137b4a75-5a75-4e5a-871e-81b276ba7908", "seq": 4, "message": "Customer address: 1657 Maple Blvd, Austin"}
+{"timestamp": "2025-10-12T20:23:37.286287Z", "level": "SECURE", "traceId": "137b4a75-5a75-4e5a-871e-81b276ba7908", "seq": 5, "message": "Credit Card: 5555-5555-5555-4444", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:37.300287Z", "level": "SECURE", "traceId": "ef2d17ff-17d9-4440-8b94-1580112861e0", "seq": 1, "message": "Credit Card: 4111111111111111"}
+{"timestamp": "2025-10-12T20:23:37.426287Z", "level": "SECURE", "traceId": "ef2d17ff-17d9-4440-8b94-1580112861e0", "seq": 2, "message": "User SSN: 687-46-8690", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:37.514287Z", "level": "SECURE", "traceId": "ef2d17ff-17d9-4440-8b94-1580112861e0", "seq": 3, "message": "User SSN: 358-71-2869", "showLastFour": true}
+{"timestamp": "2025-10-12T20:23:37.617287Z", "level": "SECURE", "traceId": "ef2d17ff-17d9-4440-8b94-1580112861e0", "seq": 4, "message": "User SSN: 255-29-5978"}
+{"timestamp": "2025-10-12T20:23:37.681287Z", "level": "SECURE", "traceId": "3ab8364e-055d-4371-812b-ffee410c7ee8", "seq": 1, "message": "Customer name: Ravi Garcia"}
+{"timestamp": "2025-10-12T20:23:37.739287Z", "level": "SECURE", "traceId": "3ab8364e-055d-4371-812b-ffee410c7ee8", "seq": 2, "message": "Customer name: Pat Brown"}
+{"timestamp": "2025-10-12T20:23:37.890287Z", "level": "SECURE", "traceId": "3ab8364e-055d-4371-812b-ffee410c7ee8", "seq": 3, "message": "Customer address: 9326 Main St, Seattle"}
+{"timestamp": "2025-10-12T20:23:37.916287Z", "level": "SECURE", "traceId": "3ab8364e-055d-4371-812b-ffee410c7ee8", "seq": 4, "message": "Patient NPI: 3412328120"}
+{"timestamp": "2025-10-12T20:23:38.093287Z", "level": "SECURE", "traceId": "3ab8364e-055d-4371-812b-ffee410c7ee8", "seq": 5, "message": "Customer address: 544 Maple Blvd, Austin"}
+{"timestamp": "2025-10-12T20:23:38.273287Z", "level": "SECURE", "traceId": "3ab8364e-055d-4371-812b-ffee410c7ee8", "seq": 6, "message": "User email: ravi.ng@corp.local"}
+{"timestamp": "2025-10-12T20:23:38.434287Z", "level": "SECURE", "traceId": "3ab8364e-055d-4371-812b-ffee410c7ee8", "seq": 7, "message": "Patient NPI: 6183242102"}
