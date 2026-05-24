@@ -1,0 +1,64 @@
+{
+  "customers": [
+    {
+      "id": "CUST001",
+      "personalInfo": {
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "dateOfBirth": "1985-04-12",
+        "ssn": "987-65-4321",
+        "email": "jane.smith@example.com",
+        "phone": "+1-303-555-0198"
+      },
+      "accountInfo": {
+        "accountNumber": "ACC-1002345",
+        "balance": {
+          "currency": "USD",
+          "amount": 12500.75
+        },
+        "creditCard": {
+          "cardType": "VISA",
+          "cardNumber": "4012-8888-8888-1881",
+          "expiry": "2027-11"
+        }
+      },
+      "address": {
+        "street": "123 Maple Avenue",
+        "city": "Denver",
+        "state": "CO",
+        "postalCode": "80203",
+        "country": "USA"
+      }
+    },
+    {
+      "id": "CUST002",
+      "personalInfo": {
+        "firstName": "Robert",
+        "lastName": "Johnson",
+        "dateOfBirth": "1972-09-30",
+        "ssn": "123-45-6789",
+        "email": "robert.johnson@domain.org",
+        "phone": "(212) 555-0123"
+      },
+      "accountInfo": {
+        "accountNumber": "ACC-1006789",
+        "balance": {
+          "currency": "USD",
+          "amount": 780.00
+        },
+        "creditCard": {
+          "cardType": "MASTERCARD",
+          "cardNumber": "5500-0000-0000-0004",
+          "expiry": "2026-06"
+        }
+      },
+      "address": {
+        "street": "456 Oak Street",
+        "city": "New York",
+        "state": "NY",
+        "postalCode": "10001",
+        "country": "USA"
+      }
+    }
+  ]
+}
