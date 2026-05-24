@@ -12,12 +12,13 @@ import java.nio.file.Paths;
 import java.util.UUID;
 
 public class App {
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
         SecureSlf4jLogger logger = new SecureSlf4jLogger("App");
         System.out.println("Current mode: " + System.getProperty("securelogx.mode", "CPU_SINGLE"));
 
         int totalLogs = 10000;
         long start = System.nanoTime();
+        int j = 0;
         for (int i = 0; i < totalLogs; i++) {
             String traceId = UUID.randomUUID().toString();
             MDC.put("traceId", traceId);
@@ -41,6 +42,7 @@ public class App {
             logger.secure("Patient NPI: 1234567890", false);
             logger.secure("Customer address: 123 Main St, NY", false);
             logger.secure("Phone: (123) 456-7890", false);
+            j++;
 
             // Secure log with no sensitive content (should be unchanged if NER is correct)
           //  logger.secure("User clicked the submit button.", false);
@@ -68,37 +70,32 @@ public class App {
         logger.secure(jsonPayload, true);
 */
         // Wait for all queues to be processed before shutdown
-        SecureLogX engine = SecureLogger.getEngine();
+        // ==== GRACEFUL FLUSH BEFORE SHUTDOWN ====
+        SecureLogX engine = SecureLogger.getEngine();   // same as in your test
         if (engine != null) {
-            // Wait for queues to drain
+            // 1) Wait until internal queues are drained
             while (!engine.isQueueEmpty()) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
+                Thread.sleep(100);
             }
-            // Give a bit more time for final writes
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+
+            // 2) Give a little extra time for final writes under heavy load
+            Thread.sleep(1000);
         }
 
-        SecureLogger.shutdownExecutor();
+        // 3) Stop any executors / consumers if you have this in SecureLogger
+        SecureLogger.shutdownExecutor();  // must internally do shutdown() + awaitTermination()
+
+        // 4) Now stop batch/writer threads and close files
         SecureLogger.shutdownAppender();
 
         long end = System.nanoTime();
         double seconds = (end - start) / 1_000_000_000.0;
 
         System.out.println("----- Performance Summary -----");
-        System.out.println("Total log events: " + (totalLogs));
+        System.out.println("Total log events: " + totalLogs + " (6 per log)" + j*6);
         System.out.println("Total time taken: " + seconds + " seconds");
-        System.out.println("Logs per second: " + ((totalLogs * 3) / seconds));
+        System.out.println("Logs per second: " + (j*6 / seconds));
 
-
-        System.exit(0);
+        // optional: you don't really need System.exit(0) here
     }
 }

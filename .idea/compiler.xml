@@ -9,6 +9,5 @@
         <module name="securelogx-core" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel target="21" />
   </component>
 </project>
