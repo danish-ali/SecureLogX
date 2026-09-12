@@ -5,53 +5,39 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="19db8829-6881-466b-ae36-d3b528b48f3b" name="Changes" comment="fixed multi CPU processing time">
-      <change afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/compiler.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/compiler.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/jarRepositories.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/jarRepositories.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/practice/src/faang_sa_coding_class_plan.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/securelogx.writer0.log" beforeDir="false" afterPath="$PROJECT_DIR$/logs/securelogx.writer0.log" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/securelogx.writer1.log" beforeDir="false" afterPath="$PROJECT_DIR$/logs/securelogx.writer1.log" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/securelogx.writer2.log" beforeDir="false" afterPath="$PROJECT_DIR$/logs/securelogx.writer2.log" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/securelogx.writer3.log" beforeDir="false" afterPath="$PROJECT_DIR$/logs/securelogx.writer3.log" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/securelogx.writer4.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/securelogx.writer5.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/securelogx.writer6.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/logs/securelogx.writer7.log" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/securelogx-core/src/main/java/com/securelogx/engine/SecureLogX.java" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/src/main/java/com/securelogx/engine/SecureLogX.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/securelogx-core/src/main/java/com/securelogx/main/App.java" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/src/main/java/com/securelogx/main/App.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/securelogx-core/src/main/java/com/securelogx/ner/impl/ONNXDynamicInferenceEngine.java" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/src/main/java/com/securelogx/ner/impl/ONNXDynamicInferenceEngine.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/securelogx-core/src/main/resources/securelogx-dev.properties" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/src/main/resources/securelogx-dev.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/App.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/META-INF/services/org.slf4j.spi.SLF4JServiceProvider" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/api/SecureLogger.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/config/SecureLogXConfig.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/engine/SecureLogX$RequestContext.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/engine/SecureLogX.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/io/SecureFileAppender.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/kafka/SecureLogXKafkaListener.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/kafka/SecureLogXKafkaProducer.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/main/App2.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/main/StressTest.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/model/LogEvent.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/model/LogLevel.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/ner/InferenceEngine.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/ner/TokenizedInput.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/ner/TokenizerEngine.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/ner/impl/LabelAwareMaskingEngine.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/ner/impl/ONNXDynamicInferenceEngine.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/ner/impl/ParallelTokenizer.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/ner/impl/PureJavaTokenizer.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/slf4j/SecureSlf4jLogger.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/slf4j/SecureSlf4jLoggerFactory.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/slf4j/SecureSlf4jServiceProvider.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/securelogx/util/CachedClock.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/securelogx-dev.properties" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/maven-archiver/pom.properties" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/securelogx-core-1.0-SNAPSHOT.jar" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/api/SecureLogger.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/api/SecureLogger.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/app/AppLauncher.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/app/AppLauncher.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/config/SecureLogXConfig.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/config/SecureLogXConfig.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/consumer/MaskingConsumer.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/consumer/MaskingConsumer.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/engine/SecureLogX$Mode.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/engine/SecureLogX$Mode.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/engine/SecureLogX$RequestContext.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/engine/SecureLogX$RequestContext.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/engine/SecureLogX.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/engine/SecureLogX.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/io/SecureFileAppender.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/io/SecureFileAppender.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/kafka/SecureLogXKafkaListener.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/kafka/SecureLogXKafkaListener.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/kafka/SecureLogXKafkaProducer.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/kafka/SecureLogXKafkaProducer.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/main/App.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/main/App.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/main/App2.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/main/App2.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/main/LogGen.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/main/LogGen.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/main/StressTest.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/main/StressTest.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/model/LogEvent.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/model/LogEvent.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/model/LogLevel.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/model/LogLevel.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/InferenceEngine.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/InferenceEngine.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/TokenizedInput.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/TokenizedInput.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/TokenizerEngine.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/TokenizerEngine.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/impl/LabelAwareMaskingEngine.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/impl/LabelAwareMaskingEngine.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/impl/ONNXDynamicInferenceEngine.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/impl/ONNXDynamicInferenceEngine.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/impl/ParallelTokenizer.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/impl/ParallelTokenizer.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/impl/PureJavaTokenizer.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/ner/impl/PureJavaTokenizer.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/processor/SecureLogXProcessor$Scanner.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/processor/SecureLogXProcessor$Scanner.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/processor/SecureLogXProcessor.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/processor/SecureLogXProcessor.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/slf4j/SecureSlf4jLogger.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/slf4j/SecureSlf4jLogger.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/slf4j/SecureSlf4jLoggerFactory.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/slf4j/SecureSlf4jLoggerFactory.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/slf4j/SecureSlf4jServiceProvider.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/slf4j/SecureSlf4jServiceProvider.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/util/CachedClock.class" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/com/securelogx/util/CachedClock.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/securelogx-core/target/classes/securelogx-dev.properties" beforeDir="false" afterPath="$PROJECT_DIR$/securelogx-core/target/classes/securelogx-dev.properties" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -98,27 +84,34 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Application.App.executor&quot;: &quot;Run&quot;,
-    &quot;Application.App2.executor&quot;: &quot;Run&quot;,
-    &quot;Application.LogGen.executor&quot;: &quot;Run&quot;,
-    &quot;Application.StressTest.executor&quot;: &quot;Run&quot;,
-    &quot;Maven.securelogx-parent [clean].executor&quot;: &quot;Run&quot;,
-    &quot;Maven.securelogx-parent [install].executor&quot;: &quot;Run&quot;,
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;project.structure.last.edited&quot;: &quot;SDKs&quot;,
-    &quot;project.structure.proportion&quot;: &quot;0.0&quot;,
-    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.keymap&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Application.App.executor": "Run",
+    "Application.App2.executor": "Run",
+    "Application.LogGen.executor": "Run",
+    "Application.StressTest.executor": "Run",
+    "Maven.securelogx-parent [clean].executor": "Run",
+    "Maven.securelogx-parent [install].executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "git-widget-placeholder": "master",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "D:/workspace/SecureLogX/practice/src",
+    "onboarding.tips.debug.path": "D:/workspace/SecureLogX/practice/src/Main.java",
+    "project.structure.last.edited": "SDKs",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.2",
+    "settings.editor.selected.configurable": "ml.llm.LLMConfigurable"
   }
-}</component>
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\workspace\SecureLogX\practice\src" />
+    </key>
+  </component>
   <component name="RunManager" selected="Application.App">
     <configuration name="App" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
       <option name="MAIN_CLASS_NAME" value="com.securelogx.main.App" />
