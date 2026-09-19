@@ -34,15 +34,16 @@ public final class MlV13ParityCheck {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 3) {
+        if (args.length != 3 && args.length != 4) {
             throw new IllegalArgumentException(
-                    "Usage: MlV13ParityCheck <model.onnx> <tokenizer.json> <fixture.json>"
+                    "Usage: MlV13ParityCheck <model.onnx> <tokenizer.json> <fixture.json> [result.json]"
             );
         }
 
         Path modelPath = Path.of(args[0]);
         Path tokenizerPath = Path.of(args[1]);
         Path fixturePath = Path.of(args[2]);
+        Path resultPath = args.length == 4 ? Path.of(args[3]) : null;
 
         JSONObject fixture = new JSONObject(Files.readString(fixturePath));
         int maxLength = fixture.getInt("max_length");
@@ -131,13 +132,36 @@ public final class MlV13ParityCheck {
             }
         }
 
+        String modelSha = sha256(modelPath);
+        String tokenizerSha = sha256(tokenizerPath);
+
+        if (resultPath != null) {
+            JSONObject result = new JSONObject();
+            result.put("status", "JAVA ML-v1.3 PARITY PASSED");
+            result.put("passed", true);
+            result.put("cases", cases);
+            result.put("tokenizer_parity_cases", tokenParity);
+            result.put("onnx_argmax_parity_cases", labelParity);
+            result.put("decoded_span_parity_cases", spanParity);
+            result.put("onnx_sha256", modelSha);
+            result.put("tokenizer_json_sha256", tokenizerSha);
+            result.put("fixture_sha256", sha256(fixturePath));
+            result.put("sealed_challenge_inference", false);
+
+            Path parent = resultPath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(resultPath, result.toString(2) + System.lineSeparator());
+        }
+
         System.out.println("JAVA ML-v1.3 PARITY PASSED");
         System.out.println("Cases: " + cases);
         System.out.println("Tokenizer parity: " + tokenParity + "/" + cases);
         System.out.println("ONNX argmax parity: " + labelParity + "/" + cases);
         System.out.println("Decoded-span parity: " + spanParity + "/" + cases);
-        System.out.println("ONNX SHA-256: " + sha256(modelPath));
-        System.out.println("Tokenizer SHA-256: " + sha256(tokenizerPath));
+        System.out.println("ONNX SHA-256: " + modelSha);
+        System.out.println("Tokenizer SHA-256: " + tokenizerSha);
     }
 
     private static int[] intArray(JSONArray array) {
