@@ -19,8 +19,8 @@
   </parent>
 
   <properties>
-    <maven.compiler.source>25</maven.compiler.source>
-    <maven.compiler.target>25</maven.compiler.target>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
   </properties>
 
   <dependencies>
@@ -90,8 +90,8 @@
         <version>3.13.0</version>
         <configuration>
           <encoding>UTF-8</encoding>
-          <source>25</source>
-          <target>25</target>
+          <source>21</source>
+          <target>21</target>
      <!--     <annotationProcessorPaths>
             <path>
               <groupId>com.securelogx</groupId>
