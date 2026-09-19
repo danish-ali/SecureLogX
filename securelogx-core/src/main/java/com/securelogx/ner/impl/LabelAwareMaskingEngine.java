@@ -1,109 +1,179 @@
 package com.securelogx.ner.impl;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * LabelAwareMaskingEngine
- * - First masks using regex fallback (SSN, EMAIL) on original text
- * - Then applies AI model masking (from ONNX)
- * - Decides to show last 4 digits only for specific entity types
+ * Decodes the frozen SecureLogX ML-v1.3 51-label BIO ontology and masks
+ * detected entity spans.
  */
 public class LabelAwareMaskingEngine {
 
-    private final String[] labelMap;
+    private static final String[] LABEL_MAP = {
+            "O",
+            "B-PERSON_NAME", "I-PERSON_NAME",
+            "B-DOB", "I-DOB",
+            "B-AGE", "I-AGE",
+            "B-SSN", "I-SSN",
+            "B-ITIN", "I-ITIN",
+            "B-TAX_ID", "I-TAX_ID",
+            "B-EMAIL", "I-EMAIL",
+            "B-PHONE", "I-PHONE",
+            "B-STREET_ADDRESS", "I-STREET_ADDRESS",
+            "B-CITY", "I-CITY",
+            "B-STATE_PROVINCE", "I-STATE_PROVINCE",
+            "B-POSTAL_CODE", "I-POSTAL_CODE",
+            "B-COUNTRY", "I-COUNTRY",
+            "B-CREDIT_CARD_NUMBER", "I-CREDIT_CARD_NUMBER",
+            "B-BANK_ACCOUNT_NUMBER", "I-BANK_ACCOUNT_NUMBER",
+            "B-ROUTING_NUMBER", "I-ROUTING_NUMBER",
+            "B-IBAN", "I-IBAN",
+            "B-SWIFT_BIC", "I-SWIFT_BIC",
+            "B-BUSINESS_ID", "I-BUSINESS_ID",
+            "B-PASSPORT_NUMBER", "I-PASSPORT_NUMBER",
+            "B-DRIVER_LICENSE", "I-DRIVER_LICENSE",
+            "B-IP_ADDRESS", "I-IP_ADDRESS",
+            "B-DEVICE_ID", "I-DEVICE_ID",
+            "B-AUTH_TOKEN", "I-AUTH_TOKEN",
+            "B-API_KEY", "I-API_KEY"
+    };
+
+    private static final Pattern SSN_PATTERN =
+            Pattern.compile("\\b\\d{3}-\\d{2}-\\d{4}\\b");
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("\\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}\\b");
+
     private final boolean enableFallback;
-    // Fallback regex patterns
-    private static final Pattern SSN_PATTERN = Pattern.compile("\\b\\d{3}-\\d{2}-\\d{4}\\b");
-    private static final Pattern EMAIL_PATTERN = Pattern.compile("\\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}\\b");
 
     public LabelAwareMaskingEngine(boolean enableFallback) {
         this.enableFallback = enableFallback;
-        this.labelMap = new String[]{
-                "O", "B-EMAIL", "I-EMAIL", "B-SSN", "I-SSN",
-                "B-NPI", "I-NPI", "B-ADDRESS", "I-ADDRESS",
-                "B-PHONE", "I-PHONE"
-        };
     }
 
-    /** Default: fallback enabled */
     public LabelAwareMaskingEngine() {
         this(false);
     }
 
-    /**
-     * @param originalText   the raw log text (plain, XML or JSON)
-     * @param inputIds       token IDs from your HF tokenizer
-     * @param logits         ONNX model outputs
-     * @param offsets        token→char offsets
-     * @param showLastFour   whether to reveal last-4 digits
-     */
-        public String mask(String originalText, int[] inputIds, float[][][] logits, List<int[]> offsets, boolean showLastFour) {
-            // 1) optionally apply regex fallback
-            String textForAI = enableFallback
-                    ? fallbackMask(originalText)
-                    : originalText;
+    public List<EntitySpan> decodeSpans(
+            String originalText,
+            float[][][] logits,
+            List<int[]> offsets
+    ) {
+        if (logits == null || logits.length == 0) {
+            return List.of();
+        }
 
-            // 2) AI-driven masking on textForAI
-            StringBuilder maskedText = new StringBuilder(textForAI);
-            Set<Integer> maskedPositions = new HashSet<>();
+        int totalTokens = Math.min(logits[0].length, offsets.size());
+        List<EntitySpan> spans = new ArrayList<>();
+        MutableSpan current = null;
 
-            int totalTokens = Math.min(logits[0].length, offsets.size());
-
-        List<int[]> spans = new ArrayList<>();
-        int i = 0;
-        while (i < totalTokens) {
-            int pred = argmax(logits[0][i]);
-            if (pred >= labelMap.length) { i++; continue; }
-
-            String label = labelMap[pred];
-            if (label.startsWith("B-")) {
-                int start = offsets.get(i)[0];
-                int end = offsets.get(i)[1];
-                String entityType = label.substring(2);
-
-                int j = i + 1;
-                while (j < totalTokens) {
-                    int nextPred = argmax(logits[0][j]);
-                    String nextLabel = nextPred < labelMap.length ? labelMap[nextPred] : "O";
-                    if (nextLabel.equals("I-" + entityType)) {
-                        end = offsets.get(j)[1];
-                        j++;
-                    } else {
-                        break;
-                    }
-                }
-
-                if (start >= 0 && end > start && end <= maskedText.length()) {
-                    spans.add(new int[]{start, end, pred});
-                    for (int pos = start; pos < end; pos++) {
-                        maskedPositions.add(pos);
-                    }
-                }
-                i = j;
-            } else {
-                i++;
+        for (int i = 0; i < totalTokens; i++) {
+            int[] offset = offsets.get(i);
+            if (offset == null || offset.length < 2) {
+                continue;
             }
+
+            int start = offset[0];
+            int end = offset[1];
+            if (start < 0 || end <= start) {
+                continue;
+            }
+
+            int predictedId = argmax(logits[0][i]);
+            String label = predictedId < LABEL_MAP.length ? LABEL_MAP[predictedId] : "O";
+
+            if ("O".equals(label)) {
+                if (current != null) {
+                    addNormalizedSpan(originalText, current, spans);
+                    current = null;
+                }
+                continue;
+            }
+
+            String prefix = label.substring(0, 1);
+            String entityType = label.substring(2);
+
+            if ("B".equals(prefix)) {
+                if (current != null) {
+                    addNormalizedSpan(originalText, current, spans);
+                }
+                current = new MutableSpan(start, end, entityType);
+                continue;
+            }
+
+            if ("I".equals(prefix)
+                    && current != null
+                    && current.entityType.equals(entityType)) {
+                current.end = end;
+                continue;
+            }
+
+            // Match Python decode_bio_spans: an invalid I-transition starts a
+            // new span of that entity type rather than silently dropping it.
+            if (current != null) {
+                addNormalizedSpan(originalText, current, spans);
+            }
+            current = new MutableSpan(start, end, entityType);
         }
 
-        spans.sort((a, b) -> Integer.compare(b[0], a[0]));
-        Set<String> types = new HashSet<>();
-        for (int[] span : spans) {
-            types.add(labelMap[span[2]].replaceAll("^[BI]-", ""));
-            int start = span[0];
-            int end = span[1];
-            String label = labelMap[span[2]];
-            String original = maskedText.substring(start, end);
-            String masked = maskSpan(original, label, showLastFour);
-            maskedText.replace(start, end, masked);
+        if (current != null) {
+            addNormalizedSpan(originalText, current, spans);
         }
 
-      //  System.out.println("[SUMMARY] Types masked (Regex + AI): " + types);
+        return spans;
+    }
+
+    public String mask(
+            String originalText,
+            int[] inputIds,
+            float[][][] logits,
+            List<int[]> offsets,
+            boolean showLastFour
+    ) {
+        String textForAI = enableFallback ? fallbackMask(originalText) : originalText;
+        StringBuilder maskedText = new StringBuilder(textForAI);
+
+        List<EntitySpan> spans = new ArrayList<>(decodeSpans(originalText, logits, offsets));
+        spans.sort(Comparator.comparingInt(EntitySpan::start).reversed());
+
+        for (EntitySpan span : spans) {
+            if (span.start() < 0
+                    || span.end() <= span.start()
+                    || span.end() > maskedText.length()) {
+                continue;
+            }
+
+            String original = maskedText.substring(span.start(), span.end());
+            String masked = maskSpan(original, span.entityType(), showLastFour);
+            maskedText.replace(span.start(), span.end(), masked);
+        }
+
         return maskedText.toString();
     }
 
-    private int argmax(float[] scores) {
+    private static void addNormalizedSpan(
+            String text,
+            MutableSpan candidate,
+            List<EntitySpan> output
+    ) {
+        int start = Math.max(0, Math.min(text.length(), candidate.start));
+        int end = Math.max(start, Math.min(text.length(), candidate.end));
+
+        while (start < end && Character.isWhitespace(text.charAt(start))) {
+            start++;
+        }
+        while (end > start && Character.isWhitespace(text.charAt(end - 1))) {
+            end--;
+        }
+
+        if (start < end) {
+            output.add(new EntitySpan(start, end, candidate.entityType));
+        }
+    }
+
+    private static int argmax(float[] scores) {
         int best = 0;
         for (int i = 1; i < scores.length; i++) {
             if (scores[i] > scores[best]) {
@@ -116,35 +186,30 @@ public class LabelAwareMaskingEngine {
     private String fallbackMask(String text) {
         String result = text;
 
-        // Mask SSNs
         Matcher ssnMatcher = SSN_PATTERN.matcher(result);
         result = ssnMatcher.replaceAll(match -> maskSpan(match.group(), "SSN", true));
 
-        // Mask Emails
         Matcher emailMatcher = EMAIL_PATTERN.matcher(result);
         result = emailMatcher.replaceAll(match -> maskSpan(match.group(), "EMAIL", false));
 
         return result;
     }
 
-    private String maskSpan(String text, String label, boolean showLastFour) {
+    private static String maskSpan(String text, String entityType, boolean showLastFour) {
         if (text == null || text.isEmpty()) {
             return text;
         }
 
-        String entityType = label.replaceAll("^[BI]-", ""); // Remove B- or I- from label
-
         boolean allowLastFour = showLastFour && (
-                entityType.equalsIgnoreCase("SSN") ||
-                        entityType.equalsIgnoreCase("NPI") ||
-                        entityType.equalsIgnoreCase("PHONE") ||
-                        entityType.equalsIgnoreCase("CARD")
+                entityType.equals("SSN")
+                        || entityType.equals("ITIN")
+                        || entityType.equals("TAX_ID")
+                        || entityType.equals("PHONE")
+                        || entityType.equals("CREDIT_CARD_NUMBER")
+                        || entityType.equals("BANK_ACCOUNT_NUMBER")
         );
 
-        StringBuilder masked = new StringBuilder();
-        int revealDigits = 4;
         int digitsFound = 0;
-
         for (int i = text.length() - 1; i >= 0; i--) {
             if (Character.isDigit(text.charAt(i))) {
                 digitsFound++;
@@ -152,12 +217,12 @@ public class LabelAwareMaskingEngine {
         }
 
         int revealStartPosition = -1;
-        if (allowLastFour && digitsFound >= revealDigits) {
+        if (allowLastFour && digitsFound >= 4) {
             int count = 0;
             for (int i = text.length() - 1; i >= 0; i--) {
                 if (Character.isDigit(text.charAt(i))) {
                     count++;
-                    if (count == revealDigits) {
+                    if (count == 4) {
                         revealStartPosition = i;
                         break;
                     }
@@ -165,20 +230,34 @@ public class LabelAwareMaskingEngine {
             }
         }
 
+        StringBuilder masked = new StringBuilder(text.length());
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-
             if (Character.isLetterOrDigit(c)) {
-                if (allowLastFour && revealStartPosition != -1 && i >= revealStartPosition) {
+                if (allowLastFour && revealStartPosition >= 0 && i >= revealStartPosition) {
                     masked.append(c);
                 } else {
-                    masked.append('•');
+                    masked.append('*');
                 }
             } else {
-                masked.append(c); // Keep punctuation
+                masked.append(c);
             }
         }
-
         return masked.toString();
+    }
+
+    public record EntitySpan(int start, int end, String entityType) {
+    }
+
+    private static final class MutableSpan {
+        private int start;
+        private int end;
+        private final String entityType;
+
+        private MutableSpan(int start, int end, String entityType) {
+            this.start = start;
+            this.end = end;
+            this.entityType = entityType;
+        }
     }
 }
