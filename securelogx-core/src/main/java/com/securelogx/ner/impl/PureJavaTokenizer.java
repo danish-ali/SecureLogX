@@ -61,7 +61,7 @@ public class PureJavaTokenizer {
         List<int[]> offsets = new ArrayList<>();
 
         tokenIds.add(clsTokenId);
-        offsets.add(new int[]{-1, -1});
+        offsets.add(new int[]{0, 0});
 
         int contentLimit = maxSequenceLength - 2;
         outer:
@@ -76,7 +76,7 @@ public class PureJavaTokenizer {
         }
 
         tokenIds.add(sepTokenId);
-        offsets.add(new int[]{-1, -1});
+        offsets.add(new int[]{0, 0});
 
         int[] inputIds = tokenIds.stream().mapToInt(Integer::intValue).toArray();
         int[] attentionMask = new int[inputIds.length];
