@@ -82,7 +82,7 @@ public final class MlV13RuntimeSmokeCheck {
             );
         }
 
-        int rawEntityChecks = 0;
+        int exactSpanMaskChecks = 0;
         for (int i = 0; i < smokeCases.size(); i++) {
             SmokeCase item = smokeCases.get(i);
             String output = outputs.get(i);
@@ -92,20 +92,39 @@ public final class MlV13RuntimeSmokeCheck {
                         "Case " + i + " fell back to PROCESSING_FAILED"
                 );
             }
-            if (!output.contains("*")) {
+
+            String maskedMessage = extractMessage(output);
+            if (maskedMessage.length() != item.text().length()) {
                 throw new IllegalStateException(
-                        "Case " + i + " contains no masking marker: " + output
+                        "Case " + i + " masked-message length changed. expected="
+                                + item.text().length()
+                                + " actual="
+                                + maskedMessage.length()
                 );
             }
 
             for (RawEntity entity : item.entities()) {
-                rawEntityChecks++;
-                if (output.contains(entity.rawText())) {
+                exactSpanMaskChecks++;
+                String actualMasked = maskedMessage.substring(
+                        entity.start(),
+                        entity.end()
+                );
+                String expectedMasked = fullyMasked(entity.rawText());
+
+                if (!actualMasked.equals(expectedMasked)) {
                     throw new IllegalStateException(
-                            "Case " + i + " leaked raw entity "
+                            "Case " + i + " entity span was not masked exactly. label="
                                     + entity.label()
-                                    + ": "
+                                    + " span=["
+                                    + entity.start()
+                                    + ","
+                                    + entity.end()
+                                    + ") raw="
                                     + entity.rawText()
+                                    + " expectedMasked="
+                                    + expectedMasked
+                                    + " actualMasked="
+                                    + actualMasked
                     );
                 }
             }
@@ -115,7 +134,7 @@ public final class MlV13RuntimeSmokeCheck {
         result.put("status", "ML-v1.3 JAVA RUNTIME SMOKE PASSED");
         result.put("passed", true);
         result.put("cases", smokeCases.size());
-        result.put("raw_entity_leak_checks", rawEntityChecks);
+        result.put("exact_span_mask_checks", exactSpanMaskChecks);
         result.put("processing_failures", 0);
         result.put("max_sequence_length", config.getMaxSequenceLength());
         result.put("model_sha256", config.getModelSha256());
@@ -133,7 +152,7 @@ public final class MlV13RuntimeSmokeCheck {
 
         System.out.println("ML-v1.3 JAVA RUNTIME SMOKE PASSED");
         System.out.println("Cases: " + smokeCases.size());
-        System.out.println("Raw entity leak checks: " + rawEntityChecks);
+        System.out.println("Exact span mask checks: " + exactSpanMaskChecks);
         System.out.println("Processing failures: 0");
         System.out.println("Result: " + resultPath);
     }
@@ -169,6 +188,8 @@ public final class MlV13RuntimeSmokeCheck {
                 entities.add(
                         new RawEntity(
                                 span.getString("label"),
+                                start,
+                                end,
                                 raw
                         )
                 );
@@ -190,7 +211,42 @@ public final class MlV13RuntimeSmokeCheck {
     private record SmokeCase(String text, List<RawEntity> entities) {
     }
 
-    private record RawEntity(String label, String rawText) {
+    private static String extractMessage(String formattedOutput) {
+        String marker = " message=\"";
+        int start = formattedOutput.indexOf(marker);
+        if (start < 0) {
+            throw new IllegalStateException(
+                    "Formatted runtime output does not contain message marker: "
+                            + formattedOutput
+            );
+        }
+        start += marker.length();
+
+        int end = formattedOutput.lastIndexOf('"');
+        if (end < start) {
+            throw new IllegalStateException(
+                    "Formatted runtime output does not terminate message field: "
+                            + formattedOutput
+            );
+        }
+        return formattedOutput.substring(start, end);
+    }
+
+    private static String fullyMasked(String rawText) {
+        StringBuilder masked = new StringBuilder(rawText.length());
+        for (int i = 0; i < rawText.length(); i++) {
+            char c = rawText.charAt(i);
+            masked.append(Character.isLetterOrDigit(c) ? '*' : c);
+        }
+        return masked.toString();
+    }
+
+    private record RawEntity(
+            String label,
+            int start,
+            int end,
+            String rawText
+    ) {
     }
 
     private static final class RuntimeEngine implements AutoCloseable {
