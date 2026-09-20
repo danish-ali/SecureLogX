@@ -66,7 +66,7 @@ public class ONNXDynamicInferenceEngine {
                 // GPU-specific optimizations
                 long gpuMemory = estimateGpuMemory();
                 this.optimalBatchSize = calculateOptimalBatchSize(gpuMemory);
-                this.maxSeqLen = gpuMemory > 8_000_000_000L ? 1024 : 512; // 8GB+ = longer sequences
+                this.maxSeqLen = config.getMaxSequenceLength();
 
                 System.out.println("[SecureLogX INIT] ✅ GPU Inference Mode Enabled (CUDA)");
                 System.out.println("[SecureLogX INIT] Optimal batch size: " + optimalBatchSize);
@@ -98,7 +98,7 @@ public class ONNXDynamicInferenceEngine {
     private void setupCpuMode(com.securelogx.config.SecureLogXConfig config, OrtSession.SessionOptions opts) {
         this.isGpuMode = false;
         this.optimalBatchSize = 32; // Standard batch size for CPU
-        this.maxSeqLen = 512;
+        this.maxSeqLen = config.getMaxSequenceLength();
 
         int threads = config.isCpuMultithreadingEnabled() ? Runtime.getRuntime().availableProcessors() : 1;
         System.out.println("[SecureLogX INIT] CPU Inference Mode Enabled");
