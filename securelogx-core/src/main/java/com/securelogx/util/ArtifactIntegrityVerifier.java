@@ -1,6 +1,7 @@
 package com.securelogx.util;
 
 import java.nio.file.Files;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -28,7 +29,14 @@ public final class ArtifactIntegrityVerifier {
         }
 
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        String actual = HexFormat.of().formatHex(digest.digest(Files.readAllBytes(path)));
+        byte[] buffer = new byte[64 * 1024];
+        try (InputStream input = Files.newInputStream(path)) {
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        String actual = HexFormat.of().formatHex(digest.digest());
         if (!actual.equalsIgnoreCase(expectedSha256.trim())) {
             throw new IllegalStateException(
                     label + " SHA-256 mismatch. expected="
