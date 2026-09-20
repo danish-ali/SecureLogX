@@ -75,6 +75,20 @@ public class SecureLogXConfig {
         return props.getProperty("securelogx.modelPath");
     }
 
+    public String getModelSha256() {
+        return props.getProperty("securelogx.model.sha256", "").trim();
+    }
+
+    public String getTokenizerSha256() {
+        return props.getProperty("securelogx.tokenizer.sha256", "").trim();
+    }
+
+    public int getMaxSequenceLength() {
+        return Integer.parseInt(
+                props.getProperty("securelogx.model.maxSequenceLength", "384")
+        );
+    }
+
     public String getLogFilePath() {
         return props.getProperty("securelogx.log.file", "application.log");
     }
