@@ -45,6 +45,69 @@ public final class DeterministicSensitiveDataDetector {
     private static final Pattern IPV4 = Pattern.compile(
             "\\b(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\b"
     );
+    private static final Pattern KEY_VALUE_KEY = Pattern.compile(
+            "([A-Za-z][A-Za-z0-9_.-]{1,40})\\s*[:=]"
+    );
+    private static final Pattern CAPITALIZED_NAME = Pattern.compile(
+            "\\b[A-Z][a-z]{2,}\\s+[A-Z][a-z]{2,}\\b"
+    );
+
+    private static final Set<String> DETERMINISTIC_KEYS = Set.of(
+            "email",
+            "ssn",
+            "socialsecuritynumber",
+            "card",
+            "cardnumber",
+            "creditcard",
+            "creditcardnumber",
+            "routing",
+            "routingnumber",
+            "aba",
+            "iban",
+            "remoteip",
+            "clientip",
+            "sourceip",
+            "destinationip",
+            "srcip",
+            "dstip",
+            "gateway",
+            "peer",
+            "releaseversion",
+            "buildversion",
+            "artifactversion",
+            "version",
+            "apikey",
+            "accesskey",
+            "token",
+            "authorization",
+            "auth"
+    );
+
+    private static final Set<String> SAFE_METADATA_KEYS = Set.of(
+            "status",
+            "state",
+            "result",
+            "outcome",
+            "action",
+            "event",
+            "level",
+            "trace",
+            "traceid",
+            "seq",
+            "sequence",
+            "deployment",
+            "environment",
+            "service",
+            "mode",
+            "phase",
+            "channel",
+            "operation",
+            "purpose",
+            "type",
+            "source",
+            "target",
+            "reason"
+    );
 
     private static final Set<String> IP_NEGATIVE_CONTEXT = Set.of(
             "version",
@@ -296,6 +359,27 @@ public final class DeterministicSensitiveDataDetector {
             return true;
         }
 
+        if (containsCapitalizedNameOutsideEvidence(text, evidence)) {
+            return true;
+        }
+
+        Matcher keyMatcher = KEY_VALUE_KEY.matcher(text);
+        boolean sawKeyValue = false;
+        while (keyMatcher.find()) {
+            sawKeyValue = true;
+            String normalizedKey = normalizeKey(keyMatcher.group(1));
+            if (!DETERMINISTIC_KEYS.contains(normalizedKey)
+                    && !SAFE_METADATA_KEYS.contains(normalizedKey)) {
+                return true;
+            }
+        }
+
+        // Deterministic bypass is intentionally limited to structured log
+        // records. Free prose continues through contextual ML.
+        if (!sawKeyValue) {
+            return true;
+        }
+
         String lower = text.toLowerCase(Locale.ROOT);
 
         if (containsAny(
@@ -365,6 +449,33 @@ public final class DeterministicSensitiveDataDetector {
         }
 
         return false;
+    }
+
+    private static boolean containsCapitalizedNameOutsideEvidence(
+            String text,
+            List<DetectionEvidence> evidence
+    ) {
+        Matcher matcher = CAPITALIZED_NAME.matcher(text);
+        while (matcher.find()) {
+            boolean covered = false;
+            for (DetectionEvidence item : evidence) {
+                if (item.overlaps(matcher.start(), matcher.end())) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String normalizeKey(String key) {
+        return key.toLowerCase(Locale.ROOT)
+                .replace("_", "")
+                .replace("-", "")
+                .replace(".", "");
     }
 
     private static boolean hasEntity(
