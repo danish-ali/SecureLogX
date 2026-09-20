@@ -4,6 +4,7 @@ package com.securelogx.ner.impl;
 import ai.onnxruntime.*;
 import com.securelogx.detection.DeterministicScanResult;
 import com.securelogx.detection.HybridMaskingPipeline;
+import com.securelogx.detection.HybridRuntimeStats;
 import com.securelogx.model.LogEvent;
 import com.securelogx.ner.TokenizerEngine;
 import com.securelogx.ner.TokenizedInput;
@@ -324,11 +325,16 @@ public class ONNXDynamicInferenceEngine {
 
             return Arrays.asList(orderedOutput);
 
-        } catch (InterruptedException | ExecutionException e) {
+        } catch (InterruptedException e) {
+            System.err.println(
+                    "[ERROR] Hybrid tokenization interrupted: " + e.getMessage()
+            );
+            Thread.currentThread().interrupt();
+            return createFallbackResults(batch);
+        } catch (ExecutionException e) {
             System.err.println(
                     "[ERROR] Hybrid tokenization failed: " + e.getMessage()
             );
-            Thread.currentThread().interrupt();
             return createFallbackResults(batch);
         } catch (Exception e) {
             System.err.println(
@@ -509,6 +515,13 @@ public class ONNXDynamicInferenceEngine {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    public HybridRuntimeStats getHybridRuntimeStats() {
+        return new HybridRuntimeStats(
+                deterministicOnlyItems,
+                mlInferenceItems
+        );
     }
 
     public boolean isRunning() {
