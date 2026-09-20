@@ -2,6 +2,8 @@
 package com.securelogx.ner.impl;
 
 import ai.onnxruntime.*;
+import com.securelogx.detection.DeterministicScanResult;
+import com.securelogx.detection.HybridMaskingPipeline;
 import com.securelogx.model.LogEvent;
 import com.securelogx.ner.TokenizerEngine;
 import com.securelogx.ner.TokenizedInput;
@@ -21,6 +23,7 @@ public class ONNXDynamicInferenceEngine {
     private final OrtEnvironment env;
     private final OrtSession session;
     private final LabelAwareMaskingEngine maskingEngine = new LabelAwareMaskingEngine();
+    private final HybridMaskingPipeline hybridMaskingPipeline = new HybridMaskingPipeline();
     private volatile boolean running = true;
     private  boolean isGpuMode;
     private  int optimalBatchSize;
@@ -37,6 +40,8 @@ public class ONNXDynamicInferenceEngine {
     private long totalInferenceTime = 0;
     private long totalBatches = 0;
     private long totalItems = 0;
+    private long deterministicOnlyItems = 0;
+    private long mlInferenceItems = 0;
 
     public ONNXDynamicInferenceEngine(String modelPath, com.securelogx.config.SecureLogXConfig config) throws Exception {
         // Check CUDA environment first
@@ -171,52 +176,79 @@ public class ONNXDynamicInferenceEngine {
         return allResults;
     }
 
-    private List<String> processBatchChunk(TokenizerEngine tokenizer, List<LogEvent> batch, long overallStartTime) {
-        List<String> output = new ArrayList<>();
+    private List<String> processBatchChunk(
+            TokenizerEngine tokenizer,
+            List<LogEvent> batch,
+            long overallStartTime
+    ) {
+        String[] orderedOutput = new String[batch.size()];
 
         try {
-            // 1) Async tokenization
+            List<DeterministicScanResult> scans = new ArrayList<>(batch.size());
+            List<LogEvent> mlBatch = new ArrayList<>();
+            List<Integer> mlOriginalIndices = new ArrayList<>();
+
+            // 1) Cheap deterministic scan and conservative ML gate.
+            for (int i = 0; i < batch.size(); i++) {
+                LogEvent event = batch.get(i);
+                DeterministicScanResult scan =
+                        hybridMaskingPipeline.scan(event.getMessage());
+                scans.add(scan);
+
+                if (scan.requiresMl()) {
+                    mlOriginalIndices.add(i);
+                    mlBatch.add(event);
+                } else {
+                    String masked = hybridMaskingPipeline.maskWithoutMl(
+                            event.getMessage(),
+                            scan,
+                            event.shouldShowLastFour()
+                    );
+                    orderedOutput[i] = formatMaskedEvent(event, masked);
+                    deterministicOnlyItems++;
+                }
+            }
+
+            // Every record was resolved without model inference.
+            if (mlBatch.isEmpty()) {
+                totalItems += batch.size();
+                return Arrays.asList(orderedOutput);
+            }
+
+            // 2) Tokenize only unresolved records.
             CompletableFuture<List<TokenizedInput>> tokenizationFuture =
-                    CompletableFuture.supplyAsync(() ->
-                                    batch.parallelStream()
-                                            .map(e -> tokenizer.tokenize(e.getMessage()))
-                                            .collect(Collectors.toList()),
-                            tokenizerExecutor);
+                    CompletableFuture.supplyAsync(
+                            () -> mlBatch.parallelStream()
+                                    .map(event -> tokenizer.tokenize(event.getMessage()))
+                                    .collect(Collectors.toList()),
+                            tokenizerExecutor
+                    );
 
             List<TokenizedInput> encoded = tokenizationFuture.get();
 
-            // 2) Determine optimal sequence length (dynamic padding)
             int rawMax = encoded.stream()
-                    .mapToInt(t -> t.getInputIds().length)
-                    .max().orElse(0);
+                    .mapToInt(item -> item.getInputIds().length)
+                    .max()
+                    .orElse(0);
             int seqLen = Math.min(rawMax, maxSeqLen);
-            int batchSize = encoded.size();
+            int inferenceBatchSize = encoded.size();
 
-            // 3) Prepare batch tensors with optimal memory layout
-            long[][] inputIds = new long[batchSize][seqLen];
-            long[][] attentionMask = new long[batchSize][seqLen];
-            long[][] tokenTypeIds = new long[batchSize][seqLen];
+            long[][] inputIds = new long[inferenceBatchSize][seqLen];
+            long[][] attentionMask = new long[inferenceBatchSize][seqLen];
+            long[][] tokenTypeIds = new long[inferenceBatchSize][seqLen];
 
-
-            // 4) Efficient data copying - FASTEST: Direct assignment for small arrays
-            for (int i = 0; i < batchSize; i++) {
+            for (int i = 0; i < inferenceBatchSize; i++) {
                 int[] ids = encoded.get(i).getInputIds();
                 int[] mask = encoded.get(i).getAttentionMask();
                 int copyLength = Math.min(ids.length, seqLen);
 
-                // Direct assignment is faster for small arrays
-                long[] inputRow = inputIds[i];
-                long[] maskRow = attentionMask[i];
-
                 for (int j = 0; j < copyLength; j++) {
-                    inputRow[j] = ids[j];
-                    maskRow[j] = mask[j];
+                    inputIds[i][j] = ids[j];
+                    attentionMask[i][j] = mask[j];
                 }
-                // tokenTypeIds remain 0 (already initialized)
             }
 
-
-            // 5) Run inference with proper resource management
+            // 3) Run ONNX only for the unresolved subset.
             long inferenceStart = System.currentTimeMillis();
 
             try (OnnxTensor inputTensor = OnnxTensor.createTensor(env, inputIds);
@@ -232,31 +264,34 @@ public class ONNXDynamicInferenceEngine {
                 try (OrtSession.Result result = session.run(inputs)) {
                     float[][][] logits = (float[][][]) result.get(0).getValue();
 
-                    // 6) Post-processing (optimized)
-                    for (int i = 0; i < batchSize; i++) {
-                        List<int[]> offsets = encoded.get(i).getOffsets();
+                    // 4) Decode ML spans, resolve conflicts, then apply policy.
+                    for (int mlIndex = 0; mlIndex < inferenceBatchSize; mlIndex++) {
+                        int originalIndex = mlOriginalIndices.get(mlIndex);
+                        LogEvent event = batch.get(originalIndex);
+                        TokenizedInput tokenized = encoded.get(mlIndex);
+
+                        List<int[]> offsets = tokenized.getOffsets();
                         List<int[]> truncatedOffsets = offsets.size() > seqLen
                                 ? offsets.subList(0, seqLen)
                                 : offsets;
 
-                        String masked = maskingEngine.mask(
-                                batch.get(i).getMessage(),
-                                encoded.get(i).getInputIds(),
-                                new float[][][]{logits[i]},
-                                truncatedOffsets,
-                                batch.get(i).shouldShowLastFour()
+                        List<LabelAwareMaskingEngine.EntitySpan> mlSpans =
+                                maskingEngine.decodeSpans(
+                                        event.getMessage(),
+                                        new float[][][]{logits[mlIndex]},
+                                        truncatedOffsets
+                                );
+
+                        String masked = hybridMaskingPipeline.maskWithMl(
+                                event.getMessage(),
+                                scans.get(originalIndex),
+                                mlSpans,
+                                event.shouldShowLastFour()
                         );
 
-                        String timestamp = java.time.LocalDateTime.now().toString();
-                        String formatted = String.format(
-                                "timestamp=%s level=%s traceId=%s seq=%d message=\"%s\"",
-                                timestamp,
-                                batch.get(i).getLevel().name(),
-                                batch.get(i).getTraceId(),
-                                batch.get(i).getSequenceNumber(),
-                                masked
-                        );
-                        output.add(formatted);
+                        orderedOutput[originalIndex] =
+                                formatMaskedEvent(event, masked);
+                        mlInferenceItems++;
                     }
                 }
             }
@@ -264,43 +299,68 @@ public class ONNXDynamicInferenceEngine {
             long inferenceTime = System.currentTimeMillis() - inferenceStart;
             updatePerformanceMetrics(inferenceTime, batch.size());
 
-            // Only log performance every 10 batches to reduce CPU-GPU sync
             if (totalBatches % 10 == 0) {
-                long avgPerBatch = totalBatches > 0 ? totalInferenceTime / totalBatches : 0;
-                long avgPerItem = totalItems > 0 ? totalInferenceTime / totalItems : 0;
-                System.out.println(String.format("[PERF] Batch %d: %dms (%d items, avg: %dms/batch, %dms/item)",
-                        totalBatches, inferenceTime, batch.size(), avgPerBatch, avgPerItem));
+                long avgPerBatch =
+                        totalBatches > 0 ? totalInferenceTime / totalBatches : 0;
+                long avgPerItem =
+                        totalItems > 0 ? totalInferenceTime / totalItems : 0;
+                long routed = deterministicOnlyItems + mlInferenceItems;
+                double mlRate = routed > 0
+                        ? (100.0 * mlInferenceItems / routed)
+                        : 0.0;
+
+                System.out.println(
+                        String.format(
+                                "[PERF] Batch %d: %dms (%d items, avg: %dms/batch, %dms/item, ML-route=%.2f%%)",
+                                totalBatches,
+                                inferenceTime,
+                                batch.size(),
+                                avgPerBatch,
+                                avgPerItem,
+                                mlRate
+                        )
+                );
             }
 
+            return Arrays.asList(orderedOutput);
+
         } catch (InterruptedException | ExecutionException e) {
-            System.err.println("[ERROR] Tokenization failed: " + e.getMessage());
-            e.printStackTrace();
-            // Return fallback results for failed batch
+            System.err.println(
+                    "[ERROR] Hybrid tokenization failed: " + e.getMessage()
+            );
+            Thread.currentThread().interrupt();
             return createFallbackResults(batch);
         } catch (Exception e) {
-            System.err.println("[ERROR] Batch inference failed for batch size: " + batch.size());
+            System.err.println(
+                    "[ERROR] Hybrid inference failed for batch size: "
+                            + batch.size()
+            );
             e.printStackTrace();
-            // Return fallback results for failed batch
             return createFallbackResults(batch);
         }
-
-        return output;
     }
 
-    // Add fallback method to handle failed batches
+    private String formatMaskedEvent(LogEvent event, String masked) {
+        String timestamp = java.time.LocalDateTime.now().toString();
+        return String.format(
+                "timestamp=%s level=%s traceId=%s seq=%d message=\"%s\"",
+                timestamp,
+                event.getLevel().name(),
+                event.getTraceId(),
+                event.getSequenceNumber(),
+                masked
+        );
+    }
+
     private List<String> createFallbackResults(List<LogEvent> batch) {
         List<String> fallbackResults = new ArrayList<>();
         for (LogEvent event : batch) {
-            String timestamp = java.time.LocalDateTime.now().toString();
-            String formatted = String.format(
-                    "timestamp=%s level=%s traceId=%s seq=%d message=\"%s\"",
-                    timestamp,
-                    event.getLevel().name(),
-                    event.getTraceId(),
-                    event.getSequenceNumber(),
-                    "[PROCESSING_FAILED] " + event.getMessage()
+            fallbackResults.add(
+                    formatMaskedEvent(
+                            event,
+                            "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
+                    )
             );
-            fallbackResults.add(formatted);
         }
         return fallbackResults;
     }
