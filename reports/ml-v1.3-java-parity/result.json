@@ -1,0 +1,12 @@
+{
+  "tokenizer_parity_cases": 100,
+  "decoded_span_parity_cases": 100,
+  "cases": 100,
+  "onnx_argmax_parity_cases": 100,
+  "sealed_challenge_inference": false,
+  "fixture_sha256": "d29ea8f19c0904558b510c2cc30196303655f7abc5e6be9c825b36486ca479d4",
+  "passed": true,
+  "onnx_sha256": "5953acd999083fa08c17c537e1d88c38f3c7137bc518022d8f3246c1133997c2",
+  "status": "JAVA ML-v1.3 PARITY PASSED",
+  "tokenizer_json_sha256": "b30eb8ca04d00e5330bade5d5e6036bd0ce0ad68f7b96e2e38bff11942ee30b1"
+}
