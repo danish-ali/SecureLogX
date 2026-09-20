@@ -5,6 +5,7 @@ import com.securelogx.io.SecureFileAppender;
 import com.securelogx.model.LogEvent;
 import com.securelogx.ner.impl.ONNXDynamicInferenceEngine;
 import com.securelogx.ner.impl.ParallelTokenizer;
+import com.securelogx.util.ArtifactIntegrityVerifier;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -51,10 +52,27 @@ public class MaskingConsumer {
         String topic = kafkaProps.getOrDefault("topic", "secure-logx").toString();
         this.consumer.subscribe(Collections.singletonList(topic));
 
-        // File writer and NER engine
-        this.appender  = new SecureFileAppender(config.getLogFilePath());
-        this.tokenizer = new ParallelTokenizer(config.getTokenizerPath());
-        this.engine    = new ONNXDynamicInferenceEngine(config.getModelPath(), config);
+        // File writer and validated ML-v1.3 runtime.
+        ArtifactIntegrityVerifier.verifySha256(
+                "ML-v1.3 ONNX model",
+                config.getModelPath(),
+                config.getModelSha256()
+        );
+        ArtifactIntegrityVerifier.verifySha256(
+                "ML-v1.3 tokenizer",
+                config.getTokenizerPath(),
+                config.getTokenizerSha256()
+        );
+
+        this.appender = new SecureFileAppender(config.getLogFilePath());
+        this.tokenizer = new ParallelTokenizer(
+                config.getTokenizerPath(),
+                config.getMaxSequenceLength()
+        );
+        this.engine = new ONNXDynamicInferenceEngine(
+                config.getModelPath(),
+                config
+        );
     }
 
     /**
