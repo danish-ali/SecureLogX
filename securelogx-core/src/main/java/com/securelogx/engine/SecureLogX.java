@@ -9,6 +9,7 @@ import com.securelogx.model.LogLevel;
 import com.securelogx.ner.TokenizerEngine;
 import com.securelogx.ner.impl.ONNXDynamicInferenceEngine;
 import com.securelogx.ner.impl.ParallelTokenizer;
+import com.securelogx.util.ArtifactIntegrityVerifier;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -61,7 +62,22 @@ public class SecureLogX {
     public SecureLogX() throws Exception {
         // Load config and tokenizer
         this.config = new SecureLogXConfig(System.getenv().getOrDefault("SECURELOGX_ENV", "dev"));
-        this.tokenizer = new ParallelTokenizer(config.getTokenizerPath());
+
+        ArtifactIntegrityVerifier.verifySha256(
+                "ML-v1.3 ONNX model",
+                config.getModelPath(),
+                config.getModelSha256()
+        );
+        ArtifactIntegrityVerifier.verifySha256(
+                "ML-v1.3 tokenizer",
+                config.getTokenizerPath(),
+                config.getTokenizerSha256()
+        );
+
+        this.tokenizer = new ParallelTokenizer(
+                config.getTokenizerPath(),
+                config.getMaxSequenceLength()
+        );
 
         // Determine mode
         String m = config.getMode();
