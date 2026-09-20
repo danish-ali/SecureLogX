@@ -8,7 +8,11 @@ public class ParallelTokenizer implements TokenizerEngine {
     private final PureJavaTokenizer tokenizer;
 
     public ParallelTokenizer(String tokenizerPath) throws Exception {
-        this.tokenizer = new PureJavaTokenizer(tokenizerPath);
+        this(tokenizerPath, 384);
+    }
+
+    public ParallelTokenizer(String tokenizerPath, int maxSequenceLength) throws Exception {
+        this.tokenizer = new PureJavaTokenizer(tokenizerPath, maxSequenceLength);
     }
 
     @Override
