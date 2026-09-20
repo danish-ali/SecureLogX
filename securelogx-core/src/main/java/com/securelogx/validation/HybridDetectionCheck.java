@@ -121,6 +121,18 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
+        assertRequiresMl(
+                detector,
+                "email=jane@example.com owner=Jane Doe status=active"
+        );
+        cases++;
+
+        assertRequiresMl(
+                detector,
+                "Contact jane@example.com for Jane Doe immediately"
+        );
+        cases++;
+
         assertNegativeEvidenceSuppressesMl(detector, resolver, policy);
         cases++;
 
