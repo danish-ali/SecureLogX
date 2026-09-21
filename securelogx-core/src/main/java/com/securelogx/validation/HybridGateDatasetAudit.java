@@ -90,18 +90,26 @@ public final class HybridGateDatasetAudit {
             );
         }
 
-        boolean passed = totals.bypassUncoveredGold == 0
+        boolean safetyPassed = totals.bypassUncoveredGold == 0
                 && totals.deterministicOvermask == 0
                 && totals.allowGoldConflict == 0;
+        boolean bypassDemonstrated = totals.bypassRecords > 0;
 
         JSONObject result = new JSONObject();
         result.put(
                 "status",
-                passed
-                        ? "HYBRID GATE DATASET AUDIT PASSED"
+                safetyPassed
+                        ? (
+                                bypassDemonstrated
+                                        ? "HYBRID GATE SAFETY PASSED; BYPASS DEMONSTRATED"
+                                        : "HYBRID GATE SAFETY PASSED; BYPASS NOT YET DEMONSTRATED"
+                        )
                         : "HYBRID GATE DATASET AUDIT FAILED"
         );
-        result.put("passed", passed);
+        result.put("passed", safetyPassed);
+        result.put("safety_passed", safetyPassed);
+        result.put("bypass_demonstrated", bypassDemonstrated);
+        result.put("efficiency_ready", safetyPassed && bypassDemonstrated);
         result.put("records", totals.records);
         result.put("gold_spans", totals.goldSpans);
         result.put("bypass_records", totals.bypassRecords);
@@ -192,9 +200,16 @@ public final class HybridGateDatasetAudit {
         );
         System.out.println("Result: " + resultPath);
 
-        if (!passed) {
+        if (!safetyPassed) {
             throw new IllegalStateException(
                     "Hybrid deterministic gate failed dataset security audit"
+            );
+        }
+
+        if (!bypassDemonstrated) {
+            System.out.println(
+                    "NOTE: safety passed, but this corpus does not yet demonstrate "
+                            + "a deterministic bypass performance benefit."
             );
         }
     }
