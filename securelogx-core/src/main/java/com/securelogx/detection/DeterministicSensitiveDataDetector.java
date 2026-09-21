@@ -540,7 +540,7 @@ public final class DeterministicSensitiveDataDetector {
         return false;
     }
 
-    private StructuredGateDecision evaluateStructuredJson(String text) {
+    private static StructuredGateDecision evaluateStructuredJson(String text) {
         String trimmed = text.trim();
         if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
             return StructuredGateDecision.notRecognized();
