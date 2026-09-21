@@ -7,6 +7,8 @@ import com.securelogx.detection.ResolutionAction;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -17,14 +19,28 @@ import java.util.Map;
 /**
  * Dataset-wide security audit for the deterministic ML-bypass gate.
  *
- * A bypassed record is only acceptable when every gold sensitive span is fully
- * covered by deterministic MASK evidence. Deterministic MASK evidence may not
- * target gold-O text, and deterministic ALLOW evidence may not overlap any
- * gold sensitive span.
+ * The NER repository is treated strictly as a read-only source of the frozen
+ * labeled datasets. Hybrid logic and audit implementation live in SecureLogX.
+ *
+ * Audited datasets:
+ * - data/split/dev.jsonl
+ * - data/ml_v1_3/real_structure/dev_challenge.jsonl
+ * - data/split/test.jsonl
+ *
+ * The sealed challenge is never accessed.
  */
 public final class HybridGateDatasetAudit {
 
     private static final int MAX_FAILURE_SAMPLES = 20;
+
+    private static final Map<String, String> DATASETS = Map.of(
+            "standard_dev",
+            "data/split/dev.jsonl",
+            "v1_3_challenge_dev",
+            "data/ml_v1_3/real_structure/dev_challenge.jsonl",
+            "original_test_regression",
+            "data/split/test.jsonl"
+    );
 
     private HybridGateDatasetAudit() {
     }
@@ -32,125 +48,51 @@ public final class HybridGateDatasetAudit {
     public static void main(String[] args) throws Exception {
         if (args.length != 2) {
             throw new IllegalArgumentException(
-                    "Usage: HybridGateDatasetAudit <gold-fixture.json> <result.json>"
+                    "Usage: HybridGateDatasetAudit <SecureLogX-NER-root> <result.json>"
             );
         }
 
-        Path fixturePath = Path.of(args[0]);
+        Path nerRoot = Path.of(args[0]).toAbsolutePath().normalize();
         Path resultPath = Path.of(args[1]);
-        JSONObject fixture = new JSONObject(Files.readString(fixturePath));
-
-        if (fixture.optBoolean("sealed_challenge_accessed", true)) {
-            throw new IllegalStateException(
-                    "Gold fixture must not include sealed-challenge access"
-            );
-        }
 
         DeterministicSensitiveDataDetector detector =
                 new DeterministicSensitiveDataDetector();
 
-        long records = 0;
-        long goldSpans = 0;
-        long bypassRecords = 0;
-        long mlRecords = 0;
-        long deterministicMasks = 0;
-        long deterministicAllows = 0;
-        long bypassUncoveredGold = 0;
-        long deterministicOvermask = 0;
-        long allowGoldConflict = 0;
-
+        AuditTotals totals = new AuditTotals();
         Map<String, SourceStats> bySource = new LinkedHashMap<>();
         List<String> failureSamples = new ArrayList<>();
 
-        JSONArray cases = fixture.getJSONArray("cases");
-        for (int i = 0; i < cases.length(); i++) {
-            JSONObject item = cases.getJSONObject(i);
-            String source = item.getString("source");
-            int sourceIndex = item.getInt("source_index");
-            String text = item.getString("text");
-            List<GoldSpan> gold = goldSpans(item.getJSONArray("entities"));
+        for (Map.Entry<String, String> dataset : DATASETS.entrySet()) {
+            String source = dataset.getKey();
+            Path path = nerRoot.resolve(dataset.getValue()).normalize();
 
-            SourceStats sourceStats =
-                    bySource.computeIfAbsent(source, ignored -> new SourceStats());
-
-            records++;
-            sourceStats.records++;
-            goldSpans += gold.size();
-            sourceStats.goldSpans += gold.size();
-
-            DeterministicScanResult scan = detector.scan(text);
-
-            if (scan.requiresMl()) {
-                mlRecords++;
-                sourceStats.mlRecords++;
-            } else {
-                bypassRecords++;
-                sourceStats.bypassRecords++;
+            if (!path.startsWith(nerRoot)) {
+                throw new IllegalStateException(
+                        "Dataset path escaped NER root: " + path
+                );
+            }
+            if (!Files.exists(path)) {
+                throw new IllegalStateException(
+                        "Required NER dataset is missing: " + path
+                );
             }
 
-            for (DetectionEvidence evidence : scan.evidence()) {
-                if (evidence.action() == ResolutionAction.MASK) {
-                    deterministicMasks++;
-                    sourceStats.deterministicMasks++;
+            SourceStats sourceStats = new SourceStats();
+            bySource.put(source, sourceStats);
 
-                    if (!overlapsAnyGold(evidence, gold)) {
-                        deterministicOvermask++;
-                        sourceStats.deterministicOvermask++;
-                        addFailure(
-                                failureSamples,
-                                source,
-                                sourceIndex,
-                                "deterministic MASK on gold-O span",
-                                evidence,
-                                text
-                        );
-                    }
-                } else if (evidence.action() == ResolutionAction.ALLOW) {
-                    deterministicAllows++;
-                    sourceStats.deterministicAllows++;
-
-                    if (overlapsAnyGold(evidence, gold)) {
-                        allowGoldConflict++;
-                        sourceStats.allowGoldConflict++;
-                        addFailure(
-                                failureSamples,
-                                source,
-                                sourceIndex,
-                                "deterministic ALLOW overlaps gold sensitive span",
-                                evidence,
-                                text
-                        );
-                    }
-                }
-            }
-
-            if (!scan.requiresMl()) {
-                for (GoldSpan span : gold) {
-                    if (!fullyCoveredByMask(span, scan.evidence())) {
-                        bypassUncoveredGold++;
-                        sourceStats.bypassUncoveredGold++;
-                        if (failureSamples.size() < MAX_FAILURE_SAMPLES) {
-                            failureSamples.add(
-                                    source
-                                            + "#"
-                                            + sourceIndex
-                                            + " bypass leaves gold "
-                                            + span.label
-                                            + " ["
-                                            + span.start
-                                            + ","
-                                            + span.end
-                                            + ") uncovered"
-                            );
-                        }
-                    }
-                }
-            }
+            auditJsonl(
+                    source,
+                    path,
+                    detector,
+                    totals,
+                    sourceStats,
+                    failureSamples
+            );
         }
 
-        boolean passed = bypassUncoveredGold == 0
-                && deterministicOvermask == 0
-                && allowGoldConflict == 0;
+        boolean passed = totals.bypassUncoveredGold == 0
+                && totals.deterministicOvermask == 0
+                && totals.allowGoldConflict == 0;
 
         JSONObject result = new JSONObject();
         result.put(
@@ -160,21 +102,25 @@ public final class HybridGateDatasetAudit {
                         : "HYBRID GATE DATASET AUDIT FAILED"
         );
         result.put("passed", passed);
-        result.put("records", records);
-        result.put("gold_spans", goldSpans);
-        result.put("bypass_records", bypassRecords);
-        result.put("ml_records", mlRecords);
+        result.put("records", totals.records);
+        result.put("gold_spans", totals.goldSpans);
+        result.put("bypass_records", totals.bypassRecords);
+        result.put("ml_records", totals.mlRecords);
         result.put(
                 "bypass_rate",
-                records == 0 ? 0.0 : (double) bypassRecords / records
+                totals.records == 0
+                        ? 0.0
+                        : (double) totals.bypassRecords / totals.records
         );
-        result.put("deterministic_masks", deterministicMasks);
-        result.put("deterministic_allows", deterministicAllows);
-        result.put("bypass_uncovered_gold", bypassUncoveredGold);
-        result.put("deterministic_overmask", deterministicOvermask);
-        result.put("allow_gold_conflict", allowGoldConflict);
+        result.put("deterministic_masks", totals.deterministicMasks);
+        result.put("deterministic_allows", totals.deterministicAllows);
+        result.put("bypass_uncovered_gold", totals.bypassUncoveredGold);
+        result.put("deterministic_overmask", totals.deterministicOvermask);
+        result.put("allow_gold_conflict", totals.allowGoldConflict);
         result.put("sealed_challenge_inference", false);
+        result.put("sealed_challenge_accessed", false);
         result.put("model_inference", false);
+        result.put("ner_repository_mutated", false);
 
         JSONObject sources = new JSONObject();
         for (Map.Entry<String, SourceStats> entry : bySource.entrySet()) {
@@ -206,6 +152,7 @@ public final class HybridGateDatasetAudit {
             );
             sources.put(entry.getKey(), value);
         }
+
         result.put("by_source", sources);
         result.put("failure_samples", new JSONArray(failureSamples));
 
@@ -215,24 +162,34 @@ public final class HybridGateDatasetAudit {
         }
         Files.writeString(
                 resultPath,
-                result.toString(2) + System.lineSeparator()
+                result.toString(2) + System.lineSeparator(),
+                StandardCharsets.UTF_8
         );
 
         System.out.println(result.getString("status"));
-        System.out.println("Records: " + records);
-        System.out.println("Gold spans: " + goldSpans);
+        System.out.println("Records: " + totals.records);
+        System.out.println("Gold spans: " + totals.goldSpans);
         System.out.println(
                 "Deterministic bypass: "
-                        + bypassRecords
+                        + totals.bypassRecords
                         + "/"
-                        + records
+                        + totals.records
                         + " ("
-                        + String.format("%.2f%%", 100.0 * result.getDouble("bypass_rate"))
+                        + String.format(
+                                "%.2f%%",
+                                100.0 * result.getDouble("bypass_rate")
+                        )
                         + ")"
         );
-        System.out.println("Bypass uncovered gold: " + bypassUncoveredGold);
-        System.out.println("Deterministic overmask: " + deterministicOvermask);
-        System.out.println("ALLOW/gold conflicts: " + allowGoldConflict);
+        System.out.println(
+                "Bypass uncovered gold: " + totals.bypassUncoveredGold
+        );
+        System.out.println(
+                "Deterministic overmask: " + totals.deterministicOvermask
+        );
+        System.out.println(
+                "ALLOW/gold conflicts: " + totals.allowGoldConflict
+        );
         System.out.println("Result: " + resultPath);
 
         if (!passed) {
@@ -242,18 +199,168 @@ public final class HybridGateDatasetAudit {
         }
     }
 
+    private static void auditJsonl(
+            String source,
+            Path path,
+            DeterministicSensitiveDataDetector detector,
+            AuditTotals totals,
+            SourceStats sourceStats,
+            List<String> failureSamples
+    ) throws Exception {
+        try (BufferedReader reader = Files.newBufferedReader(
+                path,
+                StandardCharsets.UTF_8
+        )) {
+            String line;
+            int sourceIndex = 0;
+
+            while ((line = reader.readLine()) != null) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+
+                JSONObject item = new JSONObject(trimmed);
+                String text = item.getString("text");
+                List<GoldSpan> gold = goldSpans(
+                        item.optJSONArray("entities")
+                );
+
+                auditRecord(
+                        source,
+                        sourceIndex,
+                        text,
+                        gold,
+                        detector,
+                        totals,
+                        sourceStats,
+                        failureSamples
+                );
+
+                sourceIndex++;
+            }
+        }
+    }
+
+    private static void auditRecord(
+            String source,
+            int sourceIndex,
+            String text,
+            List<GoldSpan> gold,
+            DeterministicSensitiveDataDetector detector,
+            AuditTotals totals,
+            SourceStats sourceStats,
+            List<String> failureSamples
+    ) {
+        totals.records++;
+        sourceStats.records++;
+
+        totals.goldSpans += gold.size();
+        sourceStats.goldSpans += gold.size();
+
+        DeterministicScanResult scan = detector.scan(text);
+
+        if (scan.requiresMl()) {
+            totals.mlRecords++;
+            sourceStats.mlRecords++;
+        } else {
+            totals.bypassRecords++;
+            sourceStats.bypassRecords++;
+        }
+
+        for (DetectionEvidence evidence : scan.evidence()) {
+            if (evidence.action() == ResolutionAction.MASK) {
+                totals.deterministicMasks++;
+                sourceStats.deterministicMasks++;
+
+                if (!overlapsAnyGold(evidence, gold)) {
+                    totals.deterministicOvermask++;
+                    sourceStats.deterministicOvermask++;
+                    addFailure(
+                            failureSamples,
+                            source,
+                            sourceIndex,
+                            "deterministic MASK on gold-O span",
+                            evidence,
+                            text
+                    );
+                }
+            } else if (evidence.action() == ResolutionAction.ALLOW) {
+                totals.deterministicAllows++;
+                sourceStats.deterministicAllows++;
+
+                if (overlapsAnyGold(evidence, gold)) {
+                    totals.allowGoldConflict++;
+                    sourceStats.allowGoldConflict++;
+                    addFailure(
+                            failureSamples,
+                            source,
+                            sourceIndex,
+                            "deterministic ALLOW overlaps gold sensitive span",
+                            evidence,
+                            text
+                    );
+                }
+            }
+        }
+
+        if (!scan.requiresMl()) {
+            for (GoldSpan span : gold) {
+                if (!fullyCoveredByMask(span, scan.evidence())) {
+                    totals.bypassUncoveredGold++;
+                    sourceStats.bypassUncoveredGold++;
+
+                    if (failureSamples.size() < MAX_FAILURE_SAMPLES) {
+                        failureSamples.add(
+                                source
+                                        + "#"
+                                        + sourceIndex
+                                        + " bypass leaves gold "
+                                        + span.label
+                                        + " ["
+                                        + span.start
+                                        + ","
+                                        + span.end
+                                        + ") uncovered"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     private static List<GoldSpan> goldSpans(JSONArray array) {
         List<GoldSpan> result = new ArrayList<>();
-        for (int i = 0; i < array.length(); i++) {
-            JSONObject item = array.getJSONObject(i);
-            result.add(
-                    new GoldSpan(
-                            item.getInt("start"),
-                            item.getInt("end"),
-                            item.getString("label")
-                    )
-            );
+        if (array == null) {
+            return result;
         }
+
+        for (int i = 0; i < array.length(); i++) {
+            Object raw = array.get(i);
+
+            if (raw instanceof JSONArray tuple) {
+                result.add(
+                        new GoldSpan(
+                                tuple.getInt(0),
+                                tuple.getInt(1),
+                                tuple.getString(2)
+                        )
+                );
+            } else if (raw instanceof JSONObject object) {
+                result.add(
+                        new GoldSpan(
+                                object.getInt("start"),
+                                object.getInt("end"),
+                                object.getString("label")
+                        )
+                );
+            } else {
+                throw new IllegalStateException(
+                        "Unsupported entity representation at index " + i
+                );
+            }
+        }
+
         return result;
     }
 
@@ -317,6 +424,18 @@ public final class HybridGateDatasetAudit {
     }
 
     private record GoldSpan(int start, int end, String label) {
+    }
+
+    private static final class AuditTotals {
+        private long records;
+        private long goldSpans;
+        private long bypassRecords;
+        private long mlRecords;
+        private long deterministicMasks;
+        private long deterministicAllows;
+        private long bypassUncoveredGold;
+        private long deterministicOvermask;
+        private long allowGoldConflict;
     }
 
     private static final class SourceStats {
