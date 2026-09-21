@@ -155,6 +155,21 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
+        assertMaskWithoutMl(
+                detector,
+                resolver,
+                policy,
+                "{\"@timestamp\":\"2026-09-21T10:00:00Z\",\"log.level\":\"INFO\",\"service.name\":\"payments\",\"message\":\"email=jane.doe@example.com status=ok\"}",
+                "EMAIL"
+        );
+        cases++;
+
+        assertRequiresMl(
+                detector,
+                "{\"@timestamp\":\"2026-09-21T10:00:00Z\",\"log.level\":\"INFO\",\"service.name\":\"payments\",\"customer.secret\":\"ABC123\",\"message\":\"email=jane.doe@example.com status=ok\"}"
+        );
+        cases++;
+
         assertNegativeEvidenceSuppressesMl(detector, resolver, policy);
         cases++;
 
