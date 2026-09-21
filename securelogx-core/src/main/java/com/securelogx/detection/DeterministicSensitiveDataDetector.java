@@ -157,7 +157,21 @@ public final class DeterministicSensitiveDataDetector {
         List<DetectionEvidence> evidence = new ArrayList<>();
 
         addSimpleMatches(text, EMAIL, "EMAIL", "validated-email-shape", evidence);
-        addSimpleMatches(text, SSN, "SSN", "validated-ssn-shape", evidence);
+        Matcher ssn = SSN.matcher(text);
+        while (ssn.find()) {
+            addEvidence(
+                    evidence,
+                    new DetectionEvidence(
+                            ssn.start(),
+                            ssn.end(),
+                            "SSN",
+                            DetectionSource.DETERMINISTIC,
+                            ResolutionAction.ESCALATE,
+                            0.75,
+                            "ssn-shaped-value-requires-context"
+                    )
+            );
+        }
         addSimpleMatches(text, JWT, "AUTH_TOKEN", "validated-jwt-shape", evidence);
 
         Matcher bearer = BEARER.matcher(text);
@@ -268,9 +282,7 @@ public final class DeterministicSensitiveDataDetector {
         Matcher routing = ROUTING_CONTEXT.matcher(text);
         while (routing.find()) {
             String digits = routing.group(1);
-            ResolutionAction action = isValidUsRoutingNumber(digits)
-                    ? ResolutionAction.MASK
-                    : ResolutionAction.ESCALATE;
+            boolean checksumValid = isValidUsRoutingNumber(digits);
             addEvidence(
                     evidence,
                     new DetectionEvidence(
@@ -278,11 +290,11 @@ public final class DeterministicSensitiveDataDetector {
                             routing.end(1),
                             "ROUTING_NUMBER",
                             DetectionSource.DETERMINISTIC,
-                            action,
-                            action == ResolutionAction.MASK ? 1.0 : 0.5,
-                            action == ResolutionAction.MASK
-                                    ? "routing-context-and-checksum-valid"
-                                    : "routing-context-but-checksum-invalid"
+                            ResolutionAction.ESCALATE,
+                            checksumValid ? 0.75 : 0.4,
+                            checksumValid
+                                    ? "valid-routing-number-requires-account-context"
+                                    : "routing-shaped-value-checksum-invalid"
                     )
             );
         }
