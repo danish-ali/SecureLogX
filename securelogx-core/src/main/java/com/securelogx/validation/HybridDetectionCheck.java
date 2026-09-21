@@ -154,7 +154,7 @@ public final class HybridDetectionCheck {
                 detector,
                 resolver,
                 policy,
-                "versionCheck=true remoteIp=208.210.232.230 status=blocked",
+                "operation=versionCheck remoteIp=208.210.232.230 status=blocked",
                 "IP_ADDRESS"
         );
         cases++;
