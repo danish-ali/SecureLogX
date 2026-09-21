@@ -48,6 +48,9 @@ public final class DeterministicSensitiveDataDetector {
     private static final Pattern KEY_VALUE_KEY = Pattern.compile(
             "([A-Za-z][A-Za-z0-9_.-]{1,40})\\s*[:=]"
     );
+    private static final Pattern OWNING_KEY = Pattern.compile(
+            "[\\\"']?([A-Za-z][A-Za-z0-9_.-]{1,40})[\\\"']?\\s*[:=]\\s*[\\\"']?$"
+    );
     private static final Pattern CAPITALIZED_NAME = Pattern.compile(
             "\\b[A-Z][a-z]{2,}\\s+[A-Z][a-z]{2,}\\b"
     );
@@ -109,18 +112,29 @@ public final class DeterministicSensitiveDataDetector {
             "reason"
     );
 
-    private static final Set<String> IP_NEGATIVE_CONTEXT = Set.of(
-            "version",
-            "release",
-            "build",
-            "artifact",
-            "revision",
-            "protocol",
-            "package",
-            "coordinate"
+    private static final Set<String> CARD_KEYS = Set.of(
+            "card",
+            "cardnumber",
+            "creditcard",
+            "creditcardnumber",
+            "paymentcard",
+            "pan",
+            "primaryaccountnumber"
     );
 
-    private static final Set<String> IP_POSITIVE_CONTEXT = Set.of(
+    private static final Set<String> IP_TECHNICAL_KEYS = Set.of(
+            "version",
+            "releaseversion",
+            "buildversion",
+            "artifactversion",
+            "protocolversion",
+            "packageversion",
+            "serviceversion",
+            "appversion",
+            "applicationversion"
+    );
+
+    private static final Set<String> IP_NETWORK_KEYS = Set.of(
             "ip",
             "clientip",
             "remoteip",
@@ -129,10 +143,10 @@ public final class DeterministicSensitiveDataDetector {
             "srcip",
             "dstip",
             "gateway",
-            "peer",
-            "network address",
-            "remote address",
-            "client address"
+            "peerip",
+            "networkaddress",
+            "remoteaddress",
+            "clientaddress"
     );
 
     public DeterministicScanResult scan(String text) {
@@ -214,7 +228,15 @@ public final class DeterministicSensitiveDataDetector {
         while (card.find()) {
             String raw = card.group();
             String digits = digitsOnly(raw);
-            if (digits.length() >= 13 && digits.length() <= 19 && passesLuhn(digits)) {
+
+            if (digits.length() < 13
+                    || digits.length() > 19
+                    || !passesLuhn(digits)) {
+                continue;
+            }
+
+            String owningKey = owningKey(text, card.start());
+            if (CARD_KEYS.contains(owningKey)) {
                 addEvidence(
                         evidence,
                         new DetectionEvidence(
@@ -224,7 +246,20 @@ public final class DeterministicSensitiveDataDetector {
                                 DetectionSource.DETERMINISTIC,
                                 ResolutionAction.MASK,
                                 1.0,
-                                "luhn-valid-card"
+                                "card-field-and-luhn-valid"
+                        )
+                );
+            } else {
+                addEvidence(
+                        evidence,
+                        new DetectionEvidence(
+                                card.start(),
+                                card.end(),
+                                "CREDIT_CARD_NUMBER",
+                                DetectionSource.DETERMINISTIC,
+                                ResolutionAction.ESCALATE,
+                                0.5,
+                                "luhn-valid-but-no-card-field"
                         )
                 );
             }
@@ -254,27 +289,23 @@ public final class DeterministicSensitiveDataDetector {
 
         Matcher ip = IPV4.matcher(text);
         while (ip.find()) {
-            String context = contextWindow(text, ip.start(), ip.end(), 40)
-                    .toLowerCase(Locale.ROOT);
-
-            boolean negative = containsAny(context, IP_NEGATIVE_CONTEXT);
-            boolean positive = containsAny(context, IP_POSITIVE_CONTEXT);
+            String owningKey = owningKey(text, ip.start());
 
             ResolutionAction action;
             String reason;
             double confidence;
 
-            if (negative && !positive) {
+            if (IP_TECHNICAL_KEYS.contains(owningKey)) {
                 action = ResolutionAction.ALLOW;
-                reason = "technical-reference-ip-shape";
+                reason = "explicit-version-field-ip-shape";
                 confidence = 1.0;
-            } else if (positive && !negative) {
+            } else if (IP_NETWORK_KEYS.contains(owningKey)) {
                 action = ResolutionAction.MASK;
-                reason = "network-context-ip-address";
+                reason = "explicit-network-field-ip-address";
                 confidence = 1.0;
             } else {
                 action = ResolutionAction.ESCALATE;
-                reason = "ambiguous-ip-context";
+                reason = "ip-without-authoritative-field-context";
                 confidence = 0.5;
             }
 
@@ -497,15 +528,14 @@ public final class DeterministicSensitiveDataDetector {
         return false;
     }
 
-    private static String contextWindow(
-            String text,
-            int start,
-            int end,
-            int radius
-    ) {
-        int left = Math.max(0, start - radius);
-        int right = Math.min(text.length(), end + radius);
-        return text.substring(left, right);
+    private static String owningKey(String text, int valueStart) {
+        int left = Math.max(0, valueStart - 80);
+        String prefix = text.substring(left, valueStart);
+        Matcher matcher = OWNING_KEY.matcher(prefix);
+        if (!matcher.find()) {
+            return "";
+        }
+        return normalizeKey(matcher.group(1));
     }
 
     private static String digitsOnly(String value) {
