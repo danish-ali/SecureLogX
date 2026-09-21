@@ -43,10 +43,8 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
-        assertMaskWithoutMl(
+        assertEscalatesWithEvidence(
                 detector,
-                resolver,
-                policy,
                 "ssn=123-45-6789 status=verified",
                 "SSN"
         );
@@ -61,10 +59,8 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
-        assertMaskWithoutMl(
+        assertEscalatesWithEvidence(
                 detector,
-                resolver,
-                policy,
                 "routing=021000021 status=pending",
                 "ROUTING_NUMBER"
         );
@@ -267,6 +263,32 @@ public final class HybridDetectionCheck {
             throw new IllegalStateException(
                     "Negative technical reference was unexpectedly masked: "
                             + output
+            );
+        }
+    }
+
+    private static void assertEscalatesWithEvidence(
+            DeterministicSensitiveDataDetector detector,
+            String text,
+            String entityType
+    ) {
+        DeterministicScanResult scan = detector.scan(text);
+        if (!scan.requiresMl()) {
+            throw new IllegalStateException(
+                    "Expected ML escalation for: " + text
+            );
+        }
+
+        boolean found = scan.evidence().stream().anyMatch(
+                evidence -> evidence.entityType().equals(entityType)
+                        && evidence.action() == ResolutionAction.ESCALATE
+        );
+        if (!found) {
+            throw new IllegalStateException(
+                    "Expected ESCALATE evidence for "
+                            + entityType
+                            + ": "
+                            + text
             );
         }
     }
