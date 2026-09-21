@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.json.JSONObject;
 
 /**
  * Conservative deterministic scanner for strongly structured sensitive values.
@@ -84,6 +85,46 @@ public final class DeterministicSensitiveDataDetector {
             "token",
             "authorization",
             "auth"
+    );
+
+    private static final Set<String> JSON_ENVELOPE_SAFE_KEYS = Set.of(
+            "timestamp",
+            "time",
+            "level",
+            "loglevel",
+            "severity",
+            "servicename",
+            "service",
+            "logger",
+            "loggername",
+            "thread",
+            "threadname",
+            "traceid",
+            "spanid",
+            "hostname",
+            "host",
+            "environment",
+            "env",
+            "deploymentenvironment",
+            "eventdataset",
+            "eventmodule",
+            "eventkind",
+            "eventcategory",
+            "ecsversion",
+            "processid",
+            "processname",
+            "podname",
+            "containername",
+            "namespace",
+            "application",
+            "app",
+            "component"
+    );
+
+    private static final Set<String> JSON_PAYLOAD_KEYS = Set.of(
+            "message",
+            "msg",
+            "logmessage"
     );
 
     private static final Set<String> SAFE_METADATA_KEYS = Set.of(
@@ -398,6 +439,11 @@ public final class DeterministicSensitiveDataDetector {
             return true;
         }
 
+        StructuredGateDecision structured = evaluateStructuredJson(text);
+        if (structured.recognized()) {
+            return structured.requiresMl();
+        }
+
         if (evidence.isEmpty()) {
             return true;
         }
@@ -492,6 +538,102 @@ public final class DeterministicSensitiveDataDetector {
         }
 
         return false;
+    }
+
+    private StructuredGateDecision evaluateStructuredJson(String text) {
+        String trimmed = text.trim();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            return StructuredGateDecision.notRecognized();
+        }
+
+        final JSONObject object;
+        try {
+            object = new JSONObject(trimmed);
+        } catch (Exception ignored) {
+            return StructuredGateDecision.notRecognized();
+        }
+
+        boolean sawKnownKey = false;
+        boolean sawPayload = false;
+
+        for (String key : object.keySet()) {
+            String normalized = normalizeStructuredKey(key);
+
+            if (JSON_ENVELOPE_SAFE_KEYS.contains(normalized)) {
+                sawKnownKey = true;
+                continue;
+            }
+
+            if (JSON_PAYLOAD_KEYS.contains(normalized)) {
+                sawKnownKey = true;
+                sawPayload = true;
+
+                Object value = object.opt(key);
+                if (!(value instanceof String payload)) {
+                    return StructuredGateDecision.requiresMl(
+                            "non-string-json-payload"
+                    );
+                }
+
+                DeterministicScanResult payloadScan = scan(payload);
+                if (payloadScan.requiresMl()) {
+                    return StructuredGateDecision.requiresMl(
+                            "json-payload-requires-ml"
+                    );
+                }
+                continue;
+            }
+
+            // Unknown JSON fields remain conservative. We do not infer that an
+            // unfamiliar field is non-sensitive merely because it is outside
+            // the message payload.
+            return StructuredGateDecision.requiresMl(
+                    "unknown-json-field:" + key
+            );
+        }
+
+        if (!sawKnownKey) {
+            return StructuredGateDecision.notRecognized();
+        }
+
+        // A recognized envelope with only approved metadata is safe to bypass.
+        // If a message payload exists, it has already been independently
+        // scanned above.
+        return StructuredGateDecision.bypass(
+                sawPayload
+                        ? "json-envelope-payload-resolved"
+                        : "json-envelope-metadata-only"
+        );
+    }
+
+    private static String normalizeStructuredKey(String key) {
+        String lower = key.toLowerCase(Locale.ROOT);
+        StringBuilder normalized = new StringBuilder(lower.length());
+        for (int i = 0; i < lower.length(); i++) {
+            char c = lower.charAt(i);
+            if (Character.isLetterOrDigit(c)) {
+                normalized.append(c);
+            }
+        }
+        return normalized.toString();
+    }
+
+    private record StructuredGateDecision(
+            boolean recognized,
+            boolean requiresMl,
+            String reason
+    ) {
+        private static StructuredGateDecision notRecognized() {
+            return new StructuredGateDecision(false, true, "not-json-envelope");
+        }
+
+        private static StructuredGateDecision requiresMl(String reason) {
+            return new StructuredGateDecision(true, true, reason);
+        }
+
+        private static StructuredGateDecision bypass(String reason) {
+            return new StructuredGateDecision(true, false, reason);
+        }
     }
 
     private static boolean containsCapitalizedNameOutsideEvidence(
