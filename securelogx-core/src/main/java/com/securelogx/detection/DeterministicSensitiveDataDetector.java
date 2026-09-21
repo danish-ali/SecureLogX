@@ -382,12 +382,12 @@ public final class DeterministicSensitiveDataDetector {
                         .thenComparing(DetectionEvidence::entityType)
         );
 
-        boolean requiresMl = shouldInvokeMl(text, evidence);
-        String gateReason = requiresMl
-                ? "unresolved-or-semantic-risk"
-                : "fully-resolved-by-deterministic-evidence";
-
-        return new DeterministicScanResult(evidence, requiresMl, gateReason);
+        MlGateDecision gate = decideMlRouting(text, evidence);
+        return new DeterministicScanResult(
+                evidence,
+                gate.requiresMl(),
+                gate.reason()
+        );
     }
 
     private static void addSimpleMatches(
@@ -429,44 +429,54 @@ public final class DeterministicSensitiveDataDetector {
         output.add(candidate);
     }
 
-    private boolean shouldInvokeMl(
+    private MlGateDecision decideMlRouting(
             String text,
             List<DetectionEvidence> evidence
     ) {
-        if (evidence.stream().anyMatch(
-                item -> item.action() == ResolutionAction.ESCALATE
-        )) {
-            return true;
+        for (DetectionEvidence item : evidence) {
+            if (item.action() == ResolutionAction.ESCALATE) {
+                return MlGateDecision.ml(
+                        "evidence-escalate:"
+                                + item.entityType()
+                                + ":"
+                                + item.reason()
+                );
+            }
         }
 
         StructuredGateDecision structured = evaluateStructuredJson(text);
         if (structured.recognized()) {
-            return structured.requiresMl();
+            return structured.requiresMl()
+                    ? MlGateDecision.ml(structured.reason())
+                    : MlGateDecision.bypass(structured.reason());
         }
 
         if (evidence.isEmpty()) {
-            return true;
+            return MlGateDecision.ml("no-deterministic-evidence");
         }
 
         if (containsCapitalizedNameOutsideEvidence(text, evidence)) {
-            return true;
+            return MlGateDecision.ml("capitalized-name-outside-evidence");
         }
 
         Matcher keyMatcher = KEY_VALUE_KEY.matcher(text);
         boolean sawKeyValue = false;
         while (keyMatcher.find()) {
             sawKeyValue = true;
-            String normalizedKey = normalizeKey(keyMatcher.group(1));
+            String rawKey = keyMatcher.group(1);
+            String normalizedKey = normalizeKey(rawKey);
             if (!DETERMINISTIC_KEYS.contains(normalizedKey)
                     && !SAFE_METADATA_KEYS.contains(normalizedKey)) {
-                return true;
+                return MlGateDecision.ml(
+                        "unknown-key:" + normalizedKey
+                );
             }
         }
 
         // Deterministic bypass is intentionally limited to structured log
         // records. Free prose continues through contextual ML.
         if (!sawKeyValue) {
-            return true;
+            return MlGateDecision.ml("free-text-no-keyvalue");
         }
 
         String lower = text.toLowerCase(Locale.ROOT);
@@ -512,32 +522,47 @@ public final class DeterministicSensitiveDataDetector {
                         "device"
                 )
         )) {
-            return true;
+            return MlGateDecision.ml("semantic-risk-keyword");
         }
 
         if (lower.contains("ssn") && !hasEntity(evidence, "SSN")) {
-            return true;
+            return MlGateDecision.ml("unresolved-keyword:ssn");
         }
         if (lower.contains("email") && !hasEntity(evidence, "EMAIL")) {
-            return true;
+            return MlGateDecision.ml("unresolved-keyword:email");
         }
         if (containsAny(lower, Set.of("credit card", "cardnumber", "card_number"))
                 && !hasEntity(evidence, "CREDIT_CARD_NUMBER")) {
-            return true;
+            return MlGateDecision.ml("unresolved-keyword:credit-card");
         }
         if (lower.contains("iban") && !hasEntity(evidence, "IBAN")) {
-            return true;
+            return MlGateDecision.ml("unresolved-keyword:iban");
         }
         if (lower.contains("routing") && !hasEntity(evidence, "ROUTING_NUMBER")) {
-            return true;
+            return MlGateDecision.ml("unresolved-keyword:routing");
         }
         if (containsAny(lower, Set.of("token", "apikey", "api_key", "api-key"))
                 && !hasEntity(evidence, "AUTH_TOKEN")
                 && !hasEntity(evidence, "API_KEY")) {
-            return true;
+            return MlGateDecision.ml("unresolved-keyword:token");
         }
 
-        return false;
+        return MlGateDecision.bypass(
+                "fully-resolved-by-deterministic-evidence"
+        );
+    }
+
+    private record MlGateDecision(
+            boolean requiresMl,
+            String reason
+    ) {
+        private static MlGateDecision ml(String reason) {
+            return new MlGateDecision(true, reason);
+        }
+
+        private static MlGateDecision bypass(String reason) {
+            return new MlGateDecision(false, reason);
+        }
     }
 
     private StructuredGateDecision evaluateStructuredJson(String text) {
