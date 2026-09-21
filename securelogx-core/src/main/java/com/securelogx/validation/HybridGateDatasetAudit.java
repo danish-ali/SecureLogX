@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Dataset-wide security audit for the deterministic ML-bypass gate.
@@ -32,6 +34,9 @@ import java.util.Map;
 public final class HybridGateDatasetAudit {
 
     private static final int MAX_FAILURE_SAMPLES = 20;
+    private static final Pattern KEY_VALUE_SHAPE = Pattern.compile(
+            "([A-Za-z][A-Za-z0-9_.-]{1,40})\\s*[:=]"
+    );
 
     private static final Map<String, String> DATASETS = Map.of(
             "standard_dev",
@@ -129,6 +134,8 @@ public final class HybridGateDatasetAudit {
         result.put("sealed_challenge_accessed", false);
         result.put("model_inference", false);
         result.put("ner_repository_mutated", false);
+        result.put("gate_reasons", countsJson(totals.gateReasons));
+        result.put("record_shapes", countsJson(totals.recordShapes));
 
         JSONObject sources = new JSONObject();
         for (Map.Entry<String, SourceStats> entry : bySource.entrySet()) {
@@ -158,6 +165,8 @@ public final class HybridGateDatasetAudit {
                     "allow_gold_conflict",
                     stats.allowGoldConflict
             );
+            value.put("gate_reasons", countsJson(stats.gateReasons));
+            value.put("record_shapes", countsJson(stats.recordShapes));
             sources.put(entry.getKey(), value);
         }
 
@@ -198,6 +207,10 @@ public final class HybridGateDatasetAudit {
         System.out.println(
                 "ALLOW/gold conflicts: " + totals.allowGoldConflict
         );
+        System.out.println("Top ML gate reasons:");
+        printTopCounts(totals.gateReasons, 12);
+        System.out.println("Record shapes:");
+        printTopCounts(totals.recordShapes, 10);
         System.out.println("Result: " + resultPath);
 
         if (!safetyPassed) {
@@ -274,6 +287,13 @@ public final class HybridGateDatasetAudit {
         sourceStats.goldSpans += gold.size();
 
         DeterministicScanResult scan = detector.scan(text);
+
+        increment(totals.gateReasons, scan.gateReason());
+        increment(sourceStats.gateReasons, scan.gateReason());
+
+        String shape = recordShape(text);
+        increment(totals.recordShapes, shape);
+        increment(sourceStats.recordShapes, shape);
 
         if (scan.requiresMl()) {
             totals.mlRecords++;
@@ -406,6 +426,78 @@ public final class HybridGateDatasetAudit {
         return false;
     }
 
+    private static void increment(
+            Map<String, Long> counts,
+            String key
+    ) {
+        counts.merge(key, 1L, Long::sum);
+    }
+
+    private static String recordShape(String text) {
+        String trimmed = text.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            return "json";
+        }
+        if (text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0) {
+            return "multiline";
+        }
+        Matcher matcher = KEY_VALUE_SHAPE.matcher(text);
+        if (matcher.find()) {
+            return "key_value_like";
+        }
+        return "free_text";
+    }
+
+    private static JSONObject countsJson(Map<String, Long> counts) {
+        JSONObject object = new JSONObject();
+        List<Map.Entry<String, Long>> entries =
+                new ArrayList<>(counts.entrySet());
+        entries.sort(
+                (left, right) -> {
+                    int byCount = Long.compare(
+                            right.getValue(),
+                            left.getValue()
+                    );
+                    return byCount != 0
+                            ? byCount
+                            : left.getKey().compareTo(right.getKey());
+                }
+        );
+        for (Map.Entry<String, Long> entry : entries) {
+            object.put(entry.getKey(), entry.getValue());
+        }
+        return object;
+    }
+
+    private static void printTopCounts(
+            Map<String, Long> counts,
+            int limit
+    ) {
+        List<Map.Entry<String, Long>> entries =
+                new ArrayList<>(counts.entrySet());
+        entries.sort(
+                (left, right) -> {
+                    int byCount = Long.compare(
+                            right.getValue(),
+                            left.getValue()
+                    );
+                    return byCount != 0
+                            ? byCount
+                            : left.getKey().compareTo(right.getKey());
+                }
+        );
+
+        int shown = 0;
+        for (Map.Entry<String, Long> entry : entries) {
+            if (shown++ >= limit) {
+                break;
+            }
+            System.out.println(
+                    "  " + entry.getValue() + "  " + entry.getKey()
+            );
+        }
+    }
+
     private static void addFailure(
             List<String> samples,
             String source,
@@ -451,6 +543,8 @@ public final class HybridGateDatasetAudit {
         private long bypassUncoveredGold;
         private long deterministicOvermask;
         private long allowGoldConflict;
+        private final Map<String, Long> gateReasons = new LinkedHashMap<>();
+        private final Map<String, Long> recordShapes = new LinkedHashMap<>();
     }
 
     private static final class SourceStats {
@@ -463,5 +557,7 @@ public final class HybridGateDatasetAudit {
         private long bypassUncoveredGold;
         private long deterministicOvermask;
         private long allowGoldConflict;
+        private final Map<String, Long> gateReasons = new LinkedHashMap<>();
+        private final Map<String, Long> recordShapes = new LinkedHashMap<>();
     }
 }
