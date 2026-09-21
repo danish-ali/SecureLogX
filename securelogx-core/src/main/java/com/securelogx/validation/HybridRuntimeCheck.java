@@ -108,16 +108,16 @@ public final class HybridRuntimeCheck {
             );
         }
 
-        if (stats.deterministicOnlyItems() < 7) {
+        if (stats.deterministicOnlyItems() < 5) {
             throw new IllegalStateException(
-                    "Expected at least 7 deterministic-only routes, got "
+                    "Expected at least 5 deterministic-only routes, got "
                             + stats.deterministicOnlyItems()
             );
         }
 
-        if (stats.mlInferenceItems() < 2) {
+        if (stats.mlInferenceItems() < 4) {
             throw new IllegalStateException(
-                    "Expected at least 2 ML-routed records, got "
+                    "Expected at least 4 ML-routed records, got "
                             + stats.mlInferenceItems()
             );
         }
