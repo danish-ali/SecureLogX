@@ -53,6 +53,7 @@ public final class HybridRuntimeCheck {
                 "iban=GB82WEST12345698765432 status=pending",
                 "remoteIp=10.20.30.40 status=blocked",
                 "releaseVersion=10.20.30.40 deployment=canary",
+                "{\"@timestamp\":\"2026-09-21T10:00:00Z\",\"log.level\":\"INFO\",\"service.name\":\"payments\",\"message\":\"email=json.user@example.com status=ok\"}",
                 "customerId=CUST-938271 lifecycle=active",
                 "name=Jane Doe action=login"
         );
@@ -108,7 +109,13 @@ public final class HybridRuntimeCheck {
             );
         }
 
-        if (stats.deterministicOnlyItems() < 5) {
+        assertNotPresent(
+                outputs.get(7),
+                "json.user@example.com",
+                "JSON-envelope EMAIL"
+        );
+
+        if (stats.deterministicOnlyItems() < 6) {
             throw new IllegalStateException(
                     "Expected at least 5 deterministic-only routes, got "
                             + stats.deterministicOnlyItems()
