@@ -429,7 +429,7 @@ public final class DeterministicSensitiveDataDetector {
         output.add(candidate);
     }
 
-    private static boolean shouldInvokeMl(
+    private boolean shouldInvokeMl(
             String text,
             List<DetectionEvidence> evidence
     ) {
@@ -540,7 +540,7 @@ public final class DeterministicSensitiveDataDetector {
         return false;
     }
 
-    private static StructuredGateDecision evaluateStructuredJson(String text) {
+    private StructuredGateDecision evaluateStructuredJson(String text) {
         String trimmed = text.trim();
         if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
             return StructuredGateDecision.notRecognized();
