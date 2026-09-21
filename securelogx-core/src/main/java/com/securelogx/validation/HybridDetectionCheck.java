@@ -141,6 +141,24 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
+        // Luhn validity alone is not sufficient evidence that an arbitrary
+        // numeric value is a payment card.
+        assertRequiresMl(
+                detector,
+                "reference=4111111111111111 status=active"
+        );
+        cases++;
+
+        // Loose nearby words must not turn a real network IP into ALLOW.
+        assertMaskWithoutMl(
+                detector,
+                resolver,
+                policy,
+                "versionCheck=true remoteIp=208.210.232.230 status=blocked",
+                "IP_ADDRESS"
+        );
+        cases++;
+
         assertNegativeEvidenceSuppressesMl(detector, resolver, policy);
         cases++;
 
