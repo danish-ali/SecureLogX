@@ -65,7 +65,7 @@ public final class HybridDetectionCheck {
                 detector,
                 resolver,
                 policy,
-                "routing=021000021 transfer=pending",
+                "routing=021000021 status=pending",
                 "ROUTING_NUMBER"
         );
         cases++;
@@ -74,7 +74,7 @@ public final class HybridDetectionCheck {
                 detector,
                 resolver,
                 policy,
-                "iban=GB82WEST12345698765432 transfer=pending",
+                "iban=GB82WEST12345698765432 status=pending",
                 "IBAN"
         );
         cases++;
@@ -117,7 +117,15 @@ public final class HybridDetectionCheck {
 
         assertRequiresMl(
                 detector,
-                "routing=123456789 transfer=pending"
+                "routing=123456789 status=pending"
+        );
+        cases++;
+
+        // A valid routing number does not bypass ML when the same record
+        // contains an unknown field. The gate stays conservative.
+        assertRequiresMl(
+                detector,
+                "routing=021000021 transfer=pending"
         );
         cases++;
 
