@@ -1,0 +1,7 @@
+{
+  "cases": 19,
+  "sealed_challenge_inference": false,
+  "passed": true,
+  "onnx_inference": false,
+  "status": "HYBRID DETECTION CHECK PASSED"
+}

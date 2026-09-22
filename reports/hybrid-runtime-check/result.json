@@ -1,0 +1,14 @@
+{
+  "ml_inference_items": 4,
+  "model_sha256": "5953acd999083fa08c17c537e1d88c38f3c7137bc518022d8f3246c1133997c2",
+  "cases": 10,
+  "tokenizer_sha256": "b30eb8ca04d00e5330bade5d5e6036bd0ce0ad68f7b96e2e38bff11942ee30b1",
+  "ml_invocation_rate": 0.4,
+  "deterministic_only_items": 6,
+  "negative_ip_reference_preserved": true,
+  "processing_failures": 0,
+  "sealed_challenge_inference": false,
+  "fail_closed_policy_enabled": true,
+  "passed": true,
+  "status": "HYBRID RUNTIME CHECK PASSED"
+}
