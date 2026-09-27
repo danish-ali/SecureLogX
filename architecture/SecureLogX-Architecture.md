@@ -190,10 +190,11 @@ Current principles:
 
 1. high-confidence deterministic MASK evidence can protect a value even if ML misses it,
 2. deterministic MASK is a **protection floor, not a span ceiling**; overlapping ML MASK evidence may extend the protected span,
-3. high-confidence deterministic ALLOW evidence can suppress an overlapping ML false positive only when the negative context is authoritative,
-4. ESCALATE evidence does not decide the final outcome,
-5. non-overlapping contextual ML spans are normally masked,
-6. unsafe ambiguity should favor protection or escalation rather than raw exposure.
+3. deterministic ALLOW may suppress ML only when it is authoritative, matches the same entity type, and fully contains the ML span,
+4. partial-overlap ALLOW must not erase a larger ML protection span,
+5. ESCALATE evidence does not decide the final outcome,
+6. non-overlapping contextual ML spans are normally masked,
+7. unsafe ambiguity should favor protection or escalation rather than raw exposure.
 
 Future hardening requirement:
 
@@ -516,7 +517,8 @@ The resolver now treats deterministic MASK as a protection floor rather than a s
 
 - deterministic MASK remains in the final protection set,
 - overlapping ML MASK is also retained and may extend coverage,
-- deterministic ALLOW remains the only decisive evidence that can suppress an overlapping ML MASK,
+- deterministic ALLOW can suppress ML only when it matches the same entity type and fully contains the ML span,
+- partial ALLOW overlap cannot erase a larger ML span,
 - ESCALATE remains non-decisive.
 
 This change is not yet considered validated until the locked hybrid safety suite and D0/M0/H1 architecture comparison are rerun.
@@ -709,6 +711,38 @@ Production runtime must additionally define:
 - unexpected outer-exception behavior.
 
 No failure path may emit the original unmasked message.
+
+### Long-input / tokenizer-window policy
+
+**Current status: PRODUCTION SAFETY GUARD IMPLEMENTED; WINDOWED INFERENCE PENDING**
+
+ML-v1.3 currently has a validated maximum sequence length of 384 tokens.
+
+The tokenizer now reports whether input was truncated and the last covered character offset. An ML-routed message that exceeds the validated tokenizer window must **fail closed for the entire message** and emit only:
+
+`[SECURELOGX_REDACTED_PROCESSING_FAILURE]`
+
+It must not emit the partially analyzed prefix or the unseen tail.
+
+Runtime metrics track these events separately as:
+
+`truncatedFailClosedItems`
+
+This is a temporary safety policy, not the final long-message UX.
+
+Future production work should replace full-message fail-closed behavior with validated overlapping-window inference, including:
+
+- deterministic window construction,
+- overlap between adjacent windows,
+- offset rebasing into original character coordinates,
+- span de-duplication/merge across windows,
+- boundary-sensitive regression tests,
+- latency and memory benchmarks,
+- parity checks against single-window inference where applicable.
+
+Until that implementation is validated, silent truncation is prohibited.
+
+Architecture-quality benchmarks also reject truncated records rather than scoring incomplete inference.
 
 ---
 
@@ -1217,6 +1251,56 @@ Post-change validation is pending.
 **Backward-compatibility impact**
 
 Masking may expand when both deterministic MASK and overlapping ML MASK evidence are present. Public APIs are unchanged.
+
+---
+
+### 2026-09-27 — Partial ALLOW veto and silent tokenizer truncation closed
+
+**Status**
+
+PENDING VALIDATION
+
+**Change**
+
+Two safety holes were closed:
+
+1. deterministic ALLOW no longer suppresses a merely overlapping ML span; it must fully contain the ML span and match the same entity type,
+2. the tokenizer now exposes truncation metadata, and ML-routed messages beyond the 384-token validated window fail closed for the entire message.
+
+The architecture comparison harness also refuses to score truncated records.
+
+**Reason**
+
+The resolver used the same overlap-based veto mechanism for ALLOW that previously caused deterministic MASK to shrink larger ML protection spans. Although the current labeled corpus showed zero ALLOW/gold conflicts, the mechanism was unsafe in principle.
+
+Separately, `PureJavaTokenizer` silently stopped after the configured sequence limit, meaning tail characters could remain unseen by ML without triggering a fail-closed response.
+
+**Evidence / benchmark**
+
+Pre-change diagnostic:
+
+- 120 M0-to-H1 regressions,
+- all high-risk `AUTH_TOKEN`,
+- all associated with `MASK:AUTH_TOKEN:explicit-bearer-token`,
+- zero observed ALLOW/gold conflicts on the current corpus,
+- silent truncation path existed for messages beyond the validated 384-token model window.
+
+Post-change validation is pending.
+
+**Affected modules**
+
+- `HybridContextResolver`
+- `TokenizedInput`
+- `PureJavaTokenizer`
+- `ONNXDynamicInferenceEngine`
+- `HybridRuntimeStats`
+- `HybridDetectionCheck`
+- `HybridRuntimeCheck`
+- `ArchitectureComparisonBenchmark`
+
+**Backward-compatibility impact**
+
+Long ML-routed messages that previously could be partially analyzed now fail closed until windowed inference is implemented. Partial-overlap deterministic ALLOW may no longer suppress a larger ML masking span.
 
 ---
 
