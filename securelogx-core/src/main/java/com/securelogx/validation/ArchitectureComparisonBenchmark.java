@@ -283,6 +283,27 @@ public final class ArchitectureComparisonBenchmark {
         printSummary(h1);
         printRegressionDiagnostics(regressionDiagnostics);
         System.out.println();
+        System.out.println("Truncation cohort");
+        System.out.println("  input records: " + inputRecords);
+        System.out.println("  scored records: " + scoredRecords);
+        System.out.println(
+                "  excluded truncated records: "
+                        + truncationDiagnostics.totalTruncated()
+        );
+        JSONObject truncationBySource =
+                truncationDiagnostics.toJson()
+                        .getJSONObject("by_source");
+        truncationBySource.keySet().stream()
+                .sorted()
+                .forEach(
+                        source -> System.out.println(
+                                "    "
+                                        + source
+                                        + ": "
+                                        + truncationBySource.getLong(source)
+                        )
+                );
+        System.out.println();
         System.out.println(
                 "H2: EXPERIMENTAL_NOT_IMPLEMENTED "
                         + "(requires genuine contextual reviewer)"
@@ -866,9 +887,7 @@ public final class ArchitectureComparisonBenchmark {
 
         private JSONObject toJson() {
             JSONObject object = new JSONObject();
-            object.put("input_records", inputRecords);
-            object.put("scored_records", records);
-            object.put("excluded_truncated_records", truncatedRecords);
+            object.put("records", records);
             object.put("records_with_sensitive", recordsWithSensitive);
 
             object.put("sensitive_characters", sensitiveCharacters);
@@ -1302,7 +1321,9 @@ public final class ArchitectureComparisonBenchmark {
             h1.setMlInvocation(h1MlRecords, records);
 
             JSONObject object = new JSONObject();
-            object.put("records", records);
+            object.put("input_records", inputRecords);
+            object.put("scored_records", records);
+            object.put("excluded_truncated_records", truncatedRecords);
             object.put("D0", d0.toJson());
             object.put("M0", m0.toJson());
             object.put("H1", h1.toJson());
