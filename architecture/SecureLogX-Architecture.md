@@ -475,6 +475,38 @@ The first executable comparison covers D0, M0, and H1 on the same non-sealed dat
 
 H2 is intentionally reported as `EXPERIMENTAL_NOT_IMPLEMENTED` until a genuine contextual Redact/Keep reviewer exists. SecureLogX must not emulate H2 with heuristics and present that as a valid research baseline.
 
+### First Phase 2 comparison result
+
+**Status: INVESTIGATION REQUIRED**
+
+First local D0/M0/H1 execution on the non-sealed 6,463-record corpus produced:
+
+| Metric | D0 | M0 | H1 |
+|---|---:|---:|---:|
+| Sensitive-character recall | 29.5337% | 94.8855% | 94.7886% |
+| Non-sensitive-character redaction | 0.0026% | 0.2126% | 0.2126% |
+| Full-span recall | 17.4388% | 92.5633% | 91.6107% |
+| High-risk full-span recall | 13.4263% | **98.4462%** | **93.7450%** |
+| Whole-record perfect redaction | 15.4263% | 92.3410% | 90.5462% |
+| Logical ML invocation | 0% | 100% | 100% |
+
+Interpretation:
+
+> H1 does not yet meet the architecture-quality objective on this corpus. It slightly reduces overall recall and materially reduces high-risk full-span recall relative to M0, while producing the same non-sensitive-character redaction rate.
+
+Because H1 logically invokes ML on 100% of this NER-heavy corpus, the quality difference is not caused by ML bypass. M0 and H1 receive the same frozen ML predictions. The difference must therefore arise from deterministic evidence and resolver interaction.
+
+Before changing production resolver semantics, the benchmark now diagnoses:
+
+- gold spans fully covered by M0 but not H1,
+- high-risk regressions,
+- gold labels associated with regressions,
+- overlapping decisive deterministic evidence and its reason,
+- source distribution,
+- counter-cases where H1 fully covers a gold span that M0 does not.
+
+No production resolver change should be made until this diagnostic is reviewed.
+
 The journal benchmark should include:
 
 | ID | Architecture | Purpose |
@@ -1089,6 +1121,43 @@ M0 predictions are generated once on every record and reused by H1 where the pro
 **Backward-compatibility impact**
 
 None. Production routing/runtime behavior is unchanged.
+
+---
+
+### 2026-09-27 — H1 quality regression identified; resolver diagnosis added
+
+**Change**
+
+Recorded the first D0/M0/H1 comparison and added focused M0-to-H1 regression diagnostics to the Phase 2 benchmark. Production resolver behavior remains unchanged pending evidence.
+
+**Reason**
+
+H1 showed lower full-span and high-risk full-span recall than M0 despite using the same frozen ML predictions and invoking ML on 100% of the NER-heavy comparison corpus. This isolates the likely problem to deterministic/resolver interaction rather than routing.
+
+**Evidence / benchmark**
+
+Initial results:
+
+- D0 sensitive-character recall: 29.5337%
+- M0 sensitive-character recall: 94.8855%
+- H1 sensitive-character recall: 94.7886%
+- M0 full-span recall: 92.5633%
+- H1 full-span recall: 91.6107%
+- M0 high-risk full-span recall: 98.4462%
+- H1 high-risk full-span recall: 93.7450%
+- M0 whole-record perfect redaction: 92.3410%
+- H1 whole-record perfect redaction: 90.5462%
+- M0 and H1 non-sensitive-character redaction: 0.2126%
+- H1 logical ML invocation on this corpus: 100%
+
+**Affected modules**
+
+- `securelogx-core` validation tooling only
+- canonical architecture reference
+
+**Backward-compatibility impact**
+
+None. Production resolver behavior has not yet changed.
 
 ---
 
