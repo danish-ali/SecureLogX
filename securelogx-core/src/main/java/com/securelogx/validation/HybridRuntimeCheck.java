@@ -45,7 +45,7 @@ public final class HybridRuntimeCheck {
                 config.getMaxSequenceLength()
         );
 
-        List<String> messages = List.of(
+        List<String> messages = new ArrayList<>(List.of(
                 "email=jane.doe@example.com status=ok",
                 "ssn=123-45-6789 status=verified",
                 "card=4111 1111 1111 1111 status=declined",
@@ -56,7 +56,17 @@ public final class HybridRuntimeCheck {
                 "{\"@timestamp\":\"2026-09-21T10:00:00Z\",\"log.level\":\"INFO\",\"service.name\":\"payments\",\"message\":\"email=json.user@example.com status=ok\"}",
                 "customerId=CUST-938271 lifecycle=active",
                 "name=Jane Doe action=login"
-        );
+        ));
+
+        StringBuilder longMessage = new StringBuilder("name=Jane Doe ");
+        for (int i = 0; i < 450; i++) {
+            longMessage.append("segment")
+                    .append(i)
+                    .append("=operational ");
+        }
+        longMessage.append("email=tail.secret@example.com");
+        messages.add(longMessage.toString());
+        int truncationCaseIndex = messages.size() - 1;
 
         List<LogEvent> events = new ArrayList<>();
         for (int i = 0; i < messages.size(); i++) {
@@ -87,12 +97,30 @@ public final class HybridRuntimeCheck {
             );
         }
 
-        for (String output : outputs) {
+        for (int i = 0; i < outputs.size(); i++) {
+            String output = outputs.get(i);
+            if (i == truncationCaseIndex) {
+                continue;
+            }
             if (output.contains("[SECURELOGX_REDACTED_PROCESSING_FAILURE]")) {
                 throw new IllegalStateException(
                         "Hybrid runtime entered fail-closed fallback unexpectedly"
                 );
             }
+        }
+
+        String truncatedOutput = outputs.get(truncationCaseIndex);
+        if (!truncatedOutput.contains(
+                "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
+        )) {
+            throw new IllegalStateException(
+                    "Truncated ML input did not fail closed"
+            );
+        }
+        if (truncatedOutput.contains("tail.secret@example.com")) {
+            throw new IllegalStateException(
+                    "Truncated ML input leaked unseen tail content"
+            );
         }
 
         assertNotPresent(outputs.get(0), "jane.doe@example.com", "EMAIL");
@@ -129,6 +157,13 @@ public final class HybridRuntimeCheck {
             );
         }
 
+        if (stats.truncatedFailClosedItems() != 1) {
+            throw new IllegalStateException(
+                    "Expected exactly one truncation fail-closed route, got "
+                            + stats.truncatedFailClosedItems()
+            );
+        }
+
         if (stats.totalRoutedItems() != messages.size()) {
             throw new IllegalStateException(
                     "Hybrid routing stats do not cover the whole batch. routed="
@@ -150,6 +185,10 @@ public final class HybridRuntimeCheck {
         result.put("ml_invocation_rate", stats.mlInvocationRate());
         result.put("negative_ip_reference_preserved", true);
         result.put("processing_failures", 0);
+        result.put(
+                "truncated_fail_closed_items",
+                stats.truncatedFailClosedItems()
+        );
         result.put("fail_closed_policy_enabled", true);
         result.put("model_sha256", config.getModelSha256());
         result.put("tokenizer_sha256", config.getTokenizerSha256());
@@ -183,6 +222,10 @@ public final class HybridRuntimeCheck {
         );
         System.out.println("Negative IP reference preserved: true");
         System.out.println("Processing failures: 0");
+        System.out.println(
+                "Truncated fail-closed items: "
+                        + stats.truncatedFailClosedItems()
+        );
         System.out.println("Result: " + resultPath);
     }
 
