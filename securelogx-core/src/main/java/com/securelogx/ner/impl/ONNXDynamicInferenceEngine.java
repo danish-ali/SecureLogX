@@ -43,6 +43,7 @@ public class ONNXDynamicInferenceEngine {
     private long totalItems = 0;
     private long deterministicOnlyItems = 0;
     private long mlInferenceItems = 0;
+    private long truncatedFailClosedItems = 0;
 
     public ONNXDynamicInferenceEngine(String modelPath, com.securelogx.config.SecureLogXConfig config) throws Exception {
         // Check CUDA environment first
@@ -227,20 +228,53 @@ public class ONNXDynamicInferenceEngine {
 
             List<TokenizedInput> encoded = tokenizationFuture.get();
 
-            int rawMax = encoded.stream()
+            List<TokenizedInput> inferenceEncoded = new ArrayList<>();
+            List<Integer> inferenceOriginalIndices = new ArrayList<>();
+
+            for (int mlIndex = 0; mlIndex < encoded.size(); mlIndex++) {
+                TokenizedInput tokenized = encoded.get(mlIndex);
+                int originalIndex = mlOriginalIndices.get(mlIndex);
+
+                if (tokenized.isTruncated()) {
+                    LogEvent event = batch.get(originalIndex);
+                    orderedOutput[originalIndex] =
+                            formatMaskedEvent(
+                                    event,
+                                    "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
+                            );
+                    truncatedFailClosedItems++;
+                    System.err.println(
+                            "[WARN] SecureLogX fail-closed: ML-routed message "
+                                    + "exceeded tokenizer limit. coveredChars="
+                                    + tokenized.getCoveredCharacterEnd()
+                                    + " totalChars="
+                                    + event.getMessage().length()
+                    );
+                } else {
+                    inferenceEncoded.add(tokenized);
+                    inferenceOriginalIndices.add(originalIndex);
+                }
+            }
+
+            if (inferenceEncoded.isEmpty()) {
+                totalItems += batch.size();
+                return Arrays.asList(orderedOutput);
+            }
+
+            int rawMax = inferenceEncoded.stream()
                     .mapToInt(item -> item.getInputIds().length)
                     .max()
                     .orElse(0);
             int seqLen = Math.min(rawMax, maxSeqLen);
-            int inferenceBatchSize = encoded.size();
+            int inferenceBatchSize = inferenceEncoded.size();
 
             long[][] inputIds = new long[inferenceBatchSize][seqLen];
             long[][] attentionMask = new long[inferenceBatchSize][seqLen];
             long[][] tokenTypeIds = new long[inferenceBatchSize][seqLen];
 
             for (int i = 0; i < inferenceBatchSize; i++) {
-                int[] ids = encoded.get(i).getInputIds();
-                int[] mask = encoded.get(i).getAttentionMask();
+                int[] ids = inferenceEncoded.get(i).getInputIds();
+                int[] mask = inferenceEncoded.get(i).getAttentionMask();
                 int copyLength = Math.min(ids.length, seqLen);
 
                 for (int j = 0; j < copyLength; j++) {
@@ -267,9 +301,11 @@ public class ONNXDynamicInferenceEngine {
 
                     // 4) Decode ML spans, resolve conflicts, then apply policy.
                     for (int mlIndex = 0; mlIndex < inferenceBatchSize; mlIndex++) {
-                        int originalIndex = mlOriginalIndices.get(mlIndex);
+                        int originalIndex =
+                                inferenceOriginalIndices.get(mlIndex);
                         LogEvent event = batch.get(originalIndex);
-                        TokenizedInput tokenized = encoded.get(mlIndex);
+                        TokenizedInput tokenized =
+                                inferenceEncoded.get(mlIndex);
 
                         List<int[]> offsets = tokenized.getOffsets();
                         List<int[]> truncatedOffsets = offsets.size() > seqLen
@@ -520,7 +556,8 @@ public class ONNXDynamicInferenceEngine {
     public HybridRuntimeStats getHybridRuntimeStats() {
         return new HybridRuntimeStats(
                 deterministicOnlyItems,
-                mlInferenceItems
+                mlInferenceItems,
+                truncatedFailClosedItems
         );
     }
 
