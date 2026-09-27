@@ -10,7 +10,8 @@ import java.util.List;
  * Reconciles deterministic evidence with contextual ML spans.
  *
  * Precedence:
- * 1. Deterministic ALLOW is authoritative for overlapping ML spans.
+ * 1. Deterministic ALLOW is authoritative only when it fully contains an
+ *    overlapping ML span of the same entity type.
  * 2. Deterministic MASK is a protection floor, not a span ceiling: an
  *    overlapping ML MASK may extend coverage beyond the deterministic span.
  * 3. ESCALATE leaves the decision to ML.
@@ -41,10 +42,11 @@ public final class HybridContextResolver {
         }
 
         for (LabelAwareMaskingEngine.EntitySpan mlSpan : mlSpans) {
-            DetectionEvidence allow = firstOverlappingAllow(
+            DetectionEvidence allow = firstContainingAllow(
                     deterministicEvidence,
                     mlSpan.start(),
-                    mlSpan.end()
+                    mlSpan.end(),
+                    mlSpan.entityType()
             );
 
             if (allow != null) {
@@ -78,14 +80,17 @@ public final class HybridContextResolver {
         return resolved;
     }
 
-    private static DetectionEvidence firstOverlappingAllow(
+    private static DetectionEvidence firstContainingAllow(
             List<DetectionEvidence> evidence,
             int start,
-            int end
+            int end,
+            String entityType
     ) {
         for (DetectionEvidence item : evidence) {
             if (item.action() == ResolutionAction.ALLOW
-                    && item.overlaps(start, end)) {
+                    && item.entityType().equals(entityType)
+                    && item.start() <= start
+                    && item.end() >= end) {
                 return item;
             }
         }
