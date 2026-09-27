@@ -521,7 +521,7 @@ The resolver now treats deterministic MASK as a protection floor rather than a s
 - partial ALLOW overlap cannot erase a larger ML span,
 - ESCALATE remains non-decisive.
 
-This change is not yet considered validated until the locked hybrid safety suite and D0/M0/H1 architecture comparison are rerun.
+The locked hybrid safety suite has now passed with this behavior. Architecture-quality comparison is still pending to confirm the M0/H1 quality effect.
 
 The journal benchmark should include:
 
@@ -714,7 +714,7 @@ No failure path may emit the original unmasked message.
 
 ### Long-input / tokenizer-window policy
 
-**Current status: PRODUCTION SAFETY GUARD IMPLEMENTED; WINDOWED INFERENCE PENDING**
+**Current status: VALIDATED SAFETY GUARD; WINDOWED INFERENCE PENDING**
 
 ML-v1.3 currently has a validated maximum sequence length of 384 tokens.
 
@@ -1258,7 +1258,7 @@ Masking may expand when both deterministic MASK and overlapping ML MASK evidence
 
 **Status**
 
-PENDING VALIDATION
+VALIDATED FOR SAFETY
 
 **Change**
 
@@ -1285,7 +1285,22 @@ Pre-change diagnostic:
 - zero observed ALLOW/gold conflicts on the current corpus,
 - silent truncation path existed for messages beyond the validated 384-token model window.
 
-Post-change validation is pending.
+Post-change locked safety validation:
+
+- compile: passed,
+- deterministic/resolver checks: 25/25 passed,
+- security corpus: 6,463 records,
+- unsafe bypass: 0,
+- deterministic overmask: 0,
+- ALLOW/gold conflicts: 0,
+- runtime: 11 cases,
+- deterministic-only routes: 6,
+- ML routes: 4,
+- truncated fail-closed routes: 1,
+- processing failures: 0,
+- negative technical IP preserved.
+
+The resolver/truncation changes are therefore validated for safety. Phase 2 architecture-quality rerun remains required before declaring the resolver quality issue closed.
 
 **Affected modules**
 
@@ -1301,6 +1316,45 @@ Post-change validation is pending.
 **Backward-compatibility impact**
 
 Long ML-routed messages that previously could be partially analyzed now fail closed until windowed inference is implemented. Partial-overlap deterministic ALLOW may no longer suppress a larger ML masking span.
+
+---
+
+### 2026-09-27 — Resolver and truncation safety changes validated
+
+**Status**
+
+VALIDATED FOR SAFETY
+
+**Change**
+
+Promoted the stricter resolver overlap policy and tokenizer-truncation fail-closed behavior from pending validation to validated-for-safety status.
+
+**Reason**
+
+The complete hybrid validation suite passed after the changes, including the new partial-ALLOW and long-input regression checks.
+
+**Evidence / benchmark**
+
+- compile: success
+- hybrid detection checks: 25/25 passed
+- security audit: 6,463 records
+- unsafe bypass: 0
+- deterministic overmask: 0
+- ALLOW/gold conflicts: 0
+- runtime cases: 11
+- deterministic-only: 6
+- ML: 4
+- truncated fail-closed: 1
+- processing failures: 0
+- negative technical IP preserved
+
+**Affected modules**
+
+No additional implementation change in this entry; documentation status only.
+
+**Backward-compatibility impact**
+
+None beyond the previously documented resolver and long-input behavior changes.
 
 ---
 
