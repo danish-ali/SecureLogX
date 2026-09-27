@@ -375,6 +375,42 @@ The benchmark measures:
 
 The benchmark hard-fails only on safety violations. Scenario A separately reports whether the provisional `<=20%` ML-invocation target is met.
 
+### First routing baseline
+
+First local execution produced:
+
+| Scenario | ML invocation | Fast path | Safety |
+|---|---:|---:|---|
+| A normal operations 90/10 | 75.80% | 24.20% | Passed |
+| B mixed operations 75/25 | 71.20% | 28.80% | Passed |
+| C balanced 50/50 | 68.30% | 31.70% | Passed |
+| D high-risk stress | 68.30% | 31.70% | Passed |
+
+Overall:
+
+- 4,000 records,
+- 70.90% ML invocation,
+- 29.10% fast path,
+- 0 unsafe bypass,
+- 0 fast-path uncovered sensitive values,
+- 0 negative technical overmask.
+
+Interpretation:
+
+> Safety is preserved, but the first production-routing baseline does not yet meet the normal-operations efficiency target.
+
+The first optimization is therefore a **strict metadata-only fast path**, not broader regex detection.
+
+A non-JSON record may bypass ML without sensitive evidence only when:
+
+- every parsed key belongs to a narrow approved metadata set,
+- every value has a simple metadata token shape,
+- any leading text matches a recognized operational log prefix,
+- no detector has already emitted ESCALATE evidence,
+- no capitalized person-name pattern is present outside evidence.
+
+Unknown keys, free prose, contextual fields, ambiguous identifiers, and adversarial values continue to ML.
+
 This benchmark is a reproducible engineering workload, not a claim that the synthetic distribution exactly represents any production estate. Real anonymized operational distributions should eventually be used to calibrate scenario weights.
 
 ---
@@ -879,6 +915,40 @@ Pending first local execution of `scripts/run-production-routing-benchmark.ps1`.
 **Backward-compatibility impact**
 
 None. This change adds evaluation tooling only; production routing behavior is unchanged.
+
+---
+
+### 2026-09-27 — Strict metadata-only fast path added
+
+**Change**
+
+Added a narrow routing fast path for structured operational records containing only approved metadata fields, including a recognized timestamp/level/service prefix form.
+
+**Reason**
+
+The first production-routing benchmark passed all safety checks but routed 75.80% of normal-operation Scenario A records to ML. Inspection of the gate showed that records with no deterministic sensitive evidence were always routed to ML, including ordinary metadata-only logs. Running contextual inference on those records provides little security value.
+
+**Evidence / benchmark**
+
+Pre-change production-routing baseline:
+
+- Scenario A ML invocation: 75.80%
+- Overall ML invocation: 70.90%
+- unsafe bypass: 0
+- uncovered sensitive values: 0
+- negative technical overmask: 0
+
+Post-change evidence is pending rerun of both the locked hybrid safety suite and the production-routing benchmark.
+
+**Affected modules**
+
+- `securelogx-core`
+- production routing benchmark
+- hybrid detection regression suite
+
+**Backward-compatibility impact**
+
+Routing behavior changes for a narrow set of approved metadata-only log records. No public API change.
 
 ---
 
