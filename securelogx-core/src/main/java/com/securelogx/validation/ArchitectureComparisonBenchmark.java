@@ -110,6 +110,8 @@ public final class ArchitectureComparisonBenchmark {
         ArchitectureMetrics d0 = new ArchitectureMetrics("D0");
         ArchitectureMetrics m0 = new ArchitectureMetrics("M0");
         ArchitectureMetrics h1 = new ArchitectureMetrics("H1");
+        HybridRegressionDiagnostics regressionDiagnostics =
+                new HybridRegressionDiagnostics();
 
         Map<String, SourceMetrics> bySource = new LinkedHashMap<>();
         long records = 0;
@@ -171,7 +173,8 @@ public final class ArchitectureComparisonBenchmark {
                                     d0,
                                     m0,
                                     h1,
-                                    sourceMetrics
+                                    sourceMetrics,
+                                    regressionDiagnostics
                             );
                             h1MlRecords += batchMl;
                             records += batch.size();
@@ -235,6 +238,10 @@ public final class ArchitectureComparisonBenchmark {
         );
         architectures.put("H2", h2);
         result.put("architectures", architectures);
+        result.put(
+                "m0_h1_regression_diagnostics",
+                regressionDiagnostics.toJson()
+        );
 
         JSONObject sources = new JSONObject();
         for (Map.Entry<String, SourceMetrics> entry : bySource.entrySet()) {
@@ -255,6 +262,7 @@ public final class ArchitectureComparisonBenchmark {
         printSummary(d0);
         printSummary(m0);
         printSummary(h1);
+        printRegressionDiagnostics(regressionDiagnostics);
         System.out.println();
         System.out.println(
                 "H2: EXPERIMENTAL_NOT_IMPLEMENTED "
@@ -273,7 +281,8 @@ public final class ArchitectureComparisonBenchmark {
             ArchitectureMetrics d0,
             ArchitectureMetrics m0,
             ArchitectureMetrics h1,
-            SourceMetrics sourceMetrics
+            SourceMetrics sourceMetrics,
+            HybridRegressionDiagnostics regressionDiagnostics
     ) throws Exception {
         List<String> texts = batch.stream()
                 .map(RecordItem::text)
@@ -310,6 +319,15 @@ public final class ArchitectureComparisonBenchmark {
                             scan.evidence(),
                             h1MlSpans
                     )
+            );
+
+            regressionDiagnostics.compare(
+                    source,
+                    record.text(),
+                    record.gold(),
+                    m0Spans,
+                    h1Spans,
+                    scan.evidence()
             );
 
             d0.addRecord(record.text(), record.gold(), d0Spans);
@@ -477,6 +495,64 @@ public final class ArchitectureComparisonBenchmark {
                                 )
                         )
         );
+    }
+
+    private static void printRegressionDiagnostics(
+            HybridRegressionDiagnostics diagnostics
+    ) {
+        JSONObject json = diagnostics.toJson();
+        System.out.println();
+        System.out.println("M0 -> H1 regression diagnostics");
+        System.out.println(
+                "  M0 full / H1 not full: "
+                        + json.getLong("m0_full_h1_not_full")
+        );
+        System.out.println(
+                "  high-risk regressions: "
+                        + json.getLong("high_risk_regressions")
+        );
+        System.out.println(
+                "  H1 full / M0 not full: "
+                        + json.getLong("h1_full_m0_not_full")
+        );
+        System.out.println("  regressions by gold label:");
+        JSONObject byLabel = json.getJSONObject("regressions_by_gold_label");
+        byLabel.keySet().stream()
+                .sorted(
+                        (left, right) -> Long.compare(
+                                byLabel.getLong(right),
+                                byLabel.getLong(left)
+                        )
+                )
+                .limit(12)
+                .forEach(
+                        label -> System.out.println(
+                                "    "
+                                        + byLabel.getLong(label)
+                                        + "  "
+                                        + label
+                        )
+                );
+
+        System.out.println("  overlapping decisive evidence reasons:");
+        JSONObject byReason =
+                json.getJSONObject("overlapping_decisive_evidence_reasons");
+        byReason.keySet().stream()
+                .sorted(
+                        (left, right) -> Long.compare(
+                                byReason.getLong(right),
+                                byReason.getLong(left)
+                        )
+                )
+                .limit(12)
+                .forEach(
+                        reason -> System.out.println(
+                                "    "
+                                        + byReason.getLong(reason)
+                                        + "  "
+                                        + reason
+                        )
+                );
     }
 
     private static String percent(double value) {
@@ -861,6 +937,227 @@ public final class ArchitectureComparisonBenchmark {
             return denominator == 0
                     ? 0.0
                     : (double) numerator / denominator;
+        }
+    }
+
+    private static final class HybridRegressionDiagnostics {
+        private static final int MAX_SAMPLES = 30;
+
+        private long m0FullH1NotFull;
+        private long highRiskRegressions;
+        private long h1FullM0NotFull;
+
+        private final Map<String, Long> byGoldLabel =
+                new LinkedHashMap<>();
+        private final Map<String, Long> byEvidenceReason =
+                new LinkedHashMap<>();
+        private final Map<String, Long> bySource =
+                new LinkedHashMap<>();
+        private final List<String> samples = new ArrayList<>();
+
+        private void compare(
+                String source,
+                String text,
+                List<GoldSpan> gold,
+                List<PredictedSpan> m0,
+                List<PredictedSpan> h1,
+                List<DetectionEvidence> deterministicEvidence
+        ) {
+            for (GoldSpan span : gold) {
+                boolean m0Full = fullyCovered(span, m0);
+                boolean h1Full = fullyCovered(span, h1);
+
+                if (m0Full && !h1Full) {
+                    m0FullH1NotFull++;
+                    byGoldLabel.merge(span.label(), 1L, Long::sum);
+                    bySource.merge(source, 1L, Long::sum);
+
+                    if (HIGH_RISK.contains(span.label())) {
+                        highRiskRegressions++;
+                    }
+
+                    boolean foundDecisiveOverlap = false;
+                    for (DetectionEvidence evidence : deterministicEvidence) {
+                        if (evidence.action() == ResolutionAction.ESCALATE
+                                || !evidence.overlaps(
+                                        span.start(),
+                                        span.end()
+                                )) {
+                            continue;
+                        }
+
+                        foundDecisiveOverlap = true;
+                        String key = evidence.action()
+                                + ":"
+                                + evidence.entityType()
+                                + ":"
+                                + evidence.reason();
+                        byEvidenceReason.merge(key, 1L, Long::sum);
+                    }
+
+                    if (!foundDecisiveOverlap) {
+                        byEvidenceReason.merge(
+                                "NO_DECISIVE_GOLD_OVERLAP",
+                                1L,
+                                Long::sum
+                        );
+                    }
+
+                    addSample(
+                            source,
+                            text,
+                            span,
+                            m0,
+                            h1,
+                            deterministicEvidence
+                    );
+                } else if (!m0Full && h1Full) {
+                    h1FullM0NotFull++;
+                }
+            }
+        }
+
+        private void addSample(
+                String source,
+                String text,
+                GoldSpan gold,
+                List<PredictedSpan> m0,
+                List<PredictedSpan> h1,
+                List<DetectionEvidence> deterministicEvidence
+        ) {
+            if (samples.size() >= MAX_SAMPLES) {
+                return;
+            }
+
+            String raw = safeSlice(text, gold.start(), gold.end());
+            List<String> decisive = new ArrayList<>();
+            for (DetectionEvidence evidence : deterministicEvidence) {
+                if (evidence.action() != ResolutionAction.ESCALATE
+                        && evidence.overlaps(gold.start(), gold.end())) {
+                    decisive.add(
+                            evidence.action()
+                                    + ":"
+                                    + evidence.entityType()
+                                    + "["
+                                    + evidence.start()
+                                    + ","
+                                    + evidence.end()
+                                    + "):"
+                                    + evidence.reason()
+                    );
+                }
+            }
+
+            samples.add(
+                    source
+                            + " gold="
+                            + gold.label()
+                            + "["
+                            + gold.start()
+                            + ","
+                            + gold.end()
+                            + ") value="
+                            + quote(raw)
+                            + " decisive="
+                            + decisive
+                            + " m0="
+                            + overlappingPredictions(gold, m0)
+                            + " h1="
+                            + overlappingPredictions(gold, h1)
+            );
+        }
+
+        private JSONObject toJson() {
+            JSONObject object = new JSONObject();
+            object.put("m0_full_h1_not_full", m0FullH1NotFull);
+            object.put("high_risk_regressions", highRiskRegressions);
+            object.put("h1_full_m0_not_full", h1FullM0NotFull);
+            object.put(
+                    "regressions_by_gold_label",
+                    countsJson(byGoldLabel)
+            );
+            object.put(
+                    "overlapping_decisive_evidence_reasons",
+                    countsJson(byEvidenceReason)
+            );
+            object.put("regressions_by_source", countsJson(bySource));
+            object.put("samples", new JSONArray(samples));
+            return object;
+        }
+
+        private static boolean fullyCovered(
+                GoldSpan gold,
+                List<PredictedSpan> predicted
+        ) {
+            for (int position = gold.start();
+                 position < gold.end();
+                 position++) {
+                boolean covered = false;
+                for (PredictedSpan item : predicted) {
+                    if (item.start() <= position && item.end() > position) {
+                        covered = true;
+                        break;
+                    }
+                }
+                if (!covered) {
+                    return false;
+                }
+            }
+            return gold.end() > gold.start();
+        }
+
+        private static List<String> overlappingPredictions(
+                GoldSpan gold,
+                List<PredictedSpan> predicted
+        ) {
+            List<String> result = new ArrayList<>();
+            for (PredictedSpan item : predicted) {
+                if (Math.max(gold.start(), item.start())
+                        < Math.min(gold.end(), item.end())) {
+                    result.add(
+                            item.entityType()
+                                    + "["
+                                    + item.start()
+                                    + ","
+                                    + item.end()
+                                    + "):"
+                                    + item.source()
+                    );
+                }
+            }
+            return result;
+        }
+
+        private static String safeSlice(
+                String text,
+                int rawStart,
+                int rawEnd
+        ) {
+            int start = Math.max(0, Math.min(text.length(), rawStart));
+            int end = Math.max(start, Math.min(text.length(), rawEnd));
+            return text.substring(start, end);
+        }
+
+        private static String quote(String value) {
+            return "'" + value.replace("'", "\\'") + "'";
+        }
+
+        private static JSONObject countsJson(Map<String, Long> counts) {
+            JSONObject object = new JSONObject();
+            counts.entrySet().stream()
+                    .sorted(
+                            (left, right) -> Long.compare(
+                                    right.getValue(),
+                                    left.getValue()
+                            )
+                    )
+                    .forEach(
+                            entry -> object.put(
+                                    entry.getKey(),
+                                    entry.getValue()
+                            )
+                    );
+            return object;
         }
     }
 
