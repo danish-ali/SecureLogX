@@ -202,6 +202,8 @@ public final class ProductionRoutingBenchmark {
         long negativeOvermask = 0;
 
         Map<RecordClass, Long> byClass = new EnumMap<>(RecordClass.class);
+        Map<RecordClass, Long> mlByClass = new EnumMap<>(RecordClass.class);
+        Map<RecordClass, Long> fastByClass = new EnumMap<>(RecordClass.class);
         Map<String, Long> gateReasons = new LinkedHashMap<>();
         List<String> safetyFailures = new ArrayList<>();
 
@@ -212,8 +214,10 @@ public final class ProductionRoutingBenchmark {
 
             if (scan.requiresMl()) {
                 mlRecords++;
+                mlByClass.merge(fixture.recordClass, 1L, Long::sum);
             } else {
                 fastPathRecords++;
+                fastByClass.merge(fixture.recordClass, 1L, Long::sum);
             }
 
             if (!scan.requiresMl()
@@ -282,6 +286,8 @@ public final class ProductionRoutingBenchmark {
                 safetyPassed,
                 efficiencyTargetMet,
                 byClass,
+                mlByClass,
+                fastByClass,
                 gateReasons,
                 safetyFailures
         );
@@ -725,6 +731,23 @@ public final class ProductionRoutingBenchmark {
                             )
             );
         }
+        System.out.println("  ML invocation by record class:");
+        for (Map.Entry<RecordClass, Long> entry : result.byClass.entrySet()) {
+            RecordClass recordClass = entry.getKey();
+            long total = entry.getValue();
+            long ml = result.mlByClass.getOrDefault(recordClass, 0L);
+            System.out.println(
+                    "    "
+                            + recordClass.name().toLowerCase()
+                            + ": "
+                            + percent(rate(ml, total))
+                            + " ("
+                            + ml
+                            + "/"
+                            + total
+                            + ")"
+            );
+        }
         System.out.println("  Top gate reasons:");
         result.gateReasons.entrySet().stream()
                 .sorted(
@@ -796,6 +819,8 @@ public final class ProductionRoutingBenchmark {
         private final boolean safetyPassed;
         private final boolean efficiencyTargetMet;
         private final Map<RecordClass, Long> byClass;
+        private final Map<RecordClass, Long> mlByClass;
+        private final Map<RecordClass, Long> fastByClass;
         private final Map<String, Long> gateReasons;
         private final List<String> safetyFailures;
 
@@ -812,6 +837,8 @@ public final class ProductionRoutingBenchmark {
                 boolean safetyPassed,
                 boolean efficiencyTargetMet,
                 Map<RecordClass, Long> byClass,
+                Map<RecordClass, Long> mlByClass,
+                Map<RecordClass, Long> fastByClass,
                 Map<String, Long> gateReasons,
                 List<String> safetyFailures
         ) {
@@ -828,6 +855,8 @@ public final class ProductionRoutingBenchmark {
             this.safetyPassed = safetyPassed;
             this.efficiencyTargetMet = efficiencyTargetMet;
             this.byClass = new EnumMap<>(byClass);
+            this.mlByClass = new EnumMap<>(mlByClass);
+            this.fastByClass = new EnumMap<>(fastByClass);
             this.gateReasons = new LinkedHashMap<>(gateReasons);
             this.safetyFailures = List.copyOf(safetyFailures);
         }
@@ -858,9 +887,19 @@ public final class ProductionRoutingBenchmark {
 
             JSONObject classes = new JSONObject();
             for (Map.Entry<RecordClass, Long> entry : byClass.entrySet()) {
+                RecordClass recordClass = entry.getKey();
+                long total = entry.getValue();
+                long ml = mlByClass.getOrDefault(recordClass, 0L);
+                long fast = fastByClass.getOrDefault(recordClass, 0L);
+
+                JSONObject classResult = new JSONObject();
+                classResult.put("records", total);
+                classResult.put("ml_records", ml);
+                classResult.put("fast_path_records", fast);
+                classResult.put("ml_invocation_rate", rate(ml, total));
                 classes.put(
-                        entry.getKey().name().toLowerCase(),
-                        entry.getValue()
+                        recordClass.name().toLowerCase(),
+                        classResult
                 );
             }
             object.put("record_classes", classes);
