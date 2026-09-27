@@ -193,7 +193,8 @@ public final class ArchitectureComparisonBenchmark {
                                 d0,
                                 m0,
                                 h1,
-                                sourceMetrics
+                                sourceMetrics,
+                                regressionDiagnostics
                         );
                         h1MlRecords += batchMl;
                         records += batch.size();
