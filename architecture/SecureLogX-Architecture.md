@@ -333,6 +333,50 @@ No fixed ML invocation target should override safety.
 
 A practical product goal is to reduce ML invocation materially, potentially toward 10-20% on normal production traffic, **only if security quality remains unchanged or improves**.
 
+### Production-routing benchmark implementation
+
+**Status: EXPERIMENTAL**
+
+A dedicated Java routing benchmark now lives in:
+
+`securelogx-core/src/main/java/com/securelogx/validation/ProductionRoutingBenchmark.java`
+
+Runner:
+
+`scripts/run-production-routing-benchmark.ps1`
+
+Output:
+
+`reports/production-routing-benchmark/result.json`
+
+The benchmark is intentionally separate from the NER security corpus and currently uses four deterministic 1,000-record synthetic traffic mixes:
+
+- Scenario A: 90% ordinary/negative operational traffic and 10% sensitive/ambiguous traffic,
+- Scenario B: 75% ordinary/negative and 25% sensitive/ambiguous,
+- Scenario C: 50% ordinary/negative and 50% sensitive/ambiguous,
+- Scenario D: high-risk stress workload.
+
+Record classes are:
+
+- ordinary safe,
+- deterministic sensitive,
+- contextual sensitive,
+- negative technical,
+- adversarial.
+
+The benchmark measures:
+
+- ML invocation rate,
+- fast-path rate,
+- gate reasons,
+- unsafe contextual/adversarial bypass,
+- fast-path uncovered sensitive values,
+- negative technical overmask.
+
+The benchmark hard-fails only on safety violations. Scenario A separately reports whether the provisional `<=20%` ML-invocation target is met.
+
+This benchmark is a reproducible engineering workload, not a claim that the synthetic distribution exactly represents any production estate. Real anonymized operational distributions should eventually be used to calibrate scenario weights.
+
 ---
 
 ## 9. Research-Driven Evaluation Changes
@@ -809,6 +853,32 @@ Future ONNX Runtime upgrades must pass parity, hybrid safety, performance, memor
 **Reason**
 
 A newer runtime can alter inference behavior, native dependencies, memory use, CPU/GPU behavior, or security posture. Version upgrades must therefore be evidence-driven.
+
+---
+
+### 2026-09-27 — Production-routing benchmark implemented
+
+**Change**
+
+Added a dedicated Java-side production-routing benchmark with four reproducible traffic scenarios and a standalone runner.
+
+**Reason**
+
+The 6,463-record NER-heavy corpus is appropriate for safety evaluation but is not representative enough to estimate normal production ML invocation. A separate workload is required to measure the fast path without weakening the locked safety corpus.
+
+**Evidence / benchmark**
+
+Pending first local execution of `scripts/run-production-routing-benchmark.ps1`.
+
+**Affected modules**
+
+- `securelogx-core`
+- `scripts`
+- `reports/production-routing-benchmark`
+
+**Backward-compatibility impact**
+
+None. This change adds evaluation tooling only; production routing behavior is unchanged.
 
 ---
 
