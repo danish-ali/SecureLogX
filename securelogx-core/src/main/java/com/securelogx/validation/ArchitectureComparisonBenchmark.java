@@ -609,6 +609,17 @@ public final class ArchitectureComparisonBenchmark {
 
             for (String text : texts) {
                 TokenizedInput tokenized = tokenizer.tokenize(text);
+                if (tokenized.isTruncated()) {
+                    throw new IllegalStateException(
+                            "Architecture comparison input exceeds the "
+                                    + "validated tokenizer window; refusing "
+                                    + "to score a truncated record. "
+                                    + "coveredChars="
+                                    + tokenized.getCoveredCharacterEnd()
+                                    + " totalChars="
+                                    + text.length()
+                    );
+                }
                 encoded.add(tokenized);
                 seqLen = Math.max(
                         seqLen,
