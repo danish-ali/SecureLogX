@@ -64,14 +64,22 @@ public class PureJavaTokenizer {
         offsets.add(new int[]{0, 0});
 
         int contentLimit = maxSequenceLength - 2;
+        boolean truncated = false;
+        int coveredCharacterEnd = 0;
+
         outer:
         for (BasicToken token : preTokenize(text)) {
             for (WordPiece piece : wordpieceTokenize(token)) {
                 if (tokenIds.size() - 1 >= contentLimit) {
+                    truncated = true;
                     break outer;
                 }
                 tokenIds.add(vocab.getOrDefault(piece.text(), unkTokenId));
                 offsets.add(new int[]{piece.start(), piece.end()});
+                coveredCharacterEnd = Math.max(
+                        coveredCharacterEnd,
+                        piece.end()
+                );
             }
         }
 
@@ -82,7 +90,13 @@ public class PureJavaTokenizer {
         int[] attentionMask = new int[inputIds.length];
         Arrays.fill(attentionMask, 1);
 
-        return new TokenizedInput(inputIds, attentionMask, offsets);
+        return new TokenizedInput(
+                inputIds,
+                attentionMask,
+                offsets,
+                truncated,
+                coveredCharacterEnd
+        );
     }
 
     private List<BasicToken> preTokenize(String text) {
