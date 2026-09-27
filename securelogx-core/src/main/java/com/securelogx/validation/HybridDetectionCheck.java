@@ -197,6 +197,9 @@ public final class HybridDetectionCheck {
         assertMlCanExtendDeterministicMask(detector, resolver, policy);
         cases++;
 
+        assertPartialAllowCannotSuppressLargerMl(detector, resolver, policy);
+        cases++;
+
         assertNegativeEvidenceSuppressesMl(detector, resolver, policy);
         cases++;
 
@@ -419,6 +422,52 @@ public final class HybridDetectionCheck {
             throw new IllegalStateException(
                     "Extended AUTH_TOKEN span was not fully masked: "
                             + output
+            );
+        }
+    }
+
+    private static void assertPartialAllowCannotSuppressLargerMl(
+            DeterministicSensitiveDataDetector detector,
+            HybridContextResolver resolver,
+            MaskingPolicy policy
+    ) {
+        String text =
+                "releaseVersion=10.20.30.40-extra deployment=canary";
+        DeterministicScanResult scan = detector.scan(text);
+
+        int mlStart = text.indexOf("10.20.30.40");
+        int mlEnd = text.indexOf(" deployment=");
+        List<LabelAwareMaskingEngine.EntitySpan> simulatedMl = List.of(
+                new LabelAwareMaskingEngine.EntitySpan(
+                        mlStart,
+                        mlEnd,
+                        "IP_ADDRESS"
+                )
+        );
+
+        List<ResolvedSpan> resolved = resolver.resolve(
+                scan.evidence(),
+                simulatedMl
+        );
+
+        boolean mlMaskPresent = resolved.stream().anyMatch(
+                span -> span.action() == ResolutionAction.MASK
+                        && span.winningSource()
+                                == com.securelogx.detection.DetectionSource.ML
+                        && span.start() == mlStart
+                        && span.end() == mlEnd
+        );
+        if (!mlMaskPresent) {
+            throw new IllegalStateException(
+                    "Partial deterministic ALLOW incorrectly suppressed "
+                            + "a larger ML span"
+            );
+        }
+
+        String output = policy.apply(text, resolved, false);
+        if (output.contains("10.20.30.40-extra")) {
+            throw new IllegalStateException(
+                    "Larger ML span was not masked after partial ALLOW overlap"
             );
         }
     }
