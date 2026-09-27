@@ -10,10 +10,11 @@ import java.util.List;
  * Reconciles deterministic evidence with contextual ML spans.
  *
  * Precedence:
- * 1. Deterministic MASK and ALLOW decisions are authoritative for overlapping
- *    spans.
- * 2. ESCALATE leaves the decision to ML.
- * 3. Non-overlapping ML spans are masked by default.
+ * 1. Deterministic ALLOW is authoritative for overlapping ML spans.
+ * 2. Deterministic MASK is a protection floor, not a span ceiling: an
+ *    overlapping ML MASK may extend coverage beyond the deterministic span.
+ * 3. ESCALATE leaves the decision to ML.
+ * 4. Non-overlapping ML spans are masked by default.
  */
 public final class HybridContextResolver {
 
@@ -40,13 +41,13 @@ public final class HybridContextResolver {
         }
 
         for (LabelAwareMaskingEngine.EntitySpan mlSpan : mlSpans) {
-            DetectionEvidence decisive = firstOverlappingDecisive(
+            DetectionEvidence allow = firstOverlappingAllow(
                     deterministicEvidence,
                     mlSpan.start(),
                     mlSpan.end()
             );
 
-            if (decisive != null) {
+            if (allow != null) {
                 continue;
             }
 
@@ -57,7 +58,13 @@ public final class HybridContextResolver {
                             mlSpan.entityType(),
                             ResolutionAction.MASK,
                             DetectionSource.ML,
-                            "contextual-ml-v1.3"
+                            hasOverlappingMask(
+                                    deterministicEvidence,
+                                    mlSpan.start(),
+                                    mlSpan.end()
+                            )
+                                    ? "contextual-ml-v1.3-extends-deterministic-mask"
+                                    : "contextual-ml-v1.3"
                     )
             );
         }
@@ -71,17 +78,31 @@ public final class HybridContextResolver {
         return resolved;
     }
 
-    private static DetectionEvidence firstOverlappingDecisive(
+    private static DetectionEvidence firstOverlappingAllow(
             List<DetectionEvidence> evidence,
             int start,
             int end
     ) {
         for (DetectionEvidence item : evidence) {
-            if (item.action() != ResolutionAction.ESCALATE
+            if (item.action() == ResolutionAction.ALLOW
                     && item.overlaps(start, end)) {
                 return item;
             }
         }
         return null;
+    }
+
+    private static boolean hasOverlappingMask(
+            List<DetectionEvidence> evidence,
+            int start,
+            int end
+    ) {
+        for (DetectionEvidence item : evidence) {
+            if (item.action() == ResolutionAction.MASK
+                    && item.overlaps(start, end)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
