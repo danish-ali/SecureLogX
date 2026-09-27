@@ -411,6 +411,42 @@ A non-JSON record may bypass ML without sensitive evidence only when:
 
 Unknown keys, free prose, contextual fields, ambiguous identifiers, and adversarial values continue to ML.
 
+### Validated post-optimization routing result
+
+**Status: VALIDATED**
+
+After adding the strict metadata-only fast path, the locked hybrid safety validation still passed and the production-routing benchmark produced:
+
+| Scenario | ML invocation | Fast path | Safety |
+|---|---:|---:|---|
+| A normal operations 90/10 | **5.00%** | **95.00%** | Passed; <=20% target met |
+| B mixed operations 75/25 | 15.00% | 85.00% | Passed |
+| C balanced 50/50 | 35.00% | 65.00% | Passed |
+| D high-risk stress | 60.00% | 40.00% | Passed |
+
+Overall:
+
+- 4,000 records,
+- 28.75% ML invocation,
+- 71.25% fast path,
+- unsafe bypass: 0,
+- fast-path uncovered sensitive values: 0,
+- negative technical overmask: 0.
+
+Routing segmentation was clean across every scenario:
+
+- ordinary-safe: 0% ML,
+- deterministic-sensitive: 0% ML,
+- negative-technical: 0% ML,
+- contextual-sensitive: 100% ML,
+- adversarial: 100% ML.
+
+Interpretation:
+
+> Phase 1 production-routing objective is met on the reproducible engineering workload. Further reduction of ML invocation is not currently an optimization goal. Contextual and adversarial records should continue to pay the ML cost unless future evidence shows a safe alternative.
+
+The next product/research step is architecture-quality comparison (D0/M0/H1 first, with H2 remaining experimental until a genuine contextual reviewer exists).
+
 This benchmark is a reproducible engineering workload, not a claim that the synthetic distribution exactly represents any production estate. Real anonymized operational distributions should eventually be used to calibrate scenario weights.
 
 ---
@@ -949,6 +985,37 @@ Post-change evidence is pending rerun of both the locked hybrid safety suite and
 **Backward-compatibility impact**
 
 Routing behavior changes for a narrow set of approved metadata-only log records. No public API change.
+
+---
+
+### 2026-09-27 — Phase 1 routing target validated
+
+**Change**
+
+Marked the strict metadata-only fast path and production-routing benchmark as validated for the current engineering workload. Stopped further optimization toward lower ML invocation and advanced the roadmap to architecture-quality comparison.
+
+**Reason**
+
+The post-change benchmark reduced Scenario A ML invocation from 75.80% to 5.00% while preserving all current safety assertions. Ordinary-safe, deterministic-sensitive, and negative-technical records remained entirely on the fast path, while contextual-sensitive and adversarial records remained entirely on ML.
+
+**Evidence / benchmark**
+
+- Scenario A: 5.00% ML / 95.00% fast path
+- Scenario B: 15.00% ML / 85.00% fast path
+- Scenario C: 35.00% ML / 65.00% fast path
+- Scenario D: 60.00% ML / 40.00% fast path
+- unsafe bypass: 0
+- uncovered sensitive values: 0
+- negative technical overmask: 0
+- locked hybrid safety validation: passed
+
+**Affected modules**
+
+- routing policy status only; no additional production code change in this entry
+
+**Backward-compatibility impact**
+
+None.
 
 ---
 
