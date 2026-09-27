@@ -114,7 +114,10 @@ public final class ArchitectureComparisonBenchmark {
                 new HybridRegressionDiagnostics();
 
         Map<String, SourceMetrics> bySource = new LinkedHashMap<>();
-        long records = 0;
+        TruncationDiagnostics truncationDiagnostics =
+                new TruncationDiagnostics();
+        long inputRecords = 0;
+        long scoredRecords = 0;
         long h1MlRecords = 0;
 
         try (ValidationInferenceSession inference =
@@ -163,49 +166,55 @@ public final class ArchitectureComparisonBenchmark {
                         );
 
                         if (batch.size() == INFERENCE_BATCH_SIZE) {
-                            long batchMl = evaluateBatch(
-                                    source,
-                                    batch,
-                                    tokenizer,
-                                    inference,
-                                    detector,
-                                    resolver,
-                                    d0,
-                                    m0,
-                                    h1,
-                                    sourceMetrics,
-                                    regressionDiagnostics
-                            );
-                            h1MlRecords += batchMl;
-                            records += batch.size();
+                            BatchEvaluationResult batchResult =
+                                    evaluateBatch(
+                                            source,
+                                            batch,
+                                            tokenizer,
+                                            inference,
+                                            detector,
+                                            resolver,
+                                            d0,
+                                            m0,
+                                            h1,
+                                            sourceMetrics,
+                                            regressionDiagnostics,
+                                            truncationDiagnostics
+                                    );
+                            h1MlRecords += batchResult.h1MlRecords();
+                            scoredRecords += batchResult.scoredRecords();
+                            inputRecords += batch.size();
                             batch.clear();
                         }
                     }
 
                     if (!batch.isEmpty()) {
-                        long batchMl = evaluateBatch(
-                                source,
-                                batch,
-                                tokenizer,
-                                inference,
-                                detector,
-                                resolver,
-                                d0,
-                                m0,
-                                h1,
-                                sourceMetrics,
-                                regressionDiagnostics
-                        );
-                        h1MlRecords += batchMl;
-                        records += batch.size();
+                        BatchEvaluationResult batchResult =
+                                evaluateBatch(
+                                        source,
+                                        batch,
+                                        tokenizer,
+                                        inference,
+                                        detector,
+                                        resolver,
+                                        d0,
+                                        m0,
+                                        h1,
+                                        sourceMetrics,
+                                        regressionDiagnostics,
+                                        truncationDiagnostics
+                                );
+                        h1MlRecords += batchResult.h1MlRecords();
+                        scoredRecords += batchResult.scoredRecords();
+                        inputRecords += batch.size();
                     }
                 }
             }
         }
 
-        d0.setMlInvocation(0, records);
-        m0.setMlInvocation(records, records);
-        h1.setMlInvocation(h1MlRecords, records);
+        d0.setMlInvocation(0, scoredRecords);
+        m0.setMlInvocation(scoredRecords, scoredRecords);
+        h1.setMlInvocation(h1MlRecords, scoredRecords);
 
         JSONObject result = new JSONObject();
         result.put(
@@ -213,7 +222,12 @@ public final class ArchitectureComparisonBenchmark {
                 "ARCHITECTURE COMPARISON D0/M0/H1 COMPLETE; H2 PENDING"
         );
         result.put("passed", true);
-        result.put("records", records);
+        result.put("input_records", inputRecords);
+        result.put("scored_records", scoredRecords);
+        result.put(
+                "excluded_truncated_records",
+                truncationDiagnostics.totalTruncated()
+        );
         result.put("sealed_challenge_accessed", false);
         result.put("sealed_challenge_inference", false);
         result.put("model_sha256", config.getModelSha256());
@@ -242,6 +256,10 @@ public final class ArchitectureComparisonBenchmark {
         result.put(
                 "m0_h1_regression_diagnostics",
                 regressionDiagnostics.toJson()
+        );
+        result.put(
+                "truncation_diagnostics",
+                truncationDiagnostics.toJson()
         );
 
         JSONObject sources = new JSONObject();
@@ -272,7 +290,7 @@ public final class ArchitectureComparisonBenchmark {
         System.out.println("Result: " + resultPath);
     }
 
-    private static long evaluateBatch(
+    private static BatchEvaluationResult evaluateBatch(
             String source,
             List<RecordItem> batch,
             ParallelTokenizer tokenizer,
@@ -283,9 +301,32 @@ public final class ArchitectureComparisonBenchmark {
             ArchitectureMetrics m0,
             ArchitectureMetrics h1,
             SourceMetrics sourceMetrics,
-            HybridRegressionDiagnostics regressionDiagnostics
+            HybridRegressionDiagnostics regressionDiagnostics,
+            TruncationDiagnostics truncationDiagnostics
     ) throws Exception {
-        List<String> texts = batch.stream()
+        List<RecordItem> scorable = new ArrayList<>();
+        for (RecordItem record : batch) {
+            TokenizedInput probe = tokenizer.tokenize(record.text());
+            sourceMetrics.inputRecords++;
+
+            if (probe.isTruncated()) {
+                sourceMetrics.truncatedRecords++;
+                truncationDiagnostics.add(
+                        source,
+                        record.text(),
+                        probe.getCoveredCharacterEnd(),
+                        record.gold()
+                );
+            } else {
+                scorable.add(record);
+            }
+        }
+
+        if (scorable.isEmpty()) {
+            return new BatchEvaluationResult(0, 0);
+        }
+
+        List<String> texts = scorable.stream()
                 .map(RecordItem::text)
                 .toList();
 
@@ -294,8 +335,8 @@ public final class ArchitectureComparisonBenchmark {
 
         long h1MlRecords = 0;
 
-        for (int i = 0; i < batch.size(); i++) {
-            RecordItem record = batch.get(i);
+        for (int i = 0; i < scorable.size(); i++) {
+            RecordItem record = scorable.get(i);
             List<LabelAwareMaskingEngine.EntitySpan> mlSpans =
                     mlPredictions.get(i);
 
@@ -357,7 +398,10 @@ public final class ArchitectureComparisonBenchmark {
             }
         }
 
-        return h1MlRecords;
+        return new BatchEvaluationResult(
+                h1MlRecords,
+                scorable.size()
+        );
     }
 
     private static List<PredictedSpan> deterministicMaskSpans(
@@ -611,13 +655,8 @@ public final class ArchitectureComparisonBenchmark {
                 TokenizedInput tokenized = tokenizer.tokenize(text);
                 if (tokenized.isTruncated()) {
                     throw new IllegalStateException(
-                            "Architecture comparison input exceeds the "
-                                    + "validated tokenizer window; refusing "
-                                    + "to score a truncated record. "
-                                    + "coveredChars="
-                                    + tokenized.getCoveredCharacterEnd()
-                                    + " totalChars="
-                                    + text.length()
+                            "Internal benchmark invariant violated: "
+                                    + "truncated record reached inference"
                     );
                 }
                 encoded.add(tokenized);
@@ -827,7 +866,9 @@ public final class ArchitectureComparisonBenchmark {
 
         private JSONObject toJson() {
             JSONObject object = new JSONObject();
-            object.put("records", records);
+            object.put("input_records", inputRecords);
+            object.put("scored_records", records);
+            object.put("excluded_truncated_records", truncatedRecords);
             object.put("records_with_sensitive", recordsWithSensitive);
 
             object.put("sensitive_characters", sensitiveCharacters);
@@ -1173,7 +1214,79 @@ public final class ArchitectureComparisonBenchmark {
         }
     }
 
+    private static final class TruncationDiagnostics {
+        private static final int MAX_SAMPLES = 20;
+
+        private long totalTruncated;
+        private final Map<String, Long> bySource =
+                new LinkedHashMap<>();
+        private final List<String> samples = new ArrayList<>();
+
+        private void add(
+                String source,
+                String text,
+                int coveredCharacterEnd,
+                List<GoldSpan> gold
+        ) {
+            totalTruncated++;
+            bySource.merge(source, 1L, Long::sum);
+
+            if (samples.size() < MAX_SAMPLES) {
+                long goldBeyondCoverage = gold.stream()
+                        .filter(span -> span.end() > coveredCharacterEnd)
+                        .count();
+                samples.add(
+                        source
+                                + " coveredChars="
+                                + coveredCharacterEnd
+                                + " totalChars="
+                                + text.length()
+                                + " goldSpans="
+                                + gold.size()
+                                + " goldSpansBeyondCoverage="
+                                + goldBeyondCoverage
+                );
+            }
+        }
+
+        private long totalTruncated() {
+            return totalTruncated;
+        }
+
+        private JSONObject toJson() {
+            JSONObject object = new JSONObject();
+            object.put("excluded_records", totalTruncated);
+            object.put("by_source", countsJson(bySource));
+            object.put("samples", new JSONArray(samples));
+            object.put(
+                    "scoring_policy",
+                    "Excluded from D0/M0/H1 quality metrics because M0/H1 "
+                            + "cannot validly score beyond the frozen 384-token window"
+            );
+            object.put(
+                    "runtime_policy",
+                    "ML-routed over-window records fail closed until "
+                            + "validated overlapping-window inference exists"
+            );
+            return object;
+        }
+
+        private static JSONObject countsJson(Map<String, Long> counts) {
+            JSONObject object = new JSONObject();
+            counts.forEach(object::put);
+            return object;
+        }
+    }
+
+    private record BatchEvaluationResult(
+            long h1MlRecords,
+            long scoredRecords
+    ) {
+    }
+
     private static final class SourceMetrics {
+        private long inputRecords;
+        private long truncatedRecords;
         private long records;
         private long h1MlRecords;
         private final ArchitectureMetrics d0 =
