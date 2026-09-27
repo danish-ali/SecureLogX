@@ -170,6 +170,30 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
+        assertFastPathWithoutMask(
+                detector,
+                "status=SUCCESS action=healthcheck service=payments result=ok"
+        );
+        cases++;
+
+        assertFastPathWithoutMask(
+                detector,
+                "2026-09-27 15:00:00 INFO payment-service operation=refresh status=SUCCESS"
+        );
+        cases++;
+
+        assertRequiresMl(
+                detector,
+                "status=SUCCESS reason=Jane_Doe"
+        );
+        cases++;
+
+        assertRequiresMl(
+                detector,
+                "service=10.20.30.40 status=ok"
+        );
+        cases++;
+
         assertNegativeEvidenceSuppressesMl(detector, resolver, policy);
         cases++;
 
@@ -303,6 +327,28 @@ public final class HybridDetectionCheck {
                     "Expected ESCALATE evidence for "
                             + entityType
                             + ": "
+                            + text
+            );
+        }
+    }
+
+    private static void assertFastPathWithoutMask(
+            DeterministicSensitiveDataDetector detector,
+            String text
+    ) {
+        DeterministicScanResult scan = detector.scan(text);
+        if (scan.requiresMl()) {
+            throw new IllegalStateException(
+                    "Expected strict metadata fast path for: " + text
+            );
+        }
+
+        boolean masks = scan.evidence().stream().anyMatch(
+                evidence -> evidence.action() == ResolutionAction.MASK
+        );
+        if (masks) {
+            throw new IllegalStateException(
+                    "Metadata-only fast path unexpectedly produced MASK evidence: "
                             + text
             );
         }
