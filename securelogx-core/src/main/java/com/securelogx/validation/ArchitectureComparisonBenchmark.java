@@ -216,6 +216,10 @@ public final class ArchitectureComparisonBenchmark {
         result.put("tokenizer_sha256", config.getTokenizerSha256());
         result.put("character_metric_scope", "all characters in record");
         result.put("batch_size", INFERENCE_BATCH_SIZE);
+        result.put(
+                "inference_method",
+                "ML-v1.3 is evaluated once on every record so M0 and H1 use identical predictions; H1 ML rate is logical routing, not benchmark compute usage"
+        );
 
         JSONObject architectures = new JSONObject();
         architectures.put("D0", d0.toJson());
@@ -467,7 +471,11 @@ public final class ArchitectureComparisonBenchmark {
         );
         System.out.println(
                 "  ML invocation: "
-                        + percent(json.getDouble("ml_invocation_rate"))
+                        + percent(
+                                json.getDouble(
+                                        "logical_ml_invocation_rate"
+                                )
+                        )
         );
     }
 
@@ -618,6 +626,7 @@ public final class ArchitectureComparisonBenchmark {
         private long highRiskFullGoldSpans;
 
         private long recordsAllSensitiveCovered;
+        private long sensitiveRecordsAllCovered;
         private long recordsPerfectRedaction;
         private long predictedSpans;
 
@@ -678,6 +687,9 @@ public final class ArchitectureComparisonBenchmark {
 
             if (recordSensitive == recordSensitiveRedacted) {
                 recordsAllSensitiveCovered++;
+                if (recordSensitive > 0) {
+                    sensitiveRecordsAllCovered++;
+                }
                 if (recordNonSensitiveRedacted == 0) {
                     recordsPerfectRedaction++;
                 }
@@ -797,8 +809,19 @@ public final class ArchitectureComparisonBenchmark {
                     recordsAllSensitiveCovered
             );
             object.put(
-                    "whole_record_sensitive_coverage_rate",
+                    "all_record_sensitive_coverage_rate",
                     ratio(recordsAllSensitiveCovered, records)
+            );
+            object.put(
+                    "sensitive_records_all_covered",
+                    sensitiveRecordsAllCovered
+            );
+            object.put(
+                    "sensitive_record_full_coverage_rate",
+                    ratio(
+                            sensitiveRecordsAllCovered,
+                            recordsWithSensitive
+                    )
             );
             object.put(
                     "records_perfect_redaction",
@@ -810,9 +833,9 @@ public final class ArchitectureComparisonBenchmark {
             );
 
             object.put("predicted_spans", predictedSpans);
-            object.put("ml_records", mlRecords);
+            object.put("logical_ml_records", mlRecords);
             object.put(
-                    "ml_invocation_rate",
+                    "logical_ml_invocation_rate",
                     ratio(mlRecords, routedRecords)
             );
             return object;
