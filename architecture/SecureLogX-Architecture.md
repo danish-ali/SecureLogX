@@ -473,7 +473,9 @@ Output:
 
 `reports/architecture-comparison/result.json`
 
-The first executable comparison covers D0, M0, and H1 on the same non-sealed datasets. ML-v1.3 is inferred once for every benchmark record and those same frozen predictions are reused for M0 and H1 analysis. Therefore H1 reports a **logical ML routing rate**; benchmark wall-clock compute is not yet an H1 performance measurement.
+The first executable comparison covers D0, M0, and H1 on the same non-sealed datasets. ML-v1.3 is inferred once for every **scorable non-truncated benchmark record** and those same frozen predictions are reused for M0 and H1 analysis. Therefore H1 reports a **logical ML routing rate**; benchmark wall-clock compute is not yet an H1 performance measurement.
+
+Records beyond the frozen 384-token window are excluded from all three quality denominators and reported separately as a truncation cohort. This keeps D0/M0/H1 denominators identical while preserving the production rule that over-window ML-routed records fail closed.
 
 H2 is intentionally reported as `EXPERIMENTAL_NOT_IMPLEMENTED` until a genuine contextual Redact/Keep reviewer exists. SecureLogX must not emulate H2 with heuristics and present that as a valid research baseline.
 
@@ -742,7 +744,17 @@ Future production work should replace full-message fail-closed behavior with val
 
 Until that implementation is validated, silent truncation is prohibited.
 
-Architecture-quality benchmarks also reject truncated records rather than scoring incomplete inference.
+Architecture-quality benchmarks must not score incomplete inference.
+
+For D0/M0/H1 comparison, records that exceed the frozen 384-token model window are now handled as a **separate truncation cohort**:
+
+- they are excluded from D0/M0/H1 quality denominators,
+- exclusion counts are reported globally and by dataset source,
+- sample diagnostics record covered character count, total character count, gold-span count, and gold spans beyond the covered region,
+- the same scorable subset is used for D0, M0, and H1 so the comparison remains fair,
+- runtime policy remains fail-closed for ML-routed over-window records.
+
+This exclusion is a temporary evaluation policy until validated overlapping-window inference exists. It must not be interpreted as evidence that long records are supported by the current model path.
 
 ---
 
@@ -1355,6 +1367,47 @@ No additional implementation change in this entry; documentation status only.
 **Backward-compatibility impact**
 
 None beyond the previously documented resolver and long-input behavior changes.
+
+---
+
+### 2026-09-27 — Architecture comparison separates over-window truncation cohort
+
+**Status**
+
+IMPLEMENTED; QUALITY RERUN PENDING
+
+**Change**
+
+Changed the Phase 2 D0/M0/H1 benchmark so over-window records no longer abort the entire comparison. Records exceeding the frozen 384-token model window are excluded from all three quality denominators and reported separately.
+
+**Reason**
+
+The first post-safety architecture rerun correctly aborted on a real dataset record with:
+
+- covered characters: 933
+- total characters: 1,451
+
+Scoring M0 or H1 on that record would use incomplete model visibility. Aborting the whole experiment, however, prevents valid comparison of the remaining records.
+
+The fair interim policy is therefore:
+
+- same non-truncated subset for D0/M0/H1,
+- explicit truncation counts globally and by source,
+- no silent exclusion,
+- runtime remains fail-closed on over-window ML-routed records.
+
+**Evidence / benchmark**
+
+The failed comparison compiled successfully and stopped before producing D0/M0/H1 quality metrics. No NER data was modified.
+
+**Affected modules**
+
+- `ArchitectureComparisonBenchmark`
+- canonical architecture reference
+
+**Backward-compatibility impact**
+
+None. Production runtime behavior is unchanged.
 
 ---
 
