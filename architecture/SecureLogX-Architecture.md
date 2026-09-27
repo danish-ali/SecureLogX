@@ -457,6 +457,24 @@ Recent research does not justify replacing the architecture yet, but it changes 
 
 ### 9.1 Four-way architecture comparison
 
+**Current implementation status: IN PROGRESS**
+
+A non-sealed Java comparison harness now exists at:
+
+`securelogx-core/src/main/java/com/securelogx/validation/ArchitectureComparisonBenchmark.java`
+
+Runner:
+
+`scripts/run-architecture-comparison.ps1`
+
+Output:
+
+`reports/architecture-comparison/result.json`
+
+The first executable comparison covers D0, M0, and H1 on the same non-sealed datasets. ML-v1.3 is inferred once for every benchmark record and those same frozen predictions are reused for M0 and H1 analysis. Therefore H1 reports a **logical ML routing rate**; benchmark wall-clock compute is not yet an H1 performance measurement.
+
+H2 is intentionally reported as `EXPERIMENTAL_NOT_IMPLEMENTED` until a genuine contextual Redact/Keep reviewer exists. SecureLogX must not emulate H2 with heuristics and present that as a valid research baseline.
+
 The journal benchmark should include:
 
 | ID | Architecture | Purpose |
@@ -506,6 +524,21 @@ Do not rely only on token/entity micro-F1 and macro-F1.
 Primary production and journal metrics should include:
 
 ### Detection Quality
+
+The implemented D0/M0/H1 benchmark currently calculates these metrics over character offsets from the labeled non-sealed corpora:
+
+- sensitive-character recall,
+- non-sensitive-character redaction rate,
+- full-span recall,
+- exact-boundary recall,
+- partial-span and missed-span counts,
+- high-risk full-span recall,
+- sensitive-record full-coverage rate,
+- whole-record perfect-redaction rate.
+
+Character metrics currently use **all characters in the record** as the denominator; this definition must remain stable when comparing architecture runs.
+
+Additional target metrics remain:
 
 - sensitive-character recall,
 - non-sensitive-character redaction rate,
@@ -1016,6 +1049,46 @@ The post-change benchmark reduced Scenario A ML invocation from 75.80% to 5.00% 
 **Backward-compatibility impact**
 
 None.
+
+---
+
+### 2026-09-27 — Phase 2 D0/M0/H1 comparison harness added
+
+**Change**
+
+Added a non-sealed Java architecture-quality benchmark for deterministic-only (D0), frozen ML-only (M0), and current hybrid (H1). H2 remains explicitly unimplemented.
+
+**Reason**
+
+Phase 1 routing efficiency is now validated. The next decision is whether H1 materially improves protection/overmask tradeoffs relative to deterministic-only and ML-only baselines. The comparison must use modern safety metrics rather than aggregate F1 alone.
+
+**Evidence / benchmark**
+
+Pending first local execution of `scripts/run-architecture-comparison.ps1`.
+
+The harness is designed to report:
+
+- sensitive-character recall,
+- non-sensitive-character redaction rate,
+- full-span recall,
+- exact-boundary recall,
+- partial and missed spans,
+- high-risk full-span recall,
+- sensitive-record full coverage,
+- whole-record perfect redaction,
+- logical ML invocation rate.
+
+M0 predictions are generated once on every record and reused by H1 where the production gate logically invokes ML, ensuring identical ML predictions across those two architectures.
+
+**Affected modules**
+
+- `securelogx-core` validation tooling
+- `scripts`
+- `reports/architecture-comparison`
+
+**Backward-compatibility impact**
+
+None. Production routing/runtime behavior is unchanged.
 
 ---
 
