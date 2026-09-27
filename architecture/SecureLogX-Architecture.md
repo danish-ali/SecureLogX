@@ -189,10 +189,11 @@ The resolver combines deterministic and ML evidence.
 Current principles:
 
 1. high-confidence deterministic MASK evidence can protect a value even if ML misses it,
-2. high-confidence deterministic ALLOW evidence can suppress an overlapping ML false positive only when the negative context is authoritative,
-3. ESCALATE evidence does not decide the final outcome,
-4. non-overlapping contextual ML spans are normally masked,
-5. unsafe ambiguity should favor protection or escalation rather than raw exposure.
+2. deterministic MASK is a **protection floor, not a span ceiling**; overlapping ML MASK evidence may extend the protected span,
+3. high-confidence deterministic ALLOW evidence can suppress an overlapping ML false positive only when the negative context is authoritative,
+4. ESCALATE evidence does not decide the final outcome,
+5. non-overlapping contextual ML spans are normally masked,
+6. unsafe ambiguity should favor protection or escalation rather than raw exposure.
 
 Future hardening requirement:
 
@@ -505,7 +506,20 @@ Before changing production resolver semantics, the benchmark now diagnoses:
 - source distribution,
 - counter-cases where H1 fully covers a gold span that M0 does not.
 
-No production resolver change should be made until this diagnostic is reviewed.
+The follow-up diagnostic isolated all 120 M0-to-H1 full-span regressions to high-risk `AUTH_TOKEN` spans associated with deterministic `MASK:AUTH_TOKEN:explicit-bearer-token` evidence. It also found 32 spans where H1 fully covered a gold span that M0 did not.
+
+This confirms that the previous resolver rule was too aggressive: a shorter deterministic MASK was suppressing an overlapping, larger ML MASK span.
+
+**Pending-validation resolver change**
+
+The resolver now treats deterministic MASK as a protection floor rather than a span ceiling:
+
+- deterministic MASK remains in the final protection set,
+- overlapping ML MASK is also retained and may extend coverage,
+- deterministic ALLOW remains the only decisive evidence that can suppress an overlapping ML MASK,
+- ESCALATE remains non-decisive.
+
+This change is not yet considered validated until the locked hybrid safety suite and D0/M0/H1 architecture comparison are rerun.
 
 The journal benchmark should include:
 
@@ -1158,6 +1172,51 @@ Initial results:
 **Backward-compatibility impact**
 
 None. Production resolver behavior has not yet changed.
+
+---
+
+### 2026-09-27 — Resolver changed so ML may extend deterministic MASK spans
+
+**Status**
+
+PENDING VALIDATION
+
+**Change**
+
+Changed resolver precedence so deterministic MASK evidence no longer suppresses an overlapping ML MASK span. Deterministic MASK remains protective, while the ML span may extend the masked interval. Deterministic ALLOW remains authoritative for overlapping ML suppression.
+
+**Reason**
+
+Regression diagnostics found:
+
+- 120 spans fully protected by M0 but not H1,
+- all 120 were high-risk `AUTH_TOKEN`,
+- all were associated with `MASK:AUTH_TOKEN:explicit-bearer-token`,
+- 32 spans were fully protected by H1 but not M0.
+
+This indicates the previous resolver rule converted larger ML token spans into shorter deterministic spans.
+
+**Evidence / benchmark**
+
+Pre-change:
+
+- M0 high-risk full-span recall: 98.4462%
+- H1 high-risk full-span recall: 93.7450%
+- M0 full-span recall: 92.5633%
+- H1 full-span recall: 91.6107%
+- M0/H1 non-sensitive-character redaction: 0.2126%
+
+Post-change validation is pending.
+
+**Affected modules**
+
+- `HybridContextResolver`
+- `HybridDetectionCheck`
+- architecture-quality evaluation
+
+**Backward-compatibility impact**
+
+Masking may expand when both deterministic MASK and overlapping ML MASK evidence are present. Public APIs are unchanged.
 
 ---
 
