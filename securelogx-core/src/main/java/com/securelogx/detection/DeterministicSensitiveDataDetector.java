@@ -55,6 +55,15 @@ public final class DeterministicSensitiveDataDetector {
     private static final Pattern CAPITALIZED_NAME = Pattern.compile(
             "\\b[A-Z][a-z]{2,}\\s+[A-Z][a-z]{2,}\\b"
     );
+    private static final Pattern STRICT_METADATA_PAIR = Pattern.compile(
+            "([A-Za-z][A-Za-z0-9_.-]{1,40})\\s*[:=]\\s*([A-Za-z0-9_.:/-]{1,120})"
+    );
+    private static final Pattern SAFE_LOG_PREFIX = Pattern.compile(
+            "^\\s*\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}"
+                    + "(?:[.,]\\d+)?(?:Z)?\\s+"
+                    + "(?:TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\s+"
+                    + "[A-Za-z0-9_.-]+\\s*$"
+    );
 
     private static final Set<String> DETERMINISTIC_KEYS = Set.of(
             "email",
@@ -151,6 +160,25 @@ public final class DeterministicSensitiveDataDetector {
             "source",
             "target",
             "reason"
+    );
+
+    private static final Set<String> STRICT_FAST_PATH_METADATA_KEYS = Set.of(
+            "status",
+            "result",
+            "outcome",
+            "action",
+            "level",
+            "trace",
+            "traceid",
+            "seq",
+            "sequence",
+            "deployment",
+            "environment",
+            "service",
+            "mode",
+            "phase",
+            "channel",
+            "operation"
     );
 
     private static final Set<String> CARD_KEYS = Set.of(
@@ -451,12 +479,16 @@ public final class DeterministicSensitiveDataDetector {
                     : MlGateDecision.bypass(structured.reason());
         }
 
-        if (evidence.isEmpty()) {
-            return MlGateDecision.ml("no-deterministic-evidence");
-        }
-
         if (containsCapitalizedNameOutsideEvidence(text, evidence)) {
             return MlGateDecision.ml("capitalized-name-outside-evidence");
+        }
+
+        if (isStrictSafeMetadataRecord(text)) {
+            return MlGateDecision.bypass("strict-safe-metadata-record");
+        }
+
+        if (evidence.isEmpty()) {
+            return MlGateDecision.ml("no-deterministic-evidence");
         }
 
         Matcher keyMatcher = KEY_VALUE_KEY.matcher(text);
@@ -563,6 +595,37 @@ public final class DeterministicSensitiveDataDetector {
         private static MlGateDecision bypass(String reason) {
             return new MlGateDecision(false, reason);
         }
+    }
+
+    private static boolean isStrictSafeMetadataRecord(String text) {
+        Matcher matcher = STRICT_METADATA_PAIR.matcher(text);
+        int previousEnd = 0;
+        int pairs = 0;
+
+        while (matcher.find()) {
+            String gap = text.substring(previousEnd, matcher.start());
+            if (pairs == 0) {
+                if (!gap.isBlank() && !SAFE_LOG_PREFIX.matcher(gap).matches()) {
+                    return false;
+                }
+            } else if (!gap.isBlank()) {
+                return false;
+            }
+
+            String normalizedKey = normalizeKey(matcher.group(1));
+            if (!STRICT_FAST_PATH_METADATA_KEYS.contains(normalizedKey)) {
+                return false;
+            }
+
+            pairs++;
+            previousEnd = matcher.end();
+        }
+
+        if (pairs == 0) {
+            return false;
+        }
+
+        return text.substring(previousEnd).isBlank();
     }
 
     private StructuredGateDecision evaluateStructuredJson(String text) {
