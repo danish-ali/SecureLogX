@@ -194,6 +194,9 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
+        assertMlCanExtendDeterministicMask(detector, resolver, policy);
+        cases++;
+
         assertNegativeEvidenceSuppressesMl(detector, resolver, policy);
         cases++;
 
@@ -362,6 +365,60 @@ public final class HybridDetectionCheck {
         if (!scan.requiresMl()) {
             throw new IllegalStateException(
                     "Expected ML escalation for: " + text
+            );
+        }
+    }
+
+    private static void assertMlCanExtendDeterministicMask(
+            DeterministicSensitiveDataDetector detector,
+            HybridContextResolver resolver,
+            MaskingPolicy policy
+    ) {
+        String text =
+                "authorization=Bearer AbCdEfGhIjKlMnOpQrStUvWx status=denied";
+        DeterministicScanResult scan = detector.scan(text);
+
+        int mlStart = text.indexOf("Bearer");
+        int mlEnd = text.indexOf(" status=");
+        if (mlStart < 0 || mlEnd <= mlStart) {
+            throw new IllegalStateException(
+                    "Invalid resolver regression fixture"
+            );
+        }
+
+        List<LabelAwareMaskingEngine.EntitySpan> simulatedMl = List.of(
+                new LabelAwareMaskingEngine.EntitySpan(
+                        mlStart,
+                        mlEnd,
+                        "AUTH_TOKEN"
+                )
+        );
+
+        List<ResolvedSpan> resolved = resolver.resolve(
+                scan.evidence(),
+                simulatedMl
+        );
+
+        boolean extendedMlMask = resolved.stream().anyMatch(
+                span -> span.action() == ResolutionAction.MASK
+                        && span.winningSource()
+                                == com.securelogx.detection.DetectionSource.ML
+                        && span.start() == mlStart
+                        && span.end() == mlEnd
+        );
+        if (!extendedMlMask) {
+            throw new IllegalStateException(
+                    "Overlapping deterministic MASK incorrectly suppressed "
+                            + "the larger ML AUTH_TOKEN span"
+            );
+        }
+
+        String output = policy.apply(text, resolved, false);
+        if (output.contains("Bearer")
+                || output.contains("AbCdEfGhIjKlMnOpQrStUvWx")) {
+            throw new IllegalStateException(
+                    "Extended AUTH_TOKEN span was not fully masked: "
+                            + output
             );
         }
     }
