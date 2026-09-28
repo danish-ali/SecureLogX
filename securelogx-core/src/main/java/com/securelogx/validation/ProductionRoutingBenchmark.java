@@ -39,56 +39,7 @@ public final class ProductionRoutingBenchmark {
         DeterministicSensitiveDataDetector detector =
                 new DeterministicSensitiveDataDetector();
 
-        List<Scenario> scenarios = List.of(
-                new Scenario(
-                        "A",
-                        "normal-operations-90-10",
-                        1000,
-                        Map.of(
-                                RecordClass.ORDINARY_SAFE, 850,
-                                RecordClass.NEGATIVE_TECHNICAL, 50,
-                                RecordClass.DETERMINISTIC_SENSITIVE, 50,
-                                RecordClass.CONTEXTUAL_SENSITIVE, 40,
-                                RecordClass.ADVERSARIAL, 10
-                        )
-                ),
-                new Scenario(
-                        "B",
-                        "mixed-operations-75-25",
-                        1000,
-                        Map.of(
-                                RecordClass.ORDINARY_SAFE, 675,
-                                RecordClass.NEGATIVE_TECHNICAL, 75,
-                                RecordClass.DETERMINISTIC_SENSITIVE, 100,
-                                RecordClass.CONTEXTUAL_SENSITIVE, 125,
-                                RecordClass.ADVERSARIAL, 25
-                        )
-                ),
-                new Scenario(
-                        "C",
-                        "balanced-50-50",
-                        1000,
-                        Map.of(
-                                RecordClass.ORDINARY_SAFE, 400,
-                                RecordClass.NEGATIVE_TECHNICAL, 100,
-                                RecordClass.DETERMINISTIC_SENSITIVE, 150,
-                                RecordClass.CONTEXTUAL_SENSITIVE, 300,
-                                RecordClass.ADVERSARIAL, 50
-                        )
-                ),
-                new Scenario(
-                        "D",
-                        "high-risk-stress",
-                        1000,
-                        Map.of(
-                                RecordClass.ORDINARY_SAFE, 100,
-                                RecordClass.NEGATIVE_TECHNICAL, 50,
-                                RecordClass.DETERMINISTIC_SENSITIVE, 250,
-                                RecordClass.CONTEXTUAL_SENSITIVE, 500,
-                                RecordClass.ADVERSARIAL, 100
-                        )
-                )
-        );
+        List<Scenario> scenarios = scenarioDefinitions();
 
         JSONArray scenarioResults = new JSONArray();
         long totalRecords = 0;
@@ -188,6 +139,70 @@ public final class ProductionRoutingBenchmark {
                     "Production routing benchmark failed safety assertions"
             );
         }
+    }
+
+    static Map<String, List<String>> scenarioMessages() {
+        Map<String, List<String>> result = new LinkedHashMap<>();
+        for (Scenario scenario : scenarioDefinitions()) {
+            List<String> messages = buildScenario(scenario).stream()
+                    .map(Fixture::text)
+                    .toList();
+            result.put(scenario.id, messages);
+        }
+        return Map.copyOf(result);
+    }
+
+    private static List<Scenario> scenarioDefinitions() {
+        return List.of(
+                new Scenario(
+                        "A",
+                        "normal-operations-90-10",
+                        1000,
+                        Map.of(
+                                RecordClass.ORDINARY_SAFE, 850,
+                                RecordClass.NEGATIVE_TECHNICAL, 50,
+                                RecordClass.DETERMINISTIC_SENSITIVE, 50,
+                                RecordClass.CONTEXTUAL_SENSITIVE, 40,
+                                RecordClass.ADVERSARIAL, 10
+                        )
+                ),
+                new Scenario(
+                        "B",
+                        "mixed-operations-75-25",
+                        1000,
+                        Map.of(
+                                RecordClass.ORDINARY_SAFE, 675,
+                                RecordClass.NEGATIVE_TECHNICAL, 75,
+                                RecordClass.DETERMINISTIC_SENSITIVE, 100,
+                                RecordClass.CONTEXTUAL_SENSITIVE, 125,
+                                RecordClass.ADVERSARIAL, 25
+                        )
+                ),
+                new Scenario(
+                        "C",
+                        "balanced-50-50",
+                        1000,
+                        Map.of(
+                                RecordClass.ORDINARY_SAFE, 400,
+                                RecordClass.NEGATIVE_TECHNICAL, 100,
+                                RecordClass.DETERMINISTIC_SENSITIVE, 150,
+                                RecordClass.CONTEXTUAL_SENSITIVE, 300,
+                                RecordClass.ADVERSARIAL, 50
+                        )
+                ),
+                new Scenario(
+                        "D",
+                        "high-risk-stress",
+                        1000,
+                        Map.of(
+                                RecordClass.ORDINARY_SAFE, 100,
+                                RecordClass.NEGATIVE_TECHNICAL, 50,
+                                RecordClass.DETERMINISTIC_SENSITIVE, 250,
+                                RecordClass.CONTEXTUAL_SENSITIVE, 500,
+                                RecordClass.ADVERSARIAL, 100
+                        )
+                )
+        );
     }
 
     private static ScenarioResult evaluateScenario(
