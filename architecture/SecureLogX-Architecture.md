@@ -709,6 +709,72 @@ Target performance metrics remain:
 - model-load time,
 - GPU/CPU comparison where applicable.
 
+### Memory ownership and native ONNX budget
+
+**Status: INSTRUMENTED; BASELINE RUN PENDING**
+
+JVM heap is **not** the SecureLogX memory boundary.
+
+ONNX Runtime owns native allocations outside normal Java heap accounting. Production memory analysis must therefore separate:
+
+- JVM heap used / committed / max,
+- JVM non-heap memory,
+- direct and mapped buffer pools,
+- whole-process working set / RSS,
+- whole-process private bytes where the OS exposes them,
+- process committed virtual memory,
+- GPU process memory when CUDA is active.
+
+The release gate must use whole-process memory in addition to JVM metrics. A healthy heap graph does not prove that native ONNX memory is bounded.
+
+Native lifecycle requirements:
+
+1. every `OnnxTensor` must be closed deterministically,
+2. every `OrtSession.Result` must be closed deterministically,
+3. `OrtSession.SessionOptions` must be closed immediately after session construction,
+4. `OrtSession` must be closed during engine shutdown,
+5. shutdown must be idempotent,
+6. retained native-memory growth after warm-up must be measured during repeated inference,
+7. GPU memory must be measured separately from host-process memory.
+
+The production engine now explicitly closes `OrtSession.SessionOptions` after session creation and closes `OrtSession` during idempotent shutdown.
+
+A native-aware memory benchmark now exists:
+
+`securelogx-core/src/main/java/com/securelogx/validation/RuntimeMemoryBenchmark.java`
+
+with snapshot support in:
+
+`securelogx-core/src/main/java/com/securelogx/validation/RuntimeMemorySnapshot.java`
+
+Runner:
+
+`scripts/run-runtime-memory-benchmark.ps1`
+
+The benchmark records:
+
+- process start,
+- tokenizer initialization,
+- ONNX session initialization,
+- post-warm-up,
+- post-GC settled checkpoints before/after each Scenario A-D workload,
+- post-session-shutdown,
+- post-shutdown settled memory.
+
+It reports JVM heap/non-heap/direct buffers separately from process working set/private/virtual memory and optionally reports GPU process memory through `nvidia-smi`.
+
+Initial release policy:
+
+> Treat repeated post-warm-up/post-GC growth in whole-process memory as a leak signal even when JVM heap is stable.
+
+Hard MiB limits are intentionally not set before representative baseline measurements. After repeated CPU and GPU runs, define:
+
+- steady-state working-set/private-memory budget,
+- maximum acceptable retained growth across soak iterations,
+- long-record/windowing memory budget,
+- GPU memory ceiling,
+- shutdown/restart recovery expectations.
+
 ### Robustness
 
 - identifier-format perturbation,
@@ -859,15 +925,15 @@ Silent truncation remains prohibited.
 
 Architecture-quality benchmarks must not score incomplete inference.
 
-For D0/M0/H1 comparison, records that exceed the frozen 384-token model window are now handled as a **separate truncation cohort**:
+The current D0/M0/H1 comparison therefore uses the validated overlapping-window path for long records:
 
-- they are excluded from D0/M0/H1 quality denominators,
-- exclusion counts are reported globally and by dataset source,
-- sample diagnostics record covered character count, total character count, gold-span count, and gold spans beyond the covered region,
-- the same scorable subset is used for D0, M0, and H1 so the comparison remains fair,
-- runtime policy remains fail-closed for ML-routed over-window records.
+- all 6,463 non-sealed records are scored,
+- 581 records use multiple inference windows,
+- zero records are excluded,
+- M0 and H1 reuse the same merged windowed ML predictions,
+- windowed-record and inference-window counts remain explicit in the report.
 
-This exclusion is a temporary evaluation policy until validated overlapping-window inference exists. It must not be interpreted as evidence that long records are supported by the current model path.
+Fail-closed behavior remains the safety fallback if a tokenizer implementation cannot produce complete windows.
 
 ---
 
@@ -1055,30 +1121,35 @@ VALIDATED (engineering benchmark)
         |
         v
 Phase 5
+Native-aware memory baseline + lifecycle / retained-growth gate
+IN PROGRESS
+        |
+        v
+Phase 6
 Constrained decoding experiment
         |
         v
-Phase 6
+Phase 7
 Runtime/concurrency/backpressure hardening
         |
         v
-Phase 6
+Phase 8
 ONNX Runtime upgrade evaluation
         |
         v
-Phase 7
+Phase 9
 Dependency / SBOM / CVE / license gate
         |
         v
-Phase 8
+Phase 10
 Spring Boot + Log4j2 production packaging
         |
         v
-Phase 9
+Phase 11
 Load, soak, failure and adversarial testing
         |
         v
-Phase 10
+Phase 12
 Release candidate
         |
         v
@@ -1088,9 +1159,9 @@ SecureLogX 1.0
 Recommended milestone terminology:
 
 - Phase 2 complete: **journal/demo ready**
-- Phase 5 complete: **runtime beta**
-- Phase 8 complete: **product beta**
-- Phase 10 complete: **production-grade release candidate**
+- Phase 7 complete: **runtime beta**
+- Phase 10 complete: **product beta**
+- Phase 12 complete: **production-grade release candidate**
 
 ---
 
@@ -1850,6 +1921,51 @@ No production code change in this entry; benchmark evidence and architecture sta
 **Backward-compatibility impact**
 
 None.
+
+---
+
+### 2026-09-28 — Native ONNX memory lifecycle and measurement made explicit
+
+**Status**
+
+INSTRUMENTED; BASELINE RUN PENDING
+
+**Change**
+
+Added an explicit native-memory contract, fixed ONNX lifecycle cleanup, and added a runtime memory benchmark that separates JVM-managed memory from whole-process/native memory.
+
+Implementation changes:
+
+- `OrtSession.SessionOptions` is closed after session construction,
+- `OrtSession` is closed during idempotent engine shutdown,
+- cached-clock interruption now terminates the updater thread cleanly,
+- M0 benchmark session options are also closed,
+- runtime memory snapshots include heap, non-heap, direct/mapped buffers, process committed virtual memory, OS working set/private/virtual memory where available, and GPU process memory when attributable.
+
+**Reason**
+
+ONNX Runtime allocations occur outside Java heap accounting. Heap-only monitoring can therefore miss native retention, JNI/native allocator growth, or GPU memory pressure.
+
+**Benchmark**
+
+Added:
+
+- `RuntimeMemorySnapshot`
+- `RuntimeMemoryBenchmark`
+- `scripts/run-runtime-memory-benchmark.ps1`
+
+The benchmark establishes post-GC settled checkpoints across Scenario A-D workloads and before/after engine shutdown. Hard memory budgets will be set after repeated measurements on representative CPU/GPU hardware.
+
+**Affected modules**
+
+- `ONNXDynamicInferenceEngine`
+- `CachedClock`
+- performance validation tooling
+- architecture memory/release policy
+
+**Backward-compatibility impact**
+
+No public API change. Engine shutdown now deterministically releases its ONNX session.
 
 ---
 
