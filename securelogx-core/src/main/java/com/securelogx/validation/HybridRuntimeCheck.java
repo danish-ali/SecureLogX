@@ -162,6 +162,22 @@ public final class HybridRuntimeCheck {
             );
         }
 
+        if (stats.onnxInferenceCalls() < 1) {
+            throw new IllegalStateException(
+                    "Expected at least one ONNX inference call"
+            );
+        }
+
+        if (stats.maxInferenceWindowsPerCallObserved()
+                > config.getMaxInferenceWindowsPerBatch()) {
+            throw new IllegalStateException(
+                    "ONNX window micro-batch cap exceeded. observed="
+                            + stats.maxInferenceWindowsPerCallObserved()
+                            + " configured="
+                            + config.getMaxInferenceWindowsPerBatch()
+            );
+        }
+
         if (stats.truncatedFailClosedItems() != 0) {
             throw new IllegalStateException(
                     "Windowed tokenizer unexpectedly failed closed, count="
@@ -199,8 +215,24 @@ public final class HybridRuntimeCheck {
                 stats.mlInferenceWindows()
         );
         result.put(
+                "onnx_inference_calls",
+                stats.onnxInferenceCalls()
+        );
+        result.put(
+                "max_inference_windows_per_call_observed",
+                stats.maxInferenceWindowsPerCallObserved()
+        );
+        result.put(
+                "configured_max_inference_windows_per_batch",
+                config.getMaxInferenceWindowsPerBatch()
+        );
+        result.put(
                 "average_windows_per_ml_item",
                 stats.averageWindowsPerMlItem()
+        );
+        result.put(
+                "average_windows_per_onnx_call",
+                stats.averageWindowsPerOnnxCall()
         );
         result.put(
                 "truncated_fail_closed_items",
@@ -246,6 +278,16 @@ public final class HybridRuntimeCheck {
         System.out.println(
                 "ML inference windows: "
                         + stats.mlInferenceWindows()
+        );
+        System.out.println(
+                "ONNX inference calls: "
+                        + stats.onnxInferenceCalls()
+        );
+        System.out.println(
+                "Max windows per ONNX call: "
+                        + stats.maxInferenceWindowsPerCallObserved()
+                        + "/"
+                        + config.getMaxInferenceWindowsPerBatch()
         );
         System.out.println(
                 "Truncated fail-closed items: "
