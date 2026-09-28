@@ -482,6 +482,14 @@ public final class RuntimeMemoryBenchmark {
                 after.mlInferenceWindows() - before.mlInferenceWindows()
         );
         object.put(
+                "onnx_inference_calls",
+                after.onnxInferenceCalls() - before.onnxInferenceCalls()
+        );
+        object.put(
+                "max_inference_windows_per_call_observed",
+                after.maxInferenceWindowsPerCallObserved()
+        );
+        object.put(
                 "truncated_fail_closed_records",
                 after.truncatedFailClosedItems()
                         - before.truncatedFailClosedItems()
