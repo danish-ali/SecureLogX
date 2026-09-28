@@ -89,6 +89,22 @@ public class SecureLogXConfig {
         );
     }
 
+    public int getMaxInferenceWindowsPerBatch() {
+        int configured = Integer.parseInt(
+                props.getProperty(
+                        "securelogx.model.maxInferenceWindowsPerBatch",
+                        "8"
+                )
+        );
+        if (configured < 1) {
+            throw new IllegalArgumentException(
+                    "securelogx.model.maxInferenceWindowsPerBatch "
+                            + "must be at least 1"
+            );
+        }
+        return configured;
+    }
+
     public String getLogFilePath() {
         return props.getProperty("securelogx.log.file", "application.log");
     }
