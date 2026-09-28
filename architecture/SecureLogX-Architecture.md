@@ -628,6 +628,44 @@ Additional target metrics remain:
 
 ### Performance
 
+A reproducible first-pass M0-vs-H1 engineering benchmark now exists at:
+
+`securelogx-core/src/main/java/com/securelogx/validation/PerformanceComparisonBenchmark.java`
+
+Runner:
+
+`scripts/run-performance-comparison.ps1`
+
+Output:
+
+`reports/performance-comparison/result.json`
+
+It reuses the exact Scenario A-D workloads from `ProductionRoutingBenchmark` and compares:
+
+- M0: frozen ML-v1.3 on every record,
+- H1: current deterministic gate + windowed ML + resolver/policy.
+
+Default measurement design:
+
+- 160 deterministically sampled records per scenario,
+- 32-record benchmark batches,
+- warm-up excluded from measurements,
+- 3 measured iterations,
+- same frozen model/tokenizer,
+- same 64-token overlapping-window policy,
+- initialization measured separately,
+- steady-state throughput in records/second,
+- batch p50/p95/p99,
+- H1 logical ML invocation,
+- H1 windowed record count,
+- H1 inference-window count,
+- H1 fail-closed count,
+- M0/H1 steady-state speedup ratio.
+
+This is an end-to-end engineering benchmark rather than JMH. Allocation rate, peak RSS/native memory, CPU profiling, and detailed JFR/JMH work remain later performance-hardening tasks.
+
+Target performance metrics remain:
+
 - cold-start latency,
 - steady-state p50,
 - p95,
@@ -977,10 +1015,12 @@ D0 / M0 / H1 / H2 architecture benchmark
 Phase 3
 Overlapping-window inference for >384-token records
 + offset rebasing / span merge / boundary tests
+VALIDATED
         |
         v
 Phase 4
-ML invocation / latency / throughput optimization
+M0 vs H1 latency / throughput / routing-cost benchmark
+IN PROGRESS
         |
         v
 Phase 5
@@ -1693,6 +1733,50 @@ No production code change in this entry; architecture status and evidence update
 **Backward-compatibility impact**
 
 None.
+
+---
+
+### 2026-09-28 — M0 versus H1 performance benchmark added
+
+**Status**
+
+IMPLEMENTED; FIRST RUN PENDING
+
+**Change**
+
+Added a reproducible end-to-end performance comparison between M0 and H1 using the same Scenario A-D workloads already used to validate production routing.
+
+**Reason**
+
+Architecture quality is now validated across the complete 6,463-record corpus. The next product question is whether H1 converts lower ML invocation on realistic traffic into measurable throughput and latency gains without safety regressions.
+
+**Benchmark design**
+
+- 160 sampled records per scenario by default,
+- 32-record batches,
+- one warm-up phase excluded from measurements,
+- 3 measured iterations,
+- M0 uses ML on every record,
+- H1 uses current production routing and overlapping-window inference,
+- p50/p95/p99 batch latency,
+- records/second throughput,
+- initialization time,
+- H1 ML invocation/window metrics,
+- speedup ratio.
+
+**Evidence / benchmark**
+
+First local run pending.
+
+**Affected modules**
+
+- `ProductionRoutingBenchmark` exposes its canonical workloads to validation tooling,
+- new `PerformanceComparisonBenchmark`,
+- new `run-performance-comparison.ps1`.
+
+**Backward-compatibility impact**
+
+None. Production masking/routing behavior is unchanged.
 
 ---
 
