@@ -5,6 +5,8 @@ public record HybridRuntimeStats(
         long mlInferenceItems,
         long windowedMlItems,
         long mlInferenceWindows,
+        long onnxInferenceCalls,
+        long maxInferenceWindowsPerCallObserved,
         long truncatedFailClosedItems
 ) {
     public long totalRoutedItems() {
@@ -31,5 +33,11 @@ public record HybridRuntimeStats(
         return mlInferenceItems == 0
                 ? 0.0
                 : (double) mlInferenceWindows / mlInferenceItems;
+    }
+
+    public double averageWindowsPerOnnxCall() {
+        return onnxInferenceCalls == 0
+                ? 0.0
+                : (double) mlInferenceWindows / onnxInferenceCalls;
     }
 }
