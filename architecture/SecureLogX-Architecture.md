@@ -711,7 +711,7 @@ Target performance metrics remain:
 
 ### Memory ownership and native ONNX budget
 
-**Status: INSTRUMENTED; BASELINE RUN PENDING**
+**Status: BASELINE VALIDATED; REPEATED SOAK/RESTART STABILITY PENDING**
 
 JVM heap is **not** the SecureLogX memory boundary.
 
@@ -767,7 +767,46 @@ Initial release policy:
 
 > Treat repeated post-warm-up/post-GC growth in whole-process memory as a leak signal even when JVM heap is stable.
 
-Hard MiB limits are intentionally not set before representative baseline measurements. After repeated CPU and GPU runs, define:
+First CPU baseline result:
+
+| Checkpoint | Heap used | Process working set | Process private |
+|---|---:|---:|---:|
+| Process start | 8.94 MiB | 119.44 MiB | 460.31 MiB |
+| After tokenizer | 11.92 MiB | 103.73 MiB | 221.03 MiB |
+| After engine init | 11.92 MiB | 564.32 MiB | 668.71 MiB |
+| After warm-up settled | 12.99 MiB | 549.16 MiB | 638.00 MiB |
+| After shutdown settled | 13.10 MiB | 142.76 MiB | 218.79 MiB |
+
+Observed retained growth per production scenario:
+
+| Scenario | Heap used | Working set | Process private |
+|---|---:|---:|---:|
+| A | +0.06 MiB | +48.08 MiB | +64.34 MiB |
+| B | +0.01 MiB | +63.93 MiB | +67.81 MiB |
+| C | +0.01 MiB | +2.52 MiB | +3.14 MiB |
+| D | +0.01 MiB | +6.75 MiB | -6.16 MiB |
+
+Interpretation:
+
+- JVM heap remained effectively flat,
+- the ONNX model/session footprint is predominantly native,
+- engine initialization accounts for the dominant process-memory increase,
+- the A/B growth followed by small/negative C/D growth is consistent with allocator/session stabilization rather than a clearly monotonic leak,
+- after explicit engine shutdown, process-private memory returned essentially to the tokenizer-only baseline,
+- working set remained somewhat above the tokenizer checkpoint, which may reflect resident JVM/native pages and must be checked across repeated restart cycles,
+- GPU process memory was unavailable in this CPU run.
+
+This is encouraging baseline evidence, but a single quick run is insufficient to establish a hard leak-free release budget.
+
+Hard MiB limits remain provisional until repeated create -> warm-up -> infer -> shutdown cycles are measured. The next memory gate must verify:
+
+- post-warm-up process-private/working-set growth plateaus across repeated workload cycles,
+- post-shutdown private memory repeatedly returns near the pre-session baseline,
+- restart cycles do not accumulate native memory,
+- long-record/windowed inference does not create unbounded retained growth,
+- GPU memory is measured separately when CUDA is active.
+
+After repeated CPU and GPU runs, define:
 
 - steady-state working-set/private-memory budget,
 - maximum acceptable retained growth across soak iterations,
@@ -1122,7 +1161,7 @@ VALIDATED (engineering benchmark)
         v
 Phase 5
 Native-aware memory baseline + lifecycle / retained-growth gate
-IN PROGRESS
+BASELINE VALIDATED; SOAK/RESTART GATE IN PROGRESS
         |
         v
 Phase 6
@@ -1966,6 +2005,47 @@ The benchmark establishes post-GC settled checkpoints across Scenario A-D worklo
 **Backward-compatibility impact**
 
 No public API change. Engine shutdown now deterministically releases its ONNX session.
+
+---
+
+### 2026-09-28 — Native memory baseline validates session cleanup
+
+**Status**
+
+BASELINE VALIDATED; SOAK/RESTART STABILITY PENDING
+
+**Change**
+
+Recorded the first native-aware CPU memory baseline after explicit ONNX lifecycle cleanup.
+
+**Evidence / benchmark**
+
+Key checkpoints:
+
+- heap remained approximately 12-13 MiB after model initialization and inference,
+- process working set rose from 103.73 MiB after tokenizer initialization to 564.32 MiB after ONNX engine initialization,
+- process private memory rose from 221.03 MiB to 668.71 MiB after engine initialization,
+- after warm-up settled: 549.16 MiB working set / 638.00 MiB private,
+- after engine shutdown settled: 142.76 MiB working set / 218.79 MiB private.
+
+Per-scenario heap growth was negligible. Native process growth was front-loaded in Scenarios A/B and then largely flattened in C/D.
+
+**Interpretation**
+
+The current evidence supports two conclusions:
+
+1. the model/session footprint is primarily native and must not be managed using JVM heap metrics alone,
+2. explicit `OrtSession.close()` is releasing the dominant private-memory footprint on shutdown.
+
+A single run does not establish leak-free steady-state behavior. Repeated session restart and soak measurements remain required before fixed release thresholds are declared.
+
+**Affected modules**
+
+No additional production behavior change in this entry; architecture evidence updated.
+
+**Backward-compatibility impact**
+
+None.
 
 ---
 
