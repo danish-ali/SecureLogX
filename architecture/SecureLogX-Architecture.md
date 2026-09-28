@@ -481,7 +481,7 @@ H2 is intentionally reported as `EXPERIMENTAL_NOT_IMPLEMENTED` until a genuine c
 
 ### First Phase 2 comparison result
 
-**Status: VALIDATED ON SCORABLE <=384-TOKEN COHORT**
+**Status: VALIDATED ON FULL 6,463-RECORD CORPUS**
 
 First local D0/M0/H1 execution on the non-sealed 6,463-record corpus produced:
 
@@ -498,26 +498,42 @@ Interpretation:
 
 > The resolver quality defect is closed for the current scorable cohort. H1 now exactly preserves M0 masking quality wherever the frozen model has complete visibility.
 
-The post-fix architecture comparison was run on the 5,882 records that fit within the validated tokenizer window.
+The final Phase 2 architecture comparison was run across **all 6,463 records**, including 581 records processed through validated overlapping-window inference.
 
 | Metric | D0 | M0 | H1 |
 |---|---:|---:|---:|
-| Sensitive-character recall | 33.4230% | 99.0918% | 99.0918% |
-| Non-sensitive-character redaction | 0.0000% | 0.2325% | 0.2325% |
-| Full-span recall | 19.2971% | 98.1830% | 98.1830% |
-| High-risk full-span recall | 13.5593% | 99.5039% | 99.5039% |
-| Whole-record perfect redaction | 14.0258% | 96.1238% | 96.1238% |
-| Logical ML invocation | 0% | 100% | 100% |
+| Sensitive-character recall | 29.5337% | 97.4260% | **97.4497%** |
+| Non-sensitive-character redaction | 0.0026% | 0.2335% | **0.2335%** |
+| Full-span recall | 17.4388% | 95.4969% | **95.5510%** |
+| High-risk full-span recall | 13.4263% | 98.9243% | **98.9641%** |
+| Whole-record perfect redaction | 15.4263% | 93.3622% | **93.4086%** |
+| Logical ML invocation on this NER-heavy corpus | 0% | 100% | 100% |
 
 M0 -> H1 regression diagnostics:
 
-- M0 full / H1 not full: 0,
-- high-risk regressions: 0,
-- H1 full / M0 not full: 0,
+- M0 full / H1 not full: **0**,
+- high-risk regressions: **0**,
+- H1 full / M0 not full: **5**,
 - regressions by gold label: none,
 - overlapping decisive evidence reasons: none.
 
-This validates the corrected resolver semantics on the scorable cohort:
+Windowed cohort:
+
+- input records: 6,463,
+- scored records: 6,463,
+- excluded records: 0,
+- windowed records: 581,
+- original_test_regression windowed records: 293,
+- standard_dev windowed records: 288,
+- ML inference windows: 7,088.
+
+Interpretation:
+
+> **H1 is validated as non-regressive versus frozen M0 on the complete non-sealed corpus. It preserves the same non-sensitive-character redaction rate while slightly improving sensitive-character recall, full-span recall, high-risk full-span recall, and whole-record perfect redaction.**
+
+The five H1-only full-span recoveries demonstrate that deterministic evidence can add protection without reducing M0 coverage under the corrected resolver semantics.
+
+The corrected resolver semantics are therefore validated:
 
 - deterministic MASK remains a protection floor,
 - overlapping ML MASK may extend protection,
@@ -525,14 +541,7 @@ This validates the corrected resolver semantics on the scorable cohort:
 - partial ALLOW overlap cannot erase a larger ML span,
 - ESCALATE remains non-decisive.
 
-The earlier apparent H1 quality penalty is therefore resolved.
-
-However, 581 of the 6,463 input records exceed the frozen 384-token window and are excluded from D0/M0/H1 quality scoring:
-
-- original_test_regression: 293,
-- standard_dev: 288.
-
-This over-window cohort is now the dominant unresolved architecture-quality limitation. Runtime handling is safe because ML-routed over-window messages fail closed, but this is not an acceptable final production UX for long records. Validated overlapping-window inference should therefore be the next implementation priority before production readiness or final journal claims about complete-record coverage.
+The 384-token blind-tail limitation is also closed for the current Java runtime through overlapping-window inference. Long-record performance and boundary robustness remain engineering/performance topics, but long records are no longer excluded from architecture-quality evaluation.
 
 The journal benchmark should include:
 
@@ -725,7 +734,7 @@ No failure path may emit the original unmasked message.
 
 ### Long-input / tokenizer-window policy
 
-**Current status: VALIDATED FOR RUNTIME SAFETY; FULL-CORPUS QUALITY RERUN PENDING**
+**Current status: VALIDATED FOR RUNTIME SAFETY AND FULL-CORPUS QUALITY**
 
 ML-v1.3 currently has a validated maximum sequence length of 384 tokens.
 
@@ -775,7 +784,7 @@ Validated runtime result:
 - negative technical IP preserved,
 - sensitive tail value beyond the first model window was masked.
 
-The architecture-quality benchmark has now been upgraded to score the previous 581-record over-window cohort through the same 64-token overlapping-window policy. The next required evidence is a full 6,463-record D0/M0/H1 quality comparison with zero excluded records.
+The architecture-quality benchmark now scores the previous 581-record over-window cohort through the same 64-token overlapping-window policy. The full 6,463-record comparison completed with zero excluded records and zero M0-to-H1 regressions.
 
 Silent truncation remains prohibited.
 
@@ -1624,6 +1633,66 @@ Full-corpus architecture-quality results are pending.
 **Backward-compatibility impact**
 
 None. This entry changes evaluation methodology only; production windowed runtime behavior was already implemented and validated.
+
+---
+
+### 2026-09-28 — Phase 2 full-corpus H1 architecture quality validated
+
+**Status**
+
+VALIDATED
+
+**Change**
+
+Completed D0/M0/H1 architecture-quality evaluation across the full 6,463-record non-sealed corpus, including all 581 records requiring overlapping-window inference.
+
+**Reason**
+
+The previous scorable-subset result showed H1 matching M0, but complete architecture validation required proving the same property on long records rather than excluding them.
+
+**Evidence / benchmark**
+
+Full corpus:
+
+- input records: 6,463
+- scored records: 6,463
+- excluded records: 0
+- windowed records: 581
+- ML inference windows: 7,088
+
+M0:
+
+- sensitive-character recall: 97.4260%
+- non-sensitive-character redaction: 0.2335%
+- full-span recall: 95.4969%
+- high-risk full-span recall: 98.9243%
+- whole-record perfect redaction: 93.3622%
+
+H1:
+
+- sensitive-character recall: 97.4497%
+- non-sensitive-character redaction: 0.2335%
+- full-span recall: 95.5510%
+- high-risk full-span recall: 98.9641%
+- whole-record perfect redaction: 93.4086%
+
+Regression diagnostics:
+
+- M0 full / H1 not full: 0
+- high-risk regressions: 0
+- H1 full / M0 not full: 5
+
+**Conclusion**
+
+H1 is non-regressive versus M0 on the complete non-sealed corpus and provides a small measurable protection improvement without increasing character-level over-redaction.
+
+**Affected modules**
+
+No production code change in this entry; architecture status and evidence updated.
+
+**Backward-compatibility impact**
+
+None.
 
 ---
 
