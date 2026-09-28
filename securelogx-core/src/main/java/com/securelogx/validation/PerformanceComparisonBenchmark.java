@@ -525,25 +525,28 @@ public final class PerformanceComparisonBenchmark {
             this.tokenizer = tokenizer;
             this.env = OrtEnvironment.getEnvironment();
 
-            OrtSession.SessionOptions options =
-                    new OrtSession.SessionOptions();
-            if (config.isCpuMultithreadingEnabled()) {
-                options.setIntraOpNumThreads(
-                        Math.max(
-                                1,
-                                Math.min(
-                                        config.getMaxCpuThreads(),
-                                        Runtime.getRuntime()
-                                                .availableProcessors()
-                                )
-                        )
+            OrtSession createdSession;
+            try (OrtSession.SessionOptions options =
+                         new OrtSession.SessionOptions()) {
+                if (config.isCpuMultithreadingEnabled()) {
+                    options.setIntraOpNumThreads(
+                            Math.max(
+                                    1,
+                                    Math.min(
+                                            config.getMaxCpuThreads(),
+                                            Runtime.getRuntime()
+                                                    .availableProcessors()
+                                    )
+                            )
+                    );
+                }
+
+                createdSession = env.createSession(
+                        config.getModelPath().replace("\\", "/"),
+                        options
                 );
             }
-
-            this.session = env.createSession(
-                    config.getModelPath().replace("\\", "/"),
-                    options
-            );
+            this.session = createdSession;
         }
 
         private List<String> run(List<String> messages) throws Exception {
