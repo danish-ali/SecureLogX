@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 
 
 public class ONNXDynamicInferenceEngine {
+    private static final int WINDOW_OVERLAP_CONTENT_TOKENS = 64;
+
     private final OrtEnvironment env;
     private final OrtSession session;
     private final LabelAwareMaskingEngine maskingEngine = new LabelAwareMaskingEngine();
@@ -43,6 +45,8 @@ public class ONNXDynamicInferenceEngine {
     private long totalItems = 0;
     private long deterministicOnlyItems = 0;
     private long mlInferenceItems = 0;
+    private long windowedMlItems = 0;
+    private long mlInferenceWindows = 0;
     private long truncatedFailClosedItems = 0;
 
     public ONNXDynamicInferenceEngine(String modelPath, com.securelogx.config.SecureLogXConfig config) throws Exception {
@@ -217,26 +221,47 @@ public class ONNXDynamicInferenceEngine {
                 return Arrays.asList(orderedOutput);
             }
 
-            // 2) Tokenize only unresolved records.
-            CompletableFuture<List<TokenizedInput>> tokenizationFuture =
+            // 2) Tokenize only unresolved records. Over-window inputs are
+            // split into overlapping windows with original-text offsets.
+            CompletableFuture<List<List<TokenizedInput>>> tokenizationFuture =
                     CompletableFuture.supplyAsync(
                             () -> mlBatch.parallelStream()
-                                    .map(event -> tokenizer.tokenize(event.getMessage()))
+                                    .map(
+                                            event -> tokenizer.tokenizeWindows(
+                                                    event.getMessage(),
+                                                    WINDOW_OVERLAP_CONTENT_TOKENS
+                                            )
+                                    )
                                     .collect(Collectors.toList()),
                             tokenizerExecutor
                     );
 
-            List<TokenizedInput> encoded = tokenizationFuture.get();
+            List<List<TokenizedInput>> windowSets =
+                    tokenizationFuture.get();
 
             List<TokenizedInput> inferenceEncoded = new ArrayList<>();
             List<Integer> inferenceOriginalIndices = new ArrayList<>();
+            Set<Integer> windowedOriginalIndices = new HashSet<>();
 
-            for (int mlIndex = 0; mlIndex < encoded.size(); mlIndex++) {
-                TokenizedInput tokenized = encoded.get(mlIndex);
+            for (int mlIndex = 0; mlIndex < windowSets.size(); mlIndex++) {
+                List<TokenizedInput> windows = windowSets.get(mlIndex);
                 int originalIndex = mlOriginalIndices.get(mlIndex);
+                LogEvent event = batch.get(originalIndex);
 
-                if (tokenized.isTruncated()) {
-                    LogEvent event = batch.get(originalIndex);
+                if (windows == null || windows.isEmpty()) {
+                    orderedOutput[originalIndex] =
+                            formatMaskedEvent(
+                                    event,
+                                    "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
+                            );
+                    truncatedFailClosedItems++;
+                    continue;
+                }
+
+                boolean invalidWindow = windows.stream().anyMatch(
+                        TokenizedInput::isTruncated
+                );
+                if (invalidWindow) {
                     orderedOutput[originalIndex] =
                             formatMaskedEvent(
                                     event,
@@ -244,14 +269,19 @@ public class ONNXDynamicInferenceEngine {
                             );
                     truncatedFailClosedItems++;
                     System.err.println(
-                            "[WARN] SecureLogX fail-closed: ML-routed message "
-                                    + "exceeded tokenizer limit. coveredChars="
-                                    + tokenized.getCoveredCharacterEnd()
-                                    + " totalChars="
-                                    + event.getMessage().length()
+                            "[WARN] SecureLogX fail-closed: tokenizer "
+                                    + "implementation returned an incomplete "
+                                    + "window for an ML-routed message."
                     );
-                } else {
-                    inferenceEncoded.add(tokenized);
+                    continue;
+                }
+
+                if (windows.size() > 1) {
+                    windowedOriginalIndices.add(originalIndex);
+                }
+
+                for (TokenizedInput window : windows) {
+                    inferenceEncoded.add(window);
                     inferenceOriginalIndices.add(originalIndex);
                 }
             }
@@ -299,36 +329,66 @@ public class ONNXDynamicInferenceEngine {
                 try (OrtSession.Result result = session.run(inputs)) {
                     float[][][] logits = (float[][][]) result.get(0).getValue();
 
-                    // 4) Decode ML spans, resolve conflicts, then apply policy.
-                    for (int mlIndex = 0; mlIndex < inferenceBatchSize; mlIndex++) {
+                    // 4) Decode each window in original coordinates.
+                    Map<Integer, List<LabelAwareMaskingEngine.EntitySpan>>
+                            spansByOriginal = new LinkedHashMap<>();
+
+                    for (int windowIndex = 0;
+                         windowIndex < inferenceBatchSize;
+                         windowIndex++) {
                         int originalIndex =
-                                inferenceOriginalIndices.get(mlIndex);
+                                inferenceOriginalIndices.get(windowIndex);
                         LogEvent event = batch.get(originalIndex);
                         TokenizedInput tokenized =
-                                inferenceEncoded.get(mlIndex);
+                                inferenceEncoded.get(windowIndex);
 
                         List<int[]> offsets = tokenized.getOffsets();
                         List<int[]> truncatedOffsets = offsets.size() > seqLen
                                 ? offsets.subList(0, seqLen)
                                 : offsets;
 
-                        List<LabelAwareMaskingEngine.EntitySpan> mlSpans =
+                        List<LabelAwareMaskingEngine.EntitySpan> windowSpans =
                                 maskingEngine.decodeSpans(
                                         event.getMessage(),
-                                        new float[][][]{logits[mlIndex]},
+                                        new float[][][]{logits[windowIndex]},
                                         truncatedOffsets
                                 );
+
+                        spansByOriginal
+                                .computeIfAbsent(
+                                        originalIndex,
+                                        ignored -> new ArrayList<>()
+                                )
+                                .addAll(windowSpans);
+                    }
+
+                    mlInferenceWindows += inferenceBatchSize;
+
+                    // 5) Merge duplicate/overlapping same-entity spans across
+                    // windows, resolve deterministic evidence once, and mask.
+                    for (Map.Entry<
+                            Integer,
+                            List<LabelAwareMaskingEngine.EntitySpan>>
+                            entry : spansByOriginal.entrySet()) {
+                        int originalIndex = entry.getKey();
+                        LogEvent event = batch.get(originalIndex);
+
+                        List<LabelAwareMaskingEngine.EntitySpan> mergedSpans =
+                                mergeWindowSpans(entry.getValue());
 
                         String masked = hybridMaskingPipeline.maskWithMl(
                                 event.getMessage(),
                                 scans.get(originalIndex),
-                                mlSpans,
+                                mergedSpans,
                                 event.shouldShowLastFour()
                         );
 
                         orderedOutput[originalIndex] =
                                 formatMaskedEvent(event, masked);
                         mlInferenceItems++;
+                        if (windowedOriginalIndices.contains(originalIndex)) {
+                            windowedMlItems++;
+                        }
                     }
                 }
             }
@@ -380,6 +440,74 @@ public class ONNXDynamicInferenceEngine {
             e.printStackTrace();
             return createFallbackResults(batch);
         }
+    }
+
+    private static List<LabelAwareMaskingEngine.EntitySpan>
+            mergeWindowSpans(
+                    List<LabelAwareMaskingEngine.EntitySpan> spans
+            ) {
+        if (spans.isEmpty()) {
+            return List.of();
+        }
+
+        List<LabelAwareMaskingEngine.EntitySpan> ordered =
+                new ArrayList<>(spans);
+        ordered.sort(
+                Comparator.comparing(
+                                LabelAwareMaskingEngine.EntitySpan::entityType
+                        )
+                        .thenComparingInt(
+                                LabelAwareMaskingEngine.EntitySpan::start
+                        )
+                        .thenComparingInt(
+                                LabelAwareMaskingEngine.EntitySpan::end
+                        )
+        );
+
+        List<LabelAwareMaskingEngine.EntitySpan> merged =
+                new ArrayList<>();
+        LabelAwareMaskingEngine.EntitySpan current = null;
+
+        for (LabelAwareMaskingEngine.EntitySpan span : ordered) {
+            if (current == null) {
+                current = span;
+                continue;
+            }
+
+            boolean sameType =
+                    current.entityType().equals(span.entityType());
+            boolean overlaps =
+                    Math.max(current.start(), span.start())
+                            < Math.min(current.end(), span.end());
+
+            if (sameType && overlaps) {
+                current = new LabelAwareMaskingEngine.EntitySpan(
+                        Math.min(current.start(), span.start()),
+                        Math.max(current.end(), span.end()),
+                        current.entityType()
+                );
+            } else {
+                merged.add(current);
+                current = span;
+            }
+        }
+
+        if (current != null) {
+            merged.add(current);
+        }
+
+        merged.sort(
+                Comparator.comparingInt(
+                                LabelAwareMaskingEngine.EntitySpan::start
+                        )
+                        .thenComparingInt(
+                                LabelAwareMaskingEngine.EntitySpan::end
+                        )
+                        .thenComparing(
+                                LabelAwareMaskingEngine.EntitySpan::entityType
+                        )
+        );
+        return List.copyOf(merged);
     }
 
     private String formatMaskedEvent(LogEvent event, String masked) {
@@ -557,6 +685,8 @@ public class ONNXDynamicInferenceEngine {
         return new HybridRuntimeStats(
                 deterministicOnlyItems,
                 mlInferenceItems,
+                windowedMlItems,
+                mlInferenceWindows,
                 truncatedFailClosedItems
         );
     }
