@@ -1529,6 +1529,44 @@ Long ML-routed messages may now be processed through multiple model windows inst
 
 ---
 
+### 2026-09-27 — Windowed runtime validation harness wiring corrected
+
+**Status**
+
+RERUN REQUIRED
+
+**Change**
+
+Changed `HybridRuntimeCheck` to pass the concrete `ParallelTokenizer` object into `ONNXDynamicInferenceEngine.runBatch(...)` instead of passing the method reference `tokenizer::tokenize`.
+
+**Reason**
+
+The method reference implemented only the single-record `tokenize(...)` contract and therefore used the interface default `tokenizeWindows(...)`, which returns a single tokenized input. For an over-window record that single input was correctly marked truncated, causing the engine to fail closed.
+
+The production `SecureLogX` and `MaskingConsumer` paths already pass the tokenizer object directly and therefore retain the overridden overlapping-window implementation.
+
+**Evidence / benchmark**
+
+Failed validation showed:
+
+- compilation success,
+- runtime warning that the tokenizer returned an incomplete window,
+- fail-closed fallback,
+- `HybridRuntimeCheck` aborted before validating windowed masking.
+
+This run does not invalidate the overlapping-window design because the windowing override was not invoked by the validation harness.
+
+**Affected modules**
+
+- `HybridRuntimeCheck`
+- canonical architecture reference
+
+**Backward-compatibility impact**
+
+None. Production runtime behavior is unchanged.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
