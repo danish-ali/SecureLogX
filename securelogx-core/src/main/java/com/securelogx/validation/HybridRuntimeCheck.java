@@ -283,7 +283,7 @@ public final class HybridRuntimeCheck {
                 ParallelTokenizer tokenizer,
                 List<LogEvent> events
         ) {
-            return delegate.runBatch(tokenizer::tokenize, events);
+            return delegate.runBatch(tokenizer, events);
         }
 
         private HybridRuntimeStats stats() {
