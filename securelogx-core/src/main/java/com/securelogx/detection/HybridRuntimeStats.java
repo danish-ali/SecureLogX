@@ -3,6 +3,8 @@ package com.securelogx.detection;
 public record HybridRuntimeStats(
         long deterministicOnlyItems,
         long mlInferenceItems,
+        long windowedMlItems,
+        long mlInferenceWindows,
         long truncatedFailClosedItems
 ) {
     public long totalRoutedItems() {
@@ -23,5 +25,11 @@ public record HybridRuntimeStats(
         return total == 0
                 ? 0.0
                 : (double) truncatedFailClosedItems / total;
+    }
+
+    public double averageWindowsPerMlItem() {
+        return mlInferenceItems == 0
+                ? 0.0
+                : (double) mlInferenceWindows / mlInferenceItems;
     }
 }
