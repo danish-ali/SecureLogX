@@ -908,24 +908,67 @@ Where possible, report denominators and confidence intervals.
 
 ## 11. Constrained Decoding Experiment
 
-The current ML pipeline uses token classification followed by span decoding.
+**Status: IMPLEMENTED; FULL-CORPUS RUN PENDING**
 
-A future experiment should compare:
+The current production ML pipeline uses token-wise argmax followed by BIO span normalization. Production behavior is unchanged.
+
+An experimental strict-BIO Viterbi decoder now compares:
 
 ```text
-Current BIO argmax decoding
+M0: current token argmax + existing span normalization
         vs
-BIO-constrained / sequence-constrained decoding
+C1: strict BIO-constrained Viterbi decoding
 ```
 
-Purpose:
+Implementation:
 
-- reduce illegal BIO transitions,
-- reduce partial spans,
-- improve span coherence,
-- preserve high-risk recall.
+- `BioConstrainedDecoder.java`
+- `ConstrainedDecodingBenchmark.java`
+- `scripts/run-constrained-decoding-benchmark.ps1`
 
-This is an evaluation item first, not an automatic production change.
+C1 constraints:
+
+- a sequence cannot begin with `I-X`,
+- `I-X` may follow only `B-X` or `I-X`,
+- `O` and `B-X` may follow any valid previous state.
+
+The decoder uses the frozen ML-v1.3 logits without retraining. It performs an optimized Viterbi pass in O(tokens x labels), rather than evaluating a full 51x51 transition matrix at every token.
+
+The benchmark uses:
+
+- the same full 6,463-record non-sealed corpus,
+- the same 64-token overlapping-window policy,
+- the same configured maximum of 8 windows per ONNX call,
+- one ONNX inference result reused by M0 and C1,
+- zero sealed-challenge access.
+
+Metrics:
+
+- sensitive-character recall,
+- non-sensitive-character redaction,
+- full-span recall,
+- exact-boundary recall,
+- high-risk full-span recall,
+- whole-record perfect redaction,
+- partial/missed gold spans,
+- raw argmax illegal BIO-transition count,
+- token labels changed by C1,
+- records whose predicted spans change,
+- M0-full/C1-not-full regressions,
+- high-risk regressions,
+- C1-full/M0-not-full gains,
+- exact-boundary gains/losses.
+
+Promotion gate:
+
+1. C1 high-risk full-span recall must not be lower than M0.
+2. Sensitive-character recall must not materially regress.
+3. Non-sensitive-character redaction must not materially increase.
+4. Illegal BIO transitions must be eliminated by construction.
+5. Every M0-full/C1-not-full regression must be inspected before production consideration.
+6. Production decoding remains unchanged unless the complete comparison is favorable.
+
+This remains an evaluation item, not an automatic production change.
 
 ---
 
@@ -2280,6 +2323,43 @@ No new implementation change in this entry; architecture status/evidence updated
 **Backward-compatibility impact**
 
 None.
+
+---
+
+### 2026-09-28 — Experimental strict-BIO constrained decoder added
+
+**Status**
+
+IMPLEMENTED; FULL-CORPUS RUN PENDING
+
+**Change**
+
+Added a strict-BIO Viterbi decoder and a full-corpus comparison against the current ML-v1.3 token-argmax decoder.
+
+**Design**
+
+C1 disallows invalid BIO paths while using the same frozen logits:
+
+- no initial `I-X`,
+- `I-X` only after `B-X` or `I-X`,
+- `O` / `B-X` unrestricted from valid prior states.
+
+The implementation is optimized to O(tokens x labels) and runs as an experimental validation path only.
+
+**Promotion requirements**
+
+C1 must preserve high-risk recall, avoid material sensitive-character regression, avoid increased non-sensitive redaction, and show favorable span/boundary diagnostics before any production decoder change.
+
+**Affected modules**
+
+- new `BioConstrainedDecoder`,
+- new `ConstrainedDecodingBenchmark`,
+- new `run-constrained-decoding-benchmark.ps1`,
+- architecture evaluation plan.
+
+**Backward-compatibility impact**
+
+None. Production decoding is unchanged.
 
 ---
 
