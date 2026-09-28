@@ -30,8 +30,9 @@ public class ONNXDynamicInferenceEngine {
     private final HybridMaskingPipeline hybridMaskingPipeline = new HybridMaskingPipeline();
     private volatile boolean running = true;
     private  boolean isGpuMode;
-    private  int optimalBatchSize;
-    private  int maxSeqLen;
+    private int optimalBatchSize;
+    private int maxSeqLen;
+    private final int maxInferenceWindowsPerBatch;
 
     // Enhanced tensor pooling for GPU memory reuse
     private final Map<String, Queue<OnnxTensor>> tensorPool = new ConcurrentHashMap<>();
@@ -49,6 +50,8 @@ public class ONNXDynamicInferenceEngine {
     private long mlInferenceItems = 0;
     private long windowedMlItems = 0;
     private long mlInferenceWindows = 0;
+    private long onnxInferenceCalls = 0;
+    private long maxInferenceWindowsPerCallObserved = 0;
     private long truncatedFailClosedItems = 0;
 
     public ONNXDynamicInferenceEngine(String modelPath, com.securelogx.config.SecureLogXConfig config) throws Exception {
@@ -57,6 +60,8 @@ public class ONNXDynamicInferenceEngine {
         addCudaToLibraryPath();
 
         this.env = OrtEnvironment.getEnvironment();
+        this.maxInferenceWindowsPerBatch =
+                config.getMaxInferenceWindowsPerBatch();
 
         OrtSession createdSession;
         try (OrtSession.SessionOptions opts =
@@ -141,6 +146,10 @@ public class ONNXDynamicInferenceEngine {
 
         System.out.println("[SecureLogX INIT] Session created successfully");
         System.out.println("[SecureLogX INIT] Model loaded from: " + modelPath);
+        System.out.println(
+                "[SecureLogX INIT] Max inference windows per ONNX call: "
+                        + maxInferenceWindowsPerBatch
+        );
     }
 
     private void setupCpuMode(com.securelogx.config.SecureLogXConfig config, OrtSession.SessionOptions opts) {
@@ -328,105 +337,152 @@ public class ONNXDynamicInferenceEngine {
                 return Arrays.asList(orderedOutput);
             }
 
-            int rawMax = inferenceEncoded.stream()
-                    .mapToInt(item -> item.getInputIds().length)
-                    .max()
-                    .orElse(0);
-            int seqLen = Math.min(rawMax, maxSeqLen);
-            int inferenceBatchSize = inferenceEncoded.size();
-
-            long[][] inputIds = new long[inferenceBatchSize][seqLen];
-            long[][] attentionMask = new long[inferenceBatchSize][seqLen];
-            long[][] tokenTypeIds = new long[inferenceBatchSize][seqLen];
-
-            for (int i = 0; i < inferenceBatchSize; i++) {
-                int[] ids = inferenceEncoded.get(i).getInputIds();
-                int[] mask = inferenceEncoded.get(i).getAttentionMask();
-                int copyLength = Math.min(ids.length, seqLen);
-
-                for (int j = 0; j < copyLength; j++) {
-                    inputIds[i][j] = ids[j];
-                    attentionMask[i][j] = mask[j];
-                }
-            }
-
-            // 3) Run ONNX only for the unresolved subset.
+            // 3) Run ONNX over bounded inference-window micro-batches.
+            //
+            // Record-level batching alone is not sufficient because one long
+            // record may expand into many overlapping model windows. Bounding
+            // windows per session.run(...) prevents native activation/tensor
+            // memory from scaling with total expanded windows in the record
+            // batch.
             long inferenceStart = System.currentTimeMillis();
 
-            try (OnnxTensor inputTensor = OnnxTensor.createTensor(env, inputIds);
-                 OnnxTensor maskTensor = OnnxTensor.createTensor(env, attentionMask);
-                 OnnxTensor typeTensor = OnnxTensor.createTensor(env, tokenTypeIds)) {
+            Map<Integer, List<LabelAwareMaskingEngine.EntitySpan>>
+                    spansByOriginal = new LinkedHashMap<>();
+            for (Integer originalIndex : inferenceOriginalIndices) {
+                spansByOriginal.computeIfAbsent(
+                        originalIndex,
+                        ignored -> new ArrayList<>()
+                );
+            }
 
-                Map<String, OnnxTensor> inputs = Map.of(
-                        "input_ids", inputTensor,
-                        "attention_mask", maskTensor,
-                        "token_type_ids", typeTensor
+            for (int windowStart = 0;
+                 windowStart < inferenceEncoded.size();
+                 windowStart += maxInferenceWindowsPerBatch) {
+                int windowEnd = Math.min(
+                        windowStart + maxInferenceWindowsPerBatch,
+                        inferenceEncoded.size()
                 );
 
-                try (OrtSession.Result result = session.run(inputs)) {
-                    float[][][] logits = (float[][][]) result.get(0).getValue();
+                List<TokenizedInput> windowBatch =
+                        inferenceEncoded.subList(windowStart, windowEnd);
 
-                    // 4) Decode each window in original coordinates.
-                    Map<Integer, List<LabelAwareMaskingEngine.EntitySpan>>
-                            spansByOriginal = new LinkedHashMap<>();
+                int rawMax = windowBatch.stream()
+                        .mapToInt(item -> item.getInputIds().length)
+                        .max()
+                        .orElse(0);
+                int seqLen = Math.min(rawMax, maxSeqLen);
+                int inferenceBatchSize = windowBatch.size();
 
-                    for (int windowIndex = 0;
-                         windowIndex < inferenceBatchSize;
-                         windowIndex++) {
-                        int originalIndex =
-                                inferenceOriginalIndices.get(windowIndex);
-                        LogEvent event = batch.get(originalIndex);
-                        TokenizedInput tokenized =
-                                inferenceEncoded.get(windowIndex);
+                long[][] inputIds =
+                        new long[inferenceBatchSize][seqLen];
+                long[][] attentionMask =
+                        new long[inferenceBatchSize][seqLen];
+                long[][] tokenTypeIds =
+                        new long[inferenceBatchSize][seqLen];
 
-                        List<int[]> offsets = tokenized.getOffsets();
-                        List<int[]> truncatedOffsets = offsets.size() > seqLen
-                                ? offsets.subList(0, seqLen)
-                                : offsets;
+                for (int localIndex = 0;
+                     localIndex < inferenceBatchSize;
+                     localIndex++) {
+                    TokenizedInput encoded =
+                            windowBatch.get(localIndex);
+                    int[] ids = encoded.getInputIds();
+                    int[] mask = encoded.getAttentionMask();
+                    int copyLength = Math.min(ids.length, seqLen);
 
-                        List<LabelAwareMaskingEngine.EntitySpan> windowSpans =
-                                maskingEngine.decodeSpans(
-                                        event.getMessage(),
-                                        new float[][][]{logits[windowIndex]},
-                                        truncatedOffsets
-                                );
-
-                        spansByOriginal
-                                .computeIfAbsent(
-                                        originalIndex,
-                                        ignored -> new ArrayList<>()
-                                )
-                                .addAll(windowSpans);
+                    for (int j = 0; j < copyLength; j++) {
+                        inputIds[localIndex][j] = ids[j];
+                        attentionMask[localIndex][j] = mask[j];
                     }
+                }
 
-                    mlInferenceWindows += inferenceBatchSize;
+                try (OnnxTensor inputTensor =
+                             OnnxTensor.createTensor(env, inputIds);
+                     OnnxTensor maskTensor =
+                             OnnxTensor.createTensor(env, attentionMask);
+                     OnnxTensor typeTensor =
+                             OnnxTensor.createTensor(env, tokenTypeIds)) {
 
-                    // 5) Merge duplicate/overlapping same-entity spans across
-                    // windows, resolve deterministic evidence once, and mask.
-                    for (Map.Entry<
-                            Integer,
-                            List<LabelAwareMaskingEngine.EntitySpan>>
-                            entry : spansByOriginal.entrySet()) {
-                        int originalIndex = entry.getKey();
-                        LogEvent event = batch.get(originalIndex);
+                    Map<String, OnnxTensor> inputs = Map.of(
+                            "input_ids", inputTensor,
+                            "attention_mask", maskTensor,
+                            "token_type_ids", typeTensor
+                    );
 
-                        List<LabelAwareMaskingEngine.EntitySpan> mergedSpans =
-                                mergeWindowSpans(entry.getValue());
+                    try (OrtSession.Result result = session.run(inputs)) {
+                        float[][][] logits =
+                                (float[][][]) result.get(0).getValue();
 
-                        String masked = hybridMaskingPipeline.maskWithMl(
-                                event.getMessage(),
-                                scans.get(originalIndex),
-                                mergedSpans,
-                                event.shouldShowLastFour()
-                        );
+                        for (int localIndex = 0;
+                             localIndex < inferenceBatchSize;
+                             localIndex++) {
+                            int flatWindowIndex =
+                                    windowStart + localIndex;
+                            int originalIndex =
+                                    inferenceOriginalIndices.get(
+                                            flatWindowIndex
+                                    );
+                            LogEvent event =
+                                    batch.get(originalIndex);
+                            TokenizedInput tokenized =
+                                    windowBatch.get(localIndex);
 
-                        orderedOutput[originalIndex] =
-                                formatMaskedEvent(event, masked);
-                        mlInferenceItems++;
-                        if (windowedOriginalIndices.contains(originalIndex)) {
-                            windowedMlItems++;
+                            List<int[]> offsets =
+                                    tokenized.getOffsets();
+                            List<int[]> truncatedOffsets =
+                                    offsets.size() > seqLen
+                                            ? offsets.subList(0, seqLen)
+                                            : offsets;
+
+                            List<
+                                    LabelAwareMaskingEngine.EntitySpan>
+                                    windowSpans =
+                                    maskingEngine.decodeSpans(
+                                            event.getMessage(),
+                                            new float[][][]{
+                                                    logits[localIndex]
+                                            },
+                                            truncatedOffsets
+                                    );
+
+                            spansByOriginal
+                                    .get(originalIndex)
+                                    .addAll(windowSpans);
                         }
                     }
+                }
+
+                mlInferenceWindows += inferenceBatchSize;
+                onnxInferenceCalls++;
+                maxInferenceWindowsPerCallObserved = Math.max(
+                        maxInferenceWindowsPerCallObserved,
+                        inferenceBatchSize
+                );
+            }
+
+            // 4) Merge duplicate/overlapping same-entity spans across all
+            // micro-batches, resolve deterministic evidence once, and mask.
+            for (Map.Entry<
+                    Integer,
+                    List<LabelAwareMaskingEngine.EntitySpan>>
+                    entry : spansByOriginal.entrySet()) {
+                int originalIndex = entry.getKey();
+                LogEvent event = batch.get(originalIndex);
+
+                List<LabelAwareMaskingEngine.EntitySpan> mergedSpans =
+                        mergeWindowSpans(entry.getValue());
+
+                String masked = hybridMaskingPipeline.maskWithMl(
+                        event.getMessage(),
+                        scans.get(originalIndex),
+                        mergedSpans,
+                        event.shouldShowLastFour()
+                );
+
+                orderedOutput[originalIndex] =
+                        formatMaskedEvent(event, masked);
+                mlInferenceItems++;
+                if (windowedOriginalIndices.contains(originalIndex)) {
+                    windowedMlItems++;
                 }
             }
 
@@ -731,6 +787,8 @@ public class ONNXDynamicInferenceEngine {
                 mlInferenceItems,
                 windowedMlItems,
                 mlInferenceWindows,
+                onnxInferenceCalls,
+                maxInferenceWindowsPerCallObserved,
                 truncatedFailClosedItems
         );
     }
