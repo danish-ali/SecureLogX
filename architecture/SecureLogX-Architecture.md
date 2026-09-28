@@ -481,7 +481,7 @@ H2 is intentionally reported as `EXPERIMENTAL_NOT_IMPLEMENTED` until a genuine c
 
 ### First Phase 2 comparison result
 
-**Status: INVESTIGATION REQUIRED**
+**Status: VALIDATED ON SCORABLE <=384-TOKEN COHORT**
 
 First local D0/M0/H1 execution on the non-sealed 6,463-record corpus produced:
 
@@ -496,34 +496,43 @@ First local D0/M0/H1 execution on the non-sealed 6,463-record corpus produced:
 
 Interpretation:
 
-> H1 does not yet meet the architecture-quality objective on this corpus. It slightly reduces overall recall and materially reduces high-risk full-span recall relative to M0, while producing the same non-sensitive-character redaction rate.
+> The resolver quality defect is closed for the current scorable cohort. H1 now exactly preserves M0 masking quality wherever the frozen model has complete visibility.
 
-Because H1 logically invokes ML on 100% of this NER-heavy corpus, the quality difference is not caused by ML bypass. M0 and H1 receive the same frozen ML predictions. The difference must therefore arise from deterministic evidence and resolver interaction.
+The post-fix architecture comparison was run on the 5,882 records that fit within the validated tokenizer window.
 
-Before changing production resolver semantics, the benchmark now diagnoses:
+| Metric | D0 | M0 | H1 |
+|---|---:|---:|---:|
+| Sensitive-character recall | 33.4230% | 99.0918% | 99.0918% |
+| Non-sensitive-character redaction | 0.0000% | 0.2325% | 0.2325% |
+| Full-span recall | 19.2971% | 98.1830% | 98.1830% |
+| High-risk full-span recall | 13.5593% | 99.5039% | 99.5039% |
+| Whole-record perfect redaction | 14.0258% | 96.1238% | 96.1238% |
+| Logical ML invocation | 0% | 100% | 100% |
 
-- gold spans fully covered by M0 but not H1,
-- high-risk regressions,
-- gold labels associated with regressions,
-- overlapping decisive deterministic evidence and its reason,
-- source distribution,
-- counter-cases where H1 fully covers a gold span that M0 does not.
+M0 -> H1 regression diagnostics:
 
-The follow-up diagnostic isolated all 120 M0-to-H1 full-span regressions to high-risk `AUTH_TOKEN` spans associated with deterministic `MASK:AUTH_TOKEN:explicit-bearer-token` evidence. It also found 32 spans where H1 fully covered a gold span that M0 did not.
+- M0 full / H1 not full: 0,
+- high-risk regressions: 0,
+- H1 full / M0 not full: 0,
+- regressions by gold label: none,
+- overlapping decisive evidence reasons: none.
 
-This confirms that the previous resolver rule was too aggressive: a shorter deterministic MASK was suppressing an overlapping, larger ML MASK span.
+This validates the corrected resolver semantics on the scorable cohort:
 
-**Pending-validation resolver change**
-
-The resolver now treats deterministic MASK as a protection floor rather than a span ceiling:
-
-- deterministic MASK remains in the final protection set,
-- overlapping ML MASK is also retained and may extend coverage,
+- deterministic MASK remains a protection floor,
+- overlapping ML MASK may extend protection,
 - deterministic ALLOW can suppress ML only when it matches the same entity type and fully contains the ML span,
 - partial ALLOW overlap cannot erase a larger ML span,
 - ESCALATE remains non-decisive.
 
-The locked hybrid safety suite has now passed with this behavior. Architecture-quality comparison is still pending to confirm the M0/H1 quality effect.
+The earlier apparent H1 quality penalty is therefore resolved.
+
+However, 581 of the 6,463 input records exceed the frozen 384-token window and are excluded from D0/M0/H1 quality scoring:
+
+- original_test_regression: 293,
+- standard_dev: 288.
+
+This over-window cohort is now the dominant unresolved architecture-quality limitation. Runtime handling is safe because ML-routed over-window messages fail closed, but this is not an acceptable final production UX for long records. Validated overlapping-window inference should therefore be the next implementation priority before production readiness or final journal claims about complete-record coverage.
 
 The journal benchmark should include:
 
@@ -931,14 +940,19 @@ D0 / M0 / H1 / H2 architecture benchmark
         |
         v
 Phase 3
-ML invocation / latency / throughput optimization
+Overlapping-window inference for >384-token records
++ offset rebasing / span merge / boundary tests
         |
         v
 Phase 4
-Constrained decoding experiment
+ML invocation / latency / throughput optimization
         |
         v
 Phase 5
+Constrained decoding experiment
+        |
+        v
+Phase 6
 Runtime/concurrency/backpressure hardening
         |
         v
@@ -1408,6 +1422,52 @@ The failed comparison compiled successfully and stopped before producing D0/M0/H
 **Backward-compatibility impact**
 
 None. Production runtime behavior is unchanged.
+
+---
+
+### 2026-09-27 — Phase 2 resolver quality validated; long-window support promoted
+
+**Status**
+
+VALIDATED ON SCORABLE COHORT
+
+**Change**
+
+Promoted the corrected H1 resolver behavior to validated architecture-quality status for records that fit within the frozen 384-token model window. Promoted overlapping-window inference to the next implementation priority.
+
+**Reason**
+
+On 5,882 scorable records, H1 exactly matched M0 on every reported quality metric and produced zero M0-to-H1 span regressions.
+
+At the same time, 581 of 6,463 records exceeded the frozen tokenizer window. Runtime fail-closed handling is safe, but excluding that cohort from quality scoring means complete long-record support remains unvalidated.
+
+**Evidence / benchmark**
+
+Scorable cohort:
+
+- records: 5,882
+- M0/H1 sensitive-character recall: 99.0918%
+- M0/H1 non-sensitive-character redaction: 0.2325%
+- M0/H1 full-span recall: 98.1830%
+- M0/H1 high-risk full-span recall: 99.5039%
+- M0/H1 whole-record perfect redaction: 96.1238%
+- M0-to-H1 full-span regressions: 0
+- high-risk regressions: 0
+- H1-only full-span gains: 0
+
+Truncation cohort:
+
+- excluded records: 581
+- original_test_regression: 293
+- standard_dev: 288
+
+**Affected modules**
+
+No new production code in this entry. Roadmap and architecture status updated.
+
+**Backward-compatibility impact**
+
+None.
 
 ---
 
