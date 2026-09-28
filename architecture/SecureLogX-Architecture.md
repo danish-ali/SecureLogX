@@ -711,7 +711,7 @@ Target performance metrics remain:
 
 ### Memory ownership and native ONNX budget
 
-**Status: RESTART LIFECYCLE VALIDATED; ACTIVE-SESSION WINDOW MEMORY CAP PENDING VALIDATION**
+**Status: VALIDATED ON CPU; GPU MEMORY VALIDATION PENDING**
 
 JVM heap is **not** the SecureLogX memory boundary.
 
@@ -845,14 +845,46 @@ Mitigation implemented, pending rerun:
 - runtime stats now expose `onnxInferenceCalls` and `maxInferenceWindowsPerCallObserved`,
 - the locked runtime check fails if the observed window count per ONNX call exceeds the configured cap.
 
-The immediate validation target is a substantial reduction in post-window private memory while preserving:
+The bounded-window rerun is now validated.
 
-- zero fail-closed records,
-- correct long-tail masking,
-- the validated resolver/safety behavior,
-- stable post-shutdown recovery.
+Locked safety/runtime result:
 
-Hard MiB limits remain provisional until the bounded-window rerun is measured. After repeated CPU and GPU runs, define:
+- compile: success,
+- detection/resolver checks: 25/25 passed,
+- 6,463-record gate audit: 0 unsafe bypass, 0 deterministic overmask, 0 ALLOW/gold conflicts,
+- runtime: 11 records,
+- deterministic-only: 6,
+- ML-routed: 5,
+- windowed ML records: 1,
+- ML inference windows: 11,
+- ONNX inference calls: 2,
+- maximum windows in one ONNX call: 8,
+- truncated fail-closed: 0,
+- processing failures: 0,
+- negative technical IP preserved.
+
+Four-cycle bounded-window restart soak:
+
+| Cycle | Warm-up private | Post-window private | Shutdown private | Shutdown WS vs tokenizer |
+|---|---:|---:|---:|---:|
+| 1 | 638.47 MiB | 1,167.17 MiB | 218.16 MiB | +26.34 MiB |
+| 2 | 641.41 MiB | 1,170.34 MiB | 222.72 MiB | +31.44 MiB |
+| 3 | 642.44 MiB | 1,170.18 MiB | 222.22 MiB | +30.49 MiB |
+| 4 | 641.91 MiB | 1,177.24 MiB | 220.53 MiB | +30.21 MiB |
+
+Interpretation:
+
+- the configured 8-window micro-batch cap was enforced,
+- active-session private high-water memory fell from approximately 2.8 GiB to approximately 1.17 GiB,
+- this is roughly a 58% reduction in retained active-session private memory under the same long-window soak shape,
+- warm-up/session footprint remains stable near 640 MiB,
+- post-shutdown private memory repeatedly returns near 220 MiB,
+- shutdown working-set delta stabilizes rather than climbing monotonically,
+- there is no current evidence of a CPU native-memory lifecycle leak across restart cycles.
+
+The CPU/native-memory phase is therefore validated for the current engineering workload.
+
+Hard production MiB budgets remain provisional until representative deployment hardware and GPU/CUDA runs are measured. After CPU/GPU deployment baselines, define:
 
 - steady-state working-set/private-memory budget,
 - maximum acceptable retained growth across soak iterations,
@@ -1207,11 +1239,12 @@ VALIDATED (engineering benchmark)
         v
 Phase 5
 Native-aware memory baseline + lifecycle / retained-growth gate
-RESTART VALIDATED; WINDOW MEMORY CAP VALIDATION IN PROGRESS
+VALIDATED ON CPU
         |
         v
 Phase 6
-Constrained decoding experiment
+Constrained BIO decoding experiment
+IN PROGRESS
         |
         v
 Phase 7
@@ -2198,6 +2231,55 @@ Required invariants:
 **Backward-compatibility impact**
 
 No public API change. Long-window inference may use more ONNX calls with smaller window batches in exchange for bounded native-memory pressure.
+
+---
+
+### 2026-09-28 — CPU native-memory window cap validated
+
+**Status**
+
+VALIDATED ON CPU
+
+**Change**
+
+Validated the 8-window ONNX micro-batch cap against the locked hybrid safety suite and the four-cycle restart/native-memory soak.
+
+**Evidence / benchmark**
+
+Safety/runtime:
+
+- 25/25 detection checks passed
+- 6,463-record gate audit passed
+- 0 unsafe bypass
+- 0 deterministic overmask
+- 0 ALLOW/gold conflicts
+- 11 runtime records
+- 11 ML windows
+- 2 ONNX calls
+- max windows per ONNX call: 8
+- 0 fail-closed records
+- 0 processing failures
+
+Memory:
+
+- prior post-window private memory: ~2.82-2.88 GiB
+- bounded-window post-window private memory: ~1.17 GiB
+- reduction: ~58%
+- warm-up private memory: ~638-642 MiB
+- post-shutdown private memory: ~218-223 MiB
+- shutdown working-set delta stabilizes around +26 to +31 MiB
+
+**Conclusion**
+
+The CPU/native lifecycle is stable for the current engineering workload, and window micro-batching materially bounds ONNX native-memory pressure without changing masking safety behavior.
+
+**Affected modules**
+
+No new implementation change in this entry; architecture status/evidence updated.
+
+**Backward-compatibility impact**
+
+None.
 
 ---
 
