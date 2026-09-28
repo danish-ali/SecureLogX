@@ -42,6 +42,7 @@ import java.util.Set;
 public final class ArchitectureComparisonBenchmark {
 
     private static final int INFERENCE_BATCH_SIZE = 64;
+    private static final int WINDOW_OVERLAP_CONTENT_TOKENS = 64;
 
     private static final Set<String> HIGH_RISK = Set.of(
             "SSN",
@@ -114,11 +115,12 @@ public final class ArchitectureComparisonBenchmark {
                 new HybridRegressionDiagnostics();
 
         Map<String, SourceMetrics> bySource = new LinkedHashMap<>();
-        TruncationDiagnostics truncationDiagnostics =
-                new TruncationDiagnostics();
+        WindowingDiagnostics windowingDiagnostics =
+                new WindowingDiagnostics();
         long inputRecords = 0;
         long scoredRecords = 0;
         long h1MlRecords = 0;
+        long totalInferenceWindows = 0;
 
         try (ValidationInferenceSession inference =
                      new ValidationInferenceSession(config)) {
@@ -179,10 +181,12 @@ public final class ArchitectureComparisonBenchmark {
                                             h1,
                                             sourceMetrics,
                                             regressionDiagnostics,
-                                            truncationDiagnostics
+                                            windowingDiagnostics
                                     );
                             h1MlRecords += batchResult.h1MlRecords();
                             scoredRecords += batchResult.scoredRecords();
+                            totalInferenceWindows +=
+                                    batchResult.inferenceWindows();
                             inputRecords += batch.size();
                             batch.clear();
                         }
@@ -202,10 +206,12 @@ public final class ArchitectureComparisonBenchmark {
                                         h1,
                                         sourceMetrics,
                                         regressionDiagnostics,
-                                        truncationDiagnostics
+                                        windowingDiagnostics
                                 );
                         h1MlRecords += batchResult.h1MlRecords();
                         scoredRecords += batchResult.scoredRecords();
+                        totalInferenceWindows +=
+                                batchResult.inferenceWindows();
                         inputRecords += batch.size();
                     }
                 }
@@ -224,9 +230,14 @@ public final class ArchitectureComparisonBenchmark {
         result.put("passed", true);
         result.put("input_records", inputRecords);
         result.put("scored_records", scoredRecords);
+        result.put("excluded_records", 0);
         result.put(
-                "excluded_truncated_records",
-                truncationDiagnostics.totalTruncated()
+                "windowed_records",
+                windowingDiagnostics.totalWindowed()
+        );
+        result.put(
+                "ml_inference_windows",
+                totalInferenceWindows
         );
         result.put("sealed_challenge_accessed", false);
         result.put("sealed_challenge_inference", false);
@@ -236,7 +247,10 @@ public final class ArchitectureComparisonBenchmark {
         result.put("batch_size", INFERENCE_BATCH_SIZE);
         result.put(
                 "inference_method",
-                "ML-v1.3 is evaluated once on every record so M0 and H1 use identical predictions; H1 ML rate is logical routing, not benchmark compute usage"
+                "ML-v1.3 is evaluated once per required inference window; "
+                        + "M0 and H1 reuse identical merged predictions. "
+                        + "Records beyond one model window use 64-token "
+                        + "overlapping windows with original character offsets."
         );
 
         JSONObject architectures = new JSONObject();
@@ -258,8 +272,8 @@ public final class ArchitectureComparisonBenchmark {
                 regressionDiagnostics.toJson()
         );
         result.put(
-                "truncation_diagnostics",
-                truncationDiagnostics.toJson()
+                "windowing_diagnostics",
+                windowingDiagnostics.toJson()
         );
 
         JSONObject sources = new JSONObject();
@@ -283,24 +297,29 @@ public final class ArchitectureComparisonBenchmark {
         printSummary(h1);
         printRegressionDiagnostics(regressionDiagnostics);
         System.out.println();
-        System.out.println("Truncation cohort");
+        System.out.println("Windowed cohort");
         System.out.println("  input records: " + inputRecords);
         System.out.println("  scored records: " + scoredRecords);
+        System.out.println("  excluded records: 0");
         System.out.println(
-                "  excluded truncated records: "
-                        + truncationDiagnostics.totalTruncated()
+                "  windowed records: "
+                        + windowingDiagnostics.totalWindowed()
         );
-        JSONObject truncationBySource =
-                truncationDiagnostics.toJson()
+        System.out.println(
+                "  ML inference windows: "
+                        + totalInferenceWindows
+        );
+        JSONObject windowedBySource =
+                windowingDiagnostics.toJson()
                         .getJSONObject("by_source");
-        truncationBySource.keySet().stream()
+        windowedBySource.keySet().stream()
                 .sorted()
                 .forEach(
                         source -> System.out.println(
                                 "    "
                                         + source
                                         + ": "
-                                        + truncationBySource.getLong(source)
+                                        + windowedBySource.getLong(source)
                         )
                 );
         System.out.println();
@@ -323,41 +342,36 @@ public final class ArchitectureComparisonBenchmark {
             ArchitectureMetrics h1,
             SourceMetrics sourceMetrics,
             HybridRegressionDiagnostics regressionDiagnostics,
-            TruncationDiagnostics truncationDiagnostics
+            WindowingDiagnostics windowingDiagnostics
     ) throws Exception {
-        List<RecordItem> scorable = new ArrayList<>();
         for (RecordItem record : batch) {
-            TokenizedInput probe = tokenizer.tokenize(record.text());
             sourceMetrics.inputRecords++;
-
-            if (probe.isTruncated()) {
-                sourceMetrics.truncatedRecords++;
-                truncationDiagnostics.add(
+            TokenizedInput singleWindowProbe =
+                    tokenizer.tokenize(record.text());
+            if (singleWindowProbe.isTruncated()) {
+                sourceMetrics.windowedRecords++;
+                windowingDiagnostics.add(
                         source,
                         record.text(),
-                        probe.getCoveredCharacterEnd(),
+                        singleWindowProbe.getCoveredCharacterEnd(),
                         record.gold()
                 );
-            } else {
-                scorable.add(record);
             }
         }
 
-        if (scorable.isEmpty()) {
-            return new BatchEvaluationResult(0, 0);
-        }
-
-        List<String> texts = scorable.stream()
+        List<String> texts = batch.stream()
                 .map(RecordItem::text)
                 .toList();
 
-        List<List<LabelAwareMaskingEngine.EntitySpan>> mlPredictions =
+        InferenceBatchResult inferenceResult =
                 inference.infer(texts, tokenizer);
+        List<List<LabelAwareMaskingEngine.EntitySpan>> mlPredictions =
+                inferenceResult.predictions();
 
         long h1MlRecords = 0;
 
-        for (int i = 0; i < scorable.size(); i++) {
-            RecordItem record = scorable.get(i);
+        for (int i = 0; i < batch.size(); i++) {
+            RecordItem record = batch.get(i);
             List<LabelAwareMaskingEngine.EntitySpan> mlSpans =
                     mlPredictions.get(i);
 
@@ -421,7 +435,8 @@ public final class ArchitectureComparisonBenchmark {
 
         return new BatchEvaluationResult(
                 h1MlRecords,
-                scorable.size()
+                batch.size(),
+                inferenceResult.inferenceWindows()
         );
     }
 
@@ -661,91 +676,208 @@ public final class ArchitectureComparisonBenchmark {
             maxSequenceLength = config.getMaxSequenceLength();
         }
 
-        private List<List<LabelAwareMaskingEngine.EntitySpan>> infer(
+        private InferenceBatchResult infer(
                 List<String> texts,
                 ParallelTokenizer tokenizer
         ) throws Exception {
             if (texts.isEmpty()) {
+                return new InferenceBatchResult(List.of(), 0);
+            }
+
+            List<TokenizedInput> flatWindows = new ArrayList<>();
+            List<Integer> originalIndices = new ArrayList<>();
+
+            for (int originalIndex = 0;
+                 originalIndex < texts.size();
+                 originalIndex++) {
+                List<TokenizedInput> windows =
+                        tokenizer.tokenizeWindows(
+                                texts.get(originalIndex),
+                                WINDOW_OVERLAP_CONTENT_TOKENS
+                        );
+
+                if (windows.isEmpty()) {
+                    throw new IllegalStateException(
+                            "Tokenizer returned no windows for record "
+                                    + originalIndex
+                    );
+                }
+                for (TokenizedInput window : windows) {
+                    if (window.isTruncated()) {
+                        throw new IllegalStateException(
+                                "Windowed tokenizer returned a truncated "
+                                        + "inference window"
+                        );
+                    }
+                    flatWindows.add(window);
+                    originalIndices.add(originalIndex);
+                }
+            }
+
+            List<List<LabelAwareMaskingEngine.EntitySpan>> predictions =
+                    new ArrayList<>(texts.size());
+            for (int i = 0; i < texts.size(); i++) {
+                predictions.add(new ArrayList<>());
+            }
+
+            for (int chunkStart = 0;
+                 chunkStart < flatWindows.size();
+                 chunkStart += INFERENCE_BATCH_SIZE) {
+                int chunkEnd = Math.min(
+                        chunkStart + INFERENCE_BATCH_SIZE,
+                        flatWindows.size()
+                );
+                List<TokenizedInput> chunk =
+                        flatWindows.subList(chunkStart, chunkEnd);
+
+                int seqLen = chunk.stream()
+                        .mapToInt(item -> item.getInputIds().length)
+                        .max()
+                        .orElse(0);
+
+                long[][] inputIds = new long[chunk.size()][seqLen];
+                long[][] attentionMask = new long[chunk.size()][seqLen];
+                long[][] tokenTypeIds = new long[chunk.size()][seqLen];
+
+                for (int i = 0; i < chunk.size(); i++) {
+                    int[] ids = chunk.get(i).getInputIds();
+                    int[] mask = chunk.get(i).getAttentionMask();
+                    int copyLength = Math.min(ids.length, seqLen);
+
+                    for (int j = 0; j < copyLength; j++) {
+                        inputIds[i][j] = ids[j];
+                        attentionMask[i][j] = mask[j];
+                    }
+                }
+
+                try (OnnxTensor inputTensor =
+                             OnnxTensor.createTensor(env, inputIds);
+                     OnnxTensor maskTensor =
+                             OnnxTensor.createTensor(env, attentionMask);
+                     OnnxTensor typeTensor =
+                             OnnxTensor.createTensor(env, tokenTypeIds)) {
+
+                    Map<String, OnnxTensor> inputs = Map.of(
+                            "input_ids", inputTensor,
+                            "attention_mask", maskTensor,
+                            "token_type_ids", typeTensor
+                    );
+
+                    try (OrtSession.Result result = session.run(inputs)) {
+                        float[][][] logits =
+                                (float[][][]) result.get(0).getValue();
+
+                        for (int localIndex = 0;
+                             localIndex < chunk.size();
+                             localIndex++) {
+                            int flatIndex = chunkStart + localIndex;
+                            int originalIndex =
+                                    originalIndices.get(flatIndex);
+                            TokenizedInput window = chunk.get(localIndex);
+
+                            List<LabelAwareMaskingEngine.EntitySpan>
+                                    windowSpans =
+                                    decoder.decodeSpans(
+                                            texts.get(originalIndex),
+                                            new float[][][]{
+                                                    logits[localIndex]
+                                            },
+                                            window.getOffsets()
+                                    );
+
+                            predictions.get(originalIndex)
+                                    .addAll(windowSpans);
+                        }
+                    }
+                }
+            }
+
+            List<List<LabelAwareMaskingEngine.EntitySpan>> merged =
+                    new ArrayList<>(texts.size());
+            for (List<LabelAwareMaskingEngine.EntitySpan> spans
+                    : predictions) {
+                merged.add(mergeWindowSpans(spans));
+            }
+
+            return new InferenceBatchResult(
+                    List.copyOf(merged),
+                    flatWindows.size()
+            );
+        }
+
+        private static List<LabelAwareMaskingEngine.EntitySpan>
+                mergeWindowSpans(
+                        List<LabelAwareMaskingEngine.EntitySpan> spans
+                ) {
+            if (spans.isEmpty()) {
                 return List.of();
             }
 
-            List<TokenizedInput> encoded = new ArrayList<>(texts.size());
-            int seqLen = 0;
+            List<LabelAwareMaskingEngine.EntitySpan> ordered =
+                    new ArrayList<>(spans);
+            ordered.sort(
+                    java.util.Comparator.comparing(
+                                    LabelAwareMaskingEngine.EntitySpan::entityType
+                            )
+                            .thenComparingInt(
+                                    LabelAwareMaskingEngine.EntitySpan::start
+                            )
+                            .thenComparingInt(
+                                    LabelAwareMaskingEngine.EntitySpan::end
+                            )
+            );
 
-            for (String text : texts) {
-                TokenizedInput tokenized = tokenizer.tokenize(text);
-                if (tokenized.isTruncated()) {
-                    throw new IllegalStateException(
-                            "Internal benchmark invariant violated: "
-                                    + "truncated record reached inference"
-                    );
+            List<LabelAwareMaskingEngine.EntitySpan> merged =
+                    new ArrayList<>();
+            LabelAwareMaskingEngine.EntitySpan current = null;
+
+            for (LabelAwareMaskingEngine.EntitySpan span : ordered) {
+                if (current == null) {
+                    current = span;
+                    continue;
                 }
-                encoded.add(tokenized);
-                seqLen = Math.max(
-                        seqLen,
-                        Math.min(
-                                tokenized.getInputIds().length,
-                                maxSequenceLength
-                        )
-                );
-            }
 
-            long[][] inputIds = new long[texts.size()][seqLen];
-            long[][] attentionMask = new long[texts.size()][seqLen];
-            long[][] tokenTypeIds = new long[texts.size()][seqLen];
+                boolean sameType =
+                        current.entityType().equals(span.entityType());
+                boolean overlaps =
+                        Math.max(current.start(), span.start())
+                                < Math.min(current.end(), span.end());
 
-            for (int i = 0; i < encoded.size(); i++) {
-                int[] ids = encoded.get(i).getInputIds();
-                int[] mask = encoded.get(i).getAttentionMask();
-                int copyLength = Math.min(ids.length, seqLen);
-
-                for (int j = 0; j < copyLength; j++) {
-                    inputIds[i][j] = ids[j];
-                    attentionMask[i][j] = mask[j];
-                }
-            }
-
-            try (OnnxTensor inputTensor =
-                         OnnxTensor.createTensor(env, inputIds);
-                 OnnxTensor maskTensor =
-                         OnnxTensor.createTensor(env, attentionMask);
-                 OnnxTensor typeTensor =
-                         OnnxTensor.createTensor(env, tokenTypeIds)) {
-
-                Map<String, OnnxTensor> inputs = Map.of(
-                        "input_ids", inputTensor,
-                        "attention_mask", maskTensor,
-                        "token_type_ids", typeTensor
-                );
-
-                try (OrtSession.Result result = session.run(inputs)) {
-                    float[][][] logits =
-                            (float[][][]) result.get(0).getValue();
-
-                    List<List<LabelAwareMaskingEngine.EntitySpan>>
-                            predictions =
-                            new ArrayList<>(texts.size());
-
-                    for (int i = 0; i < texts.size(); i++) {
-                        List<int[]> offsets =
-                                encoded.get(i).getOffsets();
-                        List<int[]> truncatedOffsets =
-                                offsets.size() > seqLen
-                                        ? offsets.subList(0, seqLen)
-                                        : offsets;
-
-                        predictions.add(
-                                decoder.decodeSpans(
-                                        texts.get(i),
-                                        new float[][][]{logits[i]},
-                                        truncatedOffsets
-                                )
-                        );
-                    }
-
-                    return predictions;
+                if (sameType && overlaps) {
+                    current =
+                            new LabelAwareMaskingEngine.EntitySpan(
+                                    Math.min(
+                                            current.start(),
+                                            span.start()
+                                    ),
+                                    Math.max(
+                                            current.end(),
+                                            span.end()
+                                    ),
+                                    current.entityType()
+                            );
+                } else {
+                    merged.add(current);
+                    current = span;
                 }
             }
+
+            if (current != null) {
+                merged.add(current);
+            }
+
+            merged.sort(
+                    java.util.Comparator.comparingInt(
+                                    LabelAwareMaskingEngine.EntitySpan::start
+                            )
+                            .thenComparingInt(
+                                    LabelAwareMaskingEngine.EntitySpan::end
+                            )
+                            .thenComparing(
+                                    LabelAwareMaskingEngine.EntitySpan::entityType
+                            )
+            );
+            return List.copyOf(merged);
         }
 
         @Override
@@ -1233,10 +1365,10 @@ public final class ArchitectureComparisonBenchmark {
         }
     }
 
-    private static final class TruncationDiagnostics {
+    private static final class WindowingDiagnostics {
         private static final int MAX_SAMPLES = 20;
 
-        private long totalTruncated;
+        private long totalWindowed;
         private final Map<String, Long> bySource =
                 new LinkedHashMap<>();
         private final List<String> samples = new ArrayList<>();
@@ -1244,48 +1376,52 @@ public final class ArchitectureComparisonBenchmark {
         private void add(
                 String source,
                 String text,
-                int coveredCharacterEnd,
+                int firstWindowCoveredCharacterEnd,
                 List<GoldSpan> gold
         ) {
-            totalTruncated++;
+            totalWindowed++;
             bySource.merge(source, 1L, Long::sum);
 
             if (samples.size() < MAX_SAMPLES) {
-                long goldBeyondCoverage = gold.stream()
-                        .filter(span -> span.end() > coveredCharacterEnd)
+                long goldBeyondFirstWindow = gold.stream()
+                        .filter(
+                                span -> span.end()
+                                        > firstWindowCoveredCharacterEnd
+                        )
                         .count();
                 samples.add(
                         source
-                                + " coveredChars="
-                                + coveredCharacterEnd
+                                + " firstWindowCoveredChars="
+                                + firstWindowCoveredCharacterEnd
                                 + " totalChars="
                                 + text.length()
                                 + " goldSpans="
                                 + gold.size()
-                                + " goldSpansBeyondCoverage="
-                                + goldBeyondCoverage
+                                + " goldSpansBeyondFirstWindow="
+                                + goldBeyondFirstWindow
                 );
             }
         }
 
-        private long totalTruncated() {
-            return totalTruncated;
+        private long totalWindowed() {
+            return totalWindowed;
         }
 
         private JSONObject toJson() {
             JSONObject object = new JSONObject();
-            object.put("excluded_records", totalTruncated);
+            object.put("windowed_records", totalWindowed);
             object.put("by_source", countsJson(bySource));
             object.put("samples", new JSONArray(samples));
             object.put(
                     "scoring_policy",
-                    "Excluded from D0/M0/H1 quality metrics because M0/H1 "
-                            + "cannot validly score beyond the frozen 384-token window"
+                    "All records are scored. Records beyond one model window "
+                            + "use 64-token overlapping windows and merged "
+                            + "original-coordinate spans."
             );
             object.put(
                     "runtime_policy",
-                    "ML-routed over-window records fail closed until "
-                            + "validated overlapping-window inference exists"
+                    "Validated overlapping-window inference; fail-closed "
+                            + "remains only as a safety fallback."
             );
             return object;
         }
@@ -1299,13 +1435,23 @@ public final class ArchitectureComparisonBenchmark {
 
     private record BatchEvaluationResult(
             long h1MlRecords,
-            long scoredRecords
+            long scoredRecords,
+            long inferenceWindows
     ) {
+    }
+
+    private record InferenceBatchResult(
+            List<List<LabelAwareMaskingEngine.EntitySpan>> predictions,
+            long inferenceWindows
+    ) {
+        private InferenceBatchResult {
+            predictions = List.copyOf(predictions);
+        }
     }
 
     private static final class SourceMetrics {
         private long inputRecords;
-        private long truncatedRecords;
+        private long windowedRecords;
         private long records;
         private long h1MlRecords;
         private final ArchitectureMetrics d0 =
@@ -1323,7 +1469,8 @@ public final class ArchitectureComparisonBenchmark {
             JSONObject object = new JSONObject();
             object.put("input_records", inputRecords);
             object.put("scored_records", records);
-            object.put("excluded_truncated_records", truncatedRecords);
+            object.put("excluded_records", 0);
+            object.put("windowed_records", windowedRecords);
             object.put("D0", d0.toJson());
             object.put("M0", m0.toJson());
             object.put("H1", h1.toJson());
