@@ -3,6 +3,8 @@ package com.securelogx.ner.impl;
 import com.securelogx.ner.TokenizerEngine;
 import com.securelogx.ner.TokenizedInput;
 
+import java.util.List;
+
 public class ParallelTokenizer implements TokenizerEngine {
 
     private final PureJavaTokenizer tokenizer;
@@ -11,12 +13,29 @@ public class ParallelTokenizer implements TokenizerEngine {
         this(tokenizerPath, 384);
     }
 
-    public ParallelTokenizer(String tokenizerPath, int maxSequenceLength) throws Exception {
-        this.tokenizer = new PureJavaTokenizer(tokenizerPath, maxSequenceLength);
+    public ParallelTokenizer(
+            String tokenizerPath,
+            int maxSequenceLength
+    ) throws Exception {
+        this.tokenizer = new PureJavaTokenizer(
+                tokenizerPath,
+                maxSequenceLength
+        );
     }
 
     @Override
     public TokenizedInput tokenize(String text) {
         return tokenizer.encode(text);
+    }
+
+    @Override
+    public List<TokenizedInput> tokenizeWindows(
+            String text,
+            int overlapContentTokens
+    ) {
+        return tokenizer.encodeWindows(
+                text,
+                overlapContentTokens
+        );
     }
 }
