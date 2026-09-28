@@ -725,7 +725,7 @@ No failure path may emit the original unmasked message.
 
 ### Long-input / tokenizer-window policy
 
-**Current status: VALIDATED SAFETY GUARD; WINDOWED INFERENCE PENDING**
+**Current status: OVERLAPPING-WINDOW INFERENCE IMPLEMENTED; VALIDATION PENDING**
 
 ML-v1.3 currently has a validated maximum sequence length of 384 tokens.
 
@@ -735,23 +735,31 @@ The tokenizer now reports whether input was truncated and the last covered chara
 
 It must not emit the partially analyzed prefix or the unseen tail.
 
-Runtime metrics track these events separately as:
+Runtime metrics retain `truncatedFailClosedItems` as the fallback counter for tokenizer implementations that cannot produce complete windows.
 
-`truncatedFailClosedItems`
+A first overlapping-window implementation now exists:
 
-This is a temporary safety policy, not the final long-message UX.
+- tokenize the complete message into WordPieces with original character offsets,
+- split content into windows of at most the frozen model sequence limit,
+- use 64 content-token overlap between adjacent windows,
+- run ONNX on every window,
+- decode spans directly in original-text coordinates,
+- merge overlapping spans of the same entity type across windows,
+- run deterministic/ML conflict resolution once per original log record,
+- track windowed records and total ML inference windows separately.
 
-Future production work should replace full-message fail-closed behavior with validated overlapping-window inference, including:
+New runtime metrics:
 
-- deterministic window construction,
-- overlap between adjacent windows,
-- offset rebasing into original character coordinates,
-- span de-duplication/merge across windows,
-- boundary-sensitive regression tests,
-- latency and memory benchmarks,
-- parity checks against single-window inference where applicable.
+- `windowedMlItems`,
+- `mlInferenceWindows`,
+- `averageWindowsPerMlItem`,
+- `truncatedFailClosedItems` remains a fallback safety counter.
 
-Until that implementation is validated, silent truncation is prohibited.
+The implementation is not yet production-validated. The first required validation is an end-to-end record containing sensitive content beyond the first model window. It must be successfully masked with zero truncation fail-closed events.
+
+After runtime validation, the architecture-quality benchmark should be upgraded to score the previous 581-record truncation cohort through the same windowed path and compare full-cohort D0/M0/H1 quality.
+
+Silent truncation remains prohibited.
 
 Architecture-quality benchmarks must not score incomplete inference.
 
@@ -1468,6 +1476,56 @@ No new production code in this entry. Roadmap and architecture status updated.
 **Backward-compatibility impact**
 
 None.
+
+---
+
+### 2026-09-27 — Overlapping-window ML inference implemented
+
+**Status**
+
+PENDING VALIDATION
+
+**Change**
+
+Implemented overlapping-window tokenization and runtime ONNX inference for ML-routed records that exceed the frozen 384-token model window.
+
+Current design:
+
+- absolute original-text WordPiece offsets,
+- 64-token content overlap,
+- multiple ONNX windows per long record,
+- same-entity overlapping span merge,
+- one final resolver/policy pass per original record,
+- explicit window-level runtime metrics.
+
+**Reason**
+
+The Phase 2 comparison identified 581 of 6,463 records that could not be validly scored through a single 384-token window. Fail-closed behavior was safe but not an acceptable final production behavior for long logs.
+
+**Validation requirement**
+
+The hybrid runtime suite now contains a long ML-routed message with a sensitive SSN beyond the first model window. Validation must show:
+
+- tail value masked,
+- no processing failure,
+- one windowed ML record,
+- ML inference windows greater than ML record count,
+- zero truncation fail-closed records.
+
+Only after that passes should the architecture comparison be moved from truncation exclusion to full-cohort windowed scoring.
+
+**Affected modules**
+
+- `TokenizerEngine`
+- `ParallelTokenizer`
+- `PureJavaTokenizer`
+- `ONNXDynamicInferenceEngine`
+- `HybridRuntimeStats`
+- `HybridRuntimeCheck`
+
+**Backward-compatibility impact**
+
+Long ML-routed messages may now be processed through multiple model windows instead of failing closed solely because of sequence length. Public API signatures remain compatible through the default tokenizer-window method.
 
 ---
 
