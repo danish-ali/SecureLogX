@@ -751,6 +751,22 @@ Runner:
 
 `scripts/run-runtime-memory-benchmark.ps1`
 
+Repeated session/native-retention soak:
+
+`securelogx-core/src/main/java/com/securelogx/validation/RuntimeMemoryRestartSoakBenchmark.java`
+
+Runner:
+
+`scripts/run-runtime-memory-restart-soak.ps1`
+
+Default soak:
+
+- 4 ONNX create/warm-up/infer/shutdown cycles,
+- 80 sampled records from each Scenario A-D per cycle,
+- 8 explicit long-window records per cycle,
+- post-GC settled checkpoints before create, after warm-up, after A-D workload, after long-window workload, and after shutdown,
+- post-shutdown private/working-set deltas versus tokenizer baseline and previous cycle.
+
 The benchmark records:
 
 - process start,
@@ -2046,6 +2062,49 @@ No additional production behavior change in this entry; architecture evidence up
 **Backward-compatibility impact**
 
 None.
+
+---
+
+### 2026-09-28 — Repeated ONNX restart/native-memory soak added
+
+**Status**
+
+IMPLEMENTED; FIRST RUN PENDING
+
+**Change**
+
+Added a repeated memory stability benchmark that exercises fresh ONNX session creation, warm-up, Scenario A-D traffic, long-window inference, explicit session shutdown, and post-GC settled checkpoints across multiple cycles.
+
+**Reason**
+
+The first memory baseline showed strong shutdown recovery but also front-loaded native growth during early workloads. Multiple restart cycles are required to distinguish allocator stabilization from retained native growth.
+
+**Default workload**
+
+- 4 create/warm-up/infer/shutdown cycles,
+- 80 sampled records per Scenario A-D per cycle,
+- 8 long-window records per cycle,
+- no fail-closed output allowed,
+- compare each post-shutdown checkpoint against tokenizer baseline and the previous cycle.
+
+**Interpretation target**
+
+Desired shape:
+
+- post-warm-up/process-private memory reaches a repeatable plateau,
+- long-window workload does not cause cycle-over-cycle retained growth,
+- post-shutdown private memory repeatedly returns near the tokenizer baseline,
+- no monotonic restart-to-restart increase.
+
+**Affected modules**
+
+- new `RuntimeMemoryRestartSoakBenchmark`,
+- new `run-runtime-memory-restart-soak.ps1`,
+- architecture memory gate.
+
+**Backward-compatibility impact**
+
+None. Evaluation tooling only.
 
 ---
 
