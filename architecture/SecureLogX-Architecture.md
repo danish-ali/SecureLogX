@@ -711,7 +711,7 @@ Target performance metrics remain:
 
 ### Memory ownership and native ONNX budget
 
-**Status: BASELINE VALIDATED; REPEATED SOAK/RESTART STABILITY PENDING**
+**Status: RESTART LIFECYCLE VALIDATED; ACTIVE-SESSION WINDOW MEMORY CAP PENDING VALIDATION**
 
 JVM heap is **not** the SecureLogX memory boundary.
 
@@ -812,17 +812,47 @@ Interpretation:
 - working set remained somewhat above the tokenizer checkpoint, which may reflect resident JVM/native pages and must be checked across repeated restart cycles,
 - GPU process memory was unavailable in this CPU run.
 
-This is encouraging baseline evidence, but a single quick run is insufficient to establish a hard leak-free release budget.
+A four-cycle restart soak now distinguishes lifecycle retention from active-session memory pressure.
 
-Hard MiB limits remain provisional until repeated create -> warm-up -> infer -> shutdown cycles are measured. The next memory gate must verify:
+Restart-soak observations:
 
-- post-warm-up process-private/working-set growth plateaus across repeated workload cycles,
-- post-shutdown private memory repeatedly returns near the pre-session baseline,
-- restart cycles do not accumulate native memory,
-- long-record/windowed inference does not create unbounded retained growth,
-- GPU memory is measured separately when CUDA is active.
+| Cycle | Warm-up private | Post-window private | Shutdown private | Shutdown WS vs tokenizer |
+|---|---:|---:|---:|---:|
+| 1 | 640.23 MiB | 2,820.62 MiB | 217.89 MiB | +35.37 MiB |
+| 2 | 639.20 MiB | 2,824.66 MiB | 220.98 MiB | +37.29 MiB |
+| 3 | 640.21 MiB | 2,826.75 MiB | 222.57 MiB | +38.61 MiB |
+| 4 | 642.38 MiB | 2,879.04 MiB | 221.23 MiB | +39.02 MiB |
 
-After repeated CPU and GPU runs, define:
+Interpretation:
+
+- session warm-up private memory is stable near 640 MiB,
+- post-shutdown private memory repeatedly returns near the ~221 MiB tokenizer baseline,
+- there is no material monotonic private-memory leak across session restart cycles,
+- the small working-set increase across shutdown cycles is not accompanied by private-memory accumulation and remains a trend to monitor,
+- the critical unresolved issue is the ~2.8 GiB **active-session native high-water footprint after window-heavy inference**,
+- because the post-window checkpoint is taken after GC/settling while the session remains alive, 2.8 GiB represents retained active-session native memory, not merely a transient Java allocation peak.
+
+Root cause:
+
+> record-level batching was bounded, but overlapping-window expansion could produce many more model windows and all expanded windows were submitted to one `session.run(...)` call. Native ONNX activation/arena memory therefore scaled with the expanded window count.
+
+Mitigation implemented, pending rerun:
+
+- new property: `securelogx.model.maxInferenceWindowsPerBatch`,
+- conservative default: **8 windows per ONNX call**,
+- expanded windows are processed as bounded micro-batches,
+- spans remain accumulated in original coordinates and are merged/resolved once per original log record,
+- runtime stats now expose `onnxInferenceCalls` and `maxInferenceWindowsPerCallObserved`,
+- the locked runtime check fails if the observed window count per ONNX call exceeds the configured cap.
+
+The immediate validation target is a substantial reduction in post-window private memory while preserving:
+
+- zero fail-closed records,
+- correct long-tail masking,
+- the validated resolver/safety behavior,
+- stable post-shutdown recovery.
+
+Hard MiB limits remain provisional until the bounded-window rerun is measured. After repeated CPU and GPU runs, define:
 
 - steady-state working-set/private-memory budget,
 - maximum acceptable retained growth across soak iterations,
@@ -1177,7 +1207,7 @@ VALIDATED (engineering benchmark)
         v
 Phase 5
 Native-aware memory baseline + lifecycle / retained-growth gate
-BASELINE VALIDATED; SOAK/RESTART GATE IN PROGRESS
+RESTART VALIDATED; WINDOW MEMORY CAP VALIDATION IN PROGRESS
         |
         v
 Phase 6
@@ -2105,6 +2135,69 @@ Desired shape:
 **Backward-compatibility impact**
 
 None. Evaluation tooling only.
+
+---
+
+### 2026-09-28 — Window-expanded ONNX native memory bounded with micro-batches
+
+**Status**
+
+IMPLEMENTED; VALIDATION PENDING
+
+**Change**
+
+Added a configurable hard cap on the number of expanded tokenizer windows submitted to any single ONNX inference call.
+
+New configuration:
+
+`securelogx.model.maxInferenceWindowsPerBatch=8`
+
+The runtime now processes expanded long-record windows in bounded micro-batches, accumulates decoded spans in original character coordinates, and runs resolver/policy once per original record after all windows complete.
+
+New runtime metrics:
+
+- `onnxInferenceCalls`,
+- `maxInferenceWindowsPerCallObserved`,
+- existing `mlInferenceWindows`.
+
+**Reason**
+
+A four-cycle restart soak showed healthy session cleanup but an unacceptable active-session native-memory high-water mark after long-window inference:
+
+- stable warm-up private memory: ~639-642 MiB,
+- post-window private memory: ~2.82-2.88 GiB,
+- post-shutdown private memory: ~218-223 MiB.
+
+This is not evidence of a restart leak; it is evidence that unbounded window expansion can cause ONNX native arena growth while the session remains alive.
+
+**Validation requirement**
+
+Rerun:
+
+1. locked hybrid validation,
+2. repeated restart/native-memory soak.
+
+Required invariants:
+
+- `maxInferenceWindowsPerCallObserved <= 8`,
+- long-window sensitive tail remains masked,
+- fail-closed count remains 0,
+- resolver/gate safety remains unchanged,
+- post-shutdown private memory continues to recover,
+- post-window active-session private memory is materially lower than the previous ~2.8 GiB baseline.
+
+**Affected modules**
+
+- `SecureLogXConfig`,
+- `ONNXDynamicInferenceEngine`,
+- `HybridRuntimeStats`,
+- `HybridRuntimeCheck`,
+- memory benchmark reporting,
+- development configuration.
+
+**Backward-compatibility impact**
+
+No public API change. Long-window inference may use more ONNX calls with smaller window batches in exchange for bounded native-memory pressure.
 
 ---
 
