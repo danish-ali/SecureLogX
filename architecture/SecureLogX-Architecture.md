@@ -662,7 +662,38 @@ Default measurement design:
 - H1 fail-closed count,
 - M0/H1 steady-state speedup ratio.
 
-This is an end-to-end engineering benchmark rather than JMH. Allocation rate, peak RSS/native memory, CPU profiling, and detailed JFR/JMH work remain later performance-hardening tasks.
+This is an end-to-end engineering benchmark rather than JMH. The first run is now validated as an engineering performance milestone.
+
+Measured results:
+
+| Scenario | M0 throughput | H1 throughput | H1 speedup | H1 ML invocation | Fail-closed |
+|---|---:|---:|---:|---:|---:|
+| A normal 90/10 | 20.286 rec/s | 130.770 rec/s | 6.446x | 5.00% | 0 |
+| B 75/25 | 21.181 rec/s | 73.737 rec/s | 3.481x | 15.00% | 0 |
+| C 50/50 | 26.161 rec/s | 50.175 rec/s | 1.918x | 35.00% | 0 |
+| D high-risk | 28.597 rec/s | 28.506 rec/s | 0.997x | 60.00% | 0 |
+
+Observed H1 batch p50:
+
+- Scenario A: ~2.7 ms,
+- Scenario B: ~2.7 ms,
+- Scenario C: ~248 ms,
+- Scenario D: ~1,305 ms.
+
+Initialization:
+
+- M0: 1,458 ms,
+- H1: 1,100 ms.
+
+Interpretation:
+
+> H1 converts ML avoidance into substantial steady-state throughput gains on normal and mixed operational traffic. The advantage narrows as ML invocation rises and is effectively neutral around the current 60% high-risk stress mix.
+
+This benchmark therefore establishes an **operating envelope**, not a universal speed claim. For workloads dominated by contextual/adversarial records, H1 should be treated primarily as a safety/architecture layer rather than a throughput optimization.
+
+The strong A/B result supports the production-routing thesis: deterministic evidence is most valuable when ordinary operational records dominate and contextual ML is reserved for the minority of ambiguous records.
+
+Allocation rate, peak RSS/native memory, CPU profiling, GPU-specific behavior, and detailed JFR/JMH work remain later performance-hardening tasks.
 
 Target performance metrics remain:
 
@@ -1020,7 +1051,7 @@ VALIDATED
         v
 Phase 4
 M0 vs H1 latency / throughput / routing-cost benchmark
-IN PROGRESS
+VALIDATED (engineering benchmark)
         |
         v
 Phase 5
@@ -1777,6 +1808,48 @@ First local run pending.
 **Backward-compatibility impact**
 
 None. Production masking/routing behavior is unchanged.
+
+---
+
+### 2026-09-28 — M0 versus H1 performance operating envelope validated
+
+**Status**
+
+VALIDATED ENGINEERING BENCHMARK
+
+**Change**
+
+Recorded the first steady-state M0-versus-H1 performance comparison on the canonical production-routing Scenario A-D workloads.
+
+**Evidence / benchmark**
+
+| Scenario | M0 throughput | H1 throughput | Speedup | H1 ML invocation |
+|---|---:|---:|---:|---:|
+| A | 20.286 rec/s | 130.770 rec/s | 6.446x | 5.00% |
+| B | 21.181 rec/s | 73.737 rec/s | 3.481x | 15.00% |
+| C | 26.161 rec/s | 50.175 rec/s | 1.918x | 35.00% |
+| D | 28.597 rec/s | 28.506 rec/s | 0.997x | 60.00% |
+
+Additional observations:
+
+- H1 batch p50 was about 2.7 ms in A/B, ~248 ms in C, and ~1,305 ms in D.
+- M0 initialization: 1,458 ms.
+- H1 initialization: 1,100 ms.
+- fail-closed records: 0 in every scenario.
+
+**Interpretation**
+
+H1 provides large throughput gains when the deterministic fast path keeps ML invocation low. The gain narrows as contextual/adversarial traffic increases and is effectively neutral at 60% ML invocation in the high-risk stress scenario.
+
+This establishes an operating envelope rather than a universal performance advantage.
+
+**Affected modules**
+
+No production code change in this entry; benchmark evidence and architecture status updated.
+
+**Backward-compatibility impact**
+
+None.
 
 ---
 
