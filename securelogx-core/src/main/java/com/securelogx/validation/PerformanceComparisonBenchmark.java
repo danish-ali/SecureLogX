@@ -469,7 +469,7 @@ public final class PerformanceComparisonBenchmark {
     private static final class HybridRunner implements AutoCloseable {
         private final ParallelTokenizer tokenizer;
         private final ONNXDynamicInferenceEngine engine;
-        private long sequence;
+        private int sequence;
 
         private HybridRunner(
                 SecureLogXConfig config,
