@@ -15,8 +15,9 @@ import java.util.Map;
 /**
  * Pure Java tokenizer for bert-base-cased WordPiece.
  *
- * The implementation preserves character offsets for every WordPiece so the
- * Java runtime can reproduce the Python/Hugging Face entity spans.
+ * The implementation preserves original-text character offsets for every
+ * WordPiece so single-window and overlapping-window inference can reconcile
+ * spans in original coordinates.
  */
 public class PureJavaTokenizer {
 
@@ -33,9 +34,14 @@ public class PureJavaTokenizer {
         this(tokenizerJsonPath, DEFAULT_MAX_SEQUENCE_LENGTH);
     }
 
-    public PureJavaTokenizer(String tokenizerJsonPath, int maxSequenceLength) throws IOException {
-        if (maxSequenceLength < 2) {
-            throw new IllegalArgumentException("maxSequenceLength must be at least 2");
+    public PureJavaTokenizer(
+            String tokenizerJsonPath,
+            int maxSequenceLength
+    ) throws IOException {
+        if (maxSequenceLength < 4) {
+            throw new IllegalArgumentException(
+                    "maxSequenceLength must be at least 4"
+            );
         }
         this.vocab = loadVocab(tokenizerJsonPath);
         this.clsTokenId = vocab.getOrDefault("[CLS]", 101);
@@ -44,10 +50,13 @@ public class PureJavaTokenizer {
         this.maxSequenceLength = maxSequenceLength;
     }
 
-    private Map<String, Integer> loadVocab(String tokenizerJsonPath) throws IOException {
+    private Map<String, Integer> loadVocab(
+            String tokenizerJsonPath
+    ) throws IOException {
         String content = Files.readString(Path.of(tokenizerJsonPath));
         JSONObject json = new JSONObject(content);
-        JSONObject vocabJson = json.getJSONObject("model").getJSONObject("vocab");
+        JSONObject vocabJson =
+                json.getJSONObject("model").getJSONObject("vocab");
 
         Map<String, Integer> result = new HashMap<>();
         for (String key : vocabJson.keySet()) {
@@ -56,37 +65,112 @@ public class PureJavaTokenizer {
         return result;
     }
 
+    /**
+     * Preserves historical single-window behavior and reports truncation.
+     */
     public TokenizedInput encode(String text) {
-        List<Integer> tokenIds = new ArrayList<>();
-        List<int[]> offsets = new ArrayList<>();
+        List<WordPiece> pieces = tokenizePieces(text);
+        int contentLimit = maxSequenceLength - 2;
+        int end = Math.min(contentLimit, pieces.size());
+
+        TokenizedInput encoded = buildWindow(
+                pieces,
+                0,
+                end,
+                pieces.size() > contentLimit
+        );
+        return encoded;
+    }
+
+    /**
+     * Produces complete overlapping windows with absolute character offsets.
+     *
+     * No returned window is marked truncated. If the input exceeds one
+     * window, the windows overlap by overlapContentTokens so entities that
+     * cross a window boundary have contextual coverage in at least one
+     * neighboring window.
+     */
+    public List<TokenizedInput> encodeWindows(
+            String text,
+            int overlapContentTokens
+    ) {
+        int contentLimit = maxSequenceLength - 2;
+        if (overlapContentTokens < 0
+                || overlapContentTokens >= contentLimit) {
+            throw new IllegalArgumentException(
+                    "overlapContentTokens must be >= 0 and < "
+                            + contentLimit
+            );
+        }
+
+        List<WordPiece> pieces = tokenizePieces(text);
+        if (pieces.size() <= contentLimit) {
+            return List.of(
+                    buildWindow(
+                            pieces,
+                            0,
+                            pieces.size(),
+                            false
+                    )
+            );
+        }
+
+        int stride = contentLimit - overlapContentTokens;
+        List<TokenizedInput> windows = new ArrayList<>();
+
+        int start = 0;
+        while (start < pieces.size()) {
+            int end = Math.min(start + contentLimit, pieces.size());
+            windows.add(
+                    buildWindow(
+                            pieces,
+                            start,
+                            end,
+                            false
+                    )
+            );
+
+            if (end >= pieces.size()) {
+                break;
+            }
+            start += stride;
+        }
+
+        return List.copyOf(windows);
+    }
+
+    private TokenizedInput buildWindow(
+            List<WordPiece> pieces,
+            int startIndex,
+            int endIndex,
+            boolean truncated
+    ) {
+        List<Integer> tokenIds =
+                new ArrayList<>(endIndex - startIndex + 2);
+        List<int[]> offsets =
+                new ArrayList<>(endIndex - startIndex + 2);
 
         tokenIds.add(clsTokenId);
         offsets.add(new int[]{0, 0});
 
-        int contentLimit = maxSequenceLength - 2;
-        boolean truncated = false;
         int coveredCharacterEnd = 0;
-
-        outer:
-        for (BasicToken token : preTokenize(text)) {
-            for (WordPiece piece : wordpieceTokenize(token)) {
-                if (tokenIds.size() - 1 >= contentLimit) {
-                    truncated = true;
-                    break outer;
-                }
-                tokenIds.add(vocab.getOrDefault(piece.text(), unkTokenId));
-                offsets.add(new int[]{piece.start(), piece.end()});
-                coveredCharacterEnd = Math.max(
-                        coveredCharacterEnd,
-                        piece.end()
-                );
-            }
+        for (int i = startIndex; i < endIndex; i++) {
+            WordPiece piece = pieces.get(i);
+            tokenIds.add(
+                    vocab.getOrDefault(piece.text(), unkTokenId)
+            );
+            offsets.add(new int[]{piece.start(), piece.end()});
+            coveredCharacterEnd = Math.max(
+                    coveredCharacterEnd,
+                    piece.end()
+            );
         }
 
         tokenIds.add(sepTokenId);
         offsets.add(new int[]{0, 0});
 
-        int[] inputIds = tokenIds.stream().mapToInt(Integer::intValue).toArray();
+        int[] inputIds =
+                tokenIds.stream().mapToInt(Integer::intValue).toArray();
         int[] attentionMask = new int[inputIds.length];
         Arrays.fill(attentionMask, 1);
 
@@ -97,6 +181,14 @@ public class PureJavaTokenizer {
                 truncated,
                 coveredCharacterEnd
         );
+    }
+
+    private List<WordPiece> tokenizePieces(String text) {
+        List<WordPiece> pieces = new ArrayList<>();
+        for (BasicToken token : preTokenize(text)) {
+            pieces.addAll(wordpieceTokenize(token));
+        }
+        return pieces;
     }
 
     private List<BasicToken> preTokenize(String text) {
@@ -112,7 +204,13 @@ public class PureJavaTokenizer {
             }
 
             if (isChineseCharacter(c) || isPunctuation(c)) {
-                tokens.add(new BasicToken(String.valueOf(c), index, index + 1));
+                tokens.add(
+                        new BasicToken(
+                                String.valueOf(c),
+                                index,
+                                index + 1
+                        )
+                );
                 index++;
                 continue;
             }
@@ -121,14 +219,23 @@ public class PureJavaTokenizer {
             StringBuilder value = new StringBuilder();
             while (index < text.length()) {
                 c = text.charAt(index);
-                if (isWhitespace(c) || isControl(c) || isChineseCharacter(c) || isPunctuation(c)) {
+                if (isWhitespace(c)
+                        || isControl(c)
+                        || isChineseCharacter(c)
+                        || isPunctuation(c)) {
                     break;
                 }
                 value.append(c);
                 index++;
             }
             if (!value.isEmpty()) {
-                tokens.add(new BasicToken(value.toString(), start, index));
+                tokens.add(
+                        new BasicToken(
+                                value.toString(),
+                                start,
+                                index
+                        )
+                );
             }
         }
 
@@ -140,7 +247,13 @@ public class PureJavaTokenizer {
         List<WordPiece> pieces = new ArrayList<>();
 
         if (word.length() > MAX_INPUT_CHARS_PER_WORD) {
-            pieces.add(new WordPiece("[UNK]", token.start(), token.end()));
+            pieces.add(
+                    new WordPiece(
+                            "[UNK]",
+                            token.start(),
+                            token.end()
+                    )
+            );
             return pieces;
         }
 
@@ -165,7 +278,13 @@ public class PureJavaTokenizer {
 
             if (matched == null) {
                 pieces.clear();
-                pieces.add(new WordPiece("[UNK]", token.start(), token.end()));
+                pieces.add(
+                        new WordPiece(
+                                "[UNK]",
+                                token.start(),
+                                token.end()
+                        )
+                );
                 return pieces;
             }
 
@@ -191,7 +310,8 @@ public class PureJavaTokenizer {
             return false;
         }
         int type = Character.getType(c);
-        return type == Character.CONTROL || type == Character.FORMAT;
+        return type == Character.CONTROL
+                || type == Character.FORMAT;
     }
 
     private static boolean isPunctuation(char c) {
@@ -219,9 +339,17 @@ public class PureJavaTokenizer {
                 || (cp >= 0x3400 && cp <= 0x4DBF);
     }
 
-    private record BasicToken(String text, int start, int end) {
+    private record BasicToken(
+            String text,
+            int start,
+            int end
+    ) {
     }
 
-    private record WordPiece(String text, int start, int end) {
+    private record WordPiece(
+            String text,
+            int start,
+            int end
+    ) {
     }
 }
