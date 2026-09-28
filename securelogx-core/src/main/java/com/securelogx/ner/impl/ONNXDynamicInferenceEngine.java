@@ -17,6 +17,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 
@@ -38,6 +39,7 @@ public class ONNXDynamicInferenceEngine {
 
     // Async tokenization pipeline
     private final ThreadPoolExecutor tokenizerExecutor;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     // Performance metrics
     private long totalInferenceTime = 0;
@@ -55,43 +57,78 @@ public class ONNXDynamicInferenceEngine {
         addCudaToLibraryPath();
 
         this.env = OrtEnvironment.getEnvironment();
-        OrtSession.SessionOptions opts = new OrtSession.SessionOptions();
 
-        // Print all available providers
-        EnumSet<OrtProvider> availableProviders = OrtEnvironment.getAvailableProviders();
-        System.out.println("[SecureLogX INIT] Available ONNX Providers: " + availableProviders);
+        OrtSession createdSession;
+        try (OrtSession.SessionOptions opts =
+                     new OrtSession.SessionOptions()) {
+            // Print all available providers
+            EnumSet<OrtProvider> availableProviders =
+                    OrtEnvironment.getAvailableProviders();
+            System.out.println(
+                    "[SecureLogX INIT] Available ONNX Providers: "
+                            + availableProviders
+            );
 
-        // Check GPU configuration
-        boolean gpuRequested = config.isGpuInferenceEnabled();
-        boolean cudaAvailable = availableProviders.contains(OrtProvider.CUDA);
-        this.isGpuMode = gpuRequested && cudaAvailable;
+            // Check GPU configuration
+            boolean gpuRequested = config.isGpuInferenceEnabled();
+            boolean cudaAvailable =
+                    availableProviders.contains(OrtProvider.CUDA);
+            this.isGpuMode = gpuRequested && cudaAvailable;
 
-        System.out.println("[SecureLogX INIT] GPU Inference Requested: " + gpuRequested);
-        System.out.println("[SecureLogX INIT] CUDA Provider Available: " + cudaAvailable);
+            System.out.println(
+                    "[SecureLogX INIT] GPU Inference Requested: "
+                            + gpuRequested
+            );
+            System.out.println(
+                    "[SecureLogX INIT] CUDA Provider Available: "
+                            + cudaAvailable
+            );
 
-        if (isGpuMode) {
-            try {
-                System.out.println("[SecureLogX INIT] Attempting to enable CUDA...");
-                opts.addCUDA();
+            if (isGpuMode) {
+                try {
+                    System.out.println(
+                            "[SecureLogX INIT] Attempting to enable CUDA..."
+                    );
+                    opts.addCUDA();
 
-                // GPU-specific optimizations
-                long gpuMemory = estimateGpuMemory();
-                this.optimalBatchSize = calculateOptimalBatchSize(gpuMemory);
-                this.maxSeqLen = config.getMaxSequenceLength();
+                    long gpuMemory = estimateGpuMemory();
+                    this.optimalBatchSize =
+                            calculateOptimalBatchSize(gpuMemory);
+                    this.maxSeqLen = config.getMaxSequenceLength();
 
-                System.out.println("[SecureLogX INIT] ✅ GPU Inference Mode Enabled (CUDA)");
-                System.out.println("[SecureLogX INIT] Optimal batch size: " + optimalBatchSize);
-                System.out.println("[SecureLogX INIT] Max sequence length: " + maxSeqLen);
-            } catch (Exception e) {
-                System.err.println("[SecureLogX INIT] ❌ Failed to enable CUDA: " + e.getMessage());
-                System.out.println("[SecureLogX INIT] Falling back to CPU mode");
+                    System.out.println(
+                            "[SecureLogX INIT] GPU Inference Mode Enabled "
+                                    + "(CUDA)"
+                    );
+                    System.out.println(
+                            "[SecureLogX INIT] Optimal batch size: "
+                                    + optimalBatchSize
+                    );
+                    System.out.println(
+                            "[SecureLogX INIT] Max sequence length: "
+                                    + maxSeqLen
+                    );
+                } catch (Exception e) {
+                    System.err.println(
+                            "[SecureLogX INIT] Failed to enable CUDA: "
+                                    + e.getMessage()
+                    );
+                    System.out.println(
+                            "[SecureLogX INIT] Falling back to CPU mode"
+                    );
+                    setupCpuMode(config, opts);
+                }
+            } else {
                 setupCpuMode(config, opts);
             }
-        } else {
-            setupCpuMode(config, opts);
+
+            createdSession = env.createSession(
+                    modelPath.replace("\\", "/"),
+                    opts
+            );
         }
 
-        this.session = env.createSession(modelPath.replace("\\", "/"), opts);
+        this.session = createdSession;
 
         // Initialize async tokenizer pool (smaller for GPU to reduce contention)
         int tokenizerThreads = isGpuMode ? 2 : Math.min(4, Runtime.getRuntime().availableProcessors());
@@ -644,6 +681,10 @@ public class ONNXDynamicInferenceEngine {
     }
 
     public void shutdown() {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+
         this.running = false;
 
         // Shutdown tokenizer executor
@@ -675,9 +716,12 @@ public class ONNXDynamicInferenceEngine {
         }
 
         try {
-            TimeUnit.MILLISECONDS.sleep(100);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            session.close();
+        } catch (Exception e) {
+            System.err.println(
+                    "[SecureLogX SHUTDOWN] Failed to close ONNX session: "
+                            + e.getMessage()
+            );
         }
     }
 
