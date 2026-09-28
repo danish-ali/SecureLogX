@@ -64,9 +64,10 @@ public final class HybridRuntimeCheck {
                     .append(i)
                     .append("=operational ");
         }
-        longMessage.append("email=tail.secret@example.com");
+        String tailSensitiveValue = "123-45-6789";
+        longMessage.append("ssn=").append(tailSensitiveValue);
         messages.add(longMessage.toString());
-        int truncationCaseIndex = messages.size() - 1;
+        int windowedCaseIndex = messages.size() - 1;
 
         List<LogEvent> events = new ArrayList<>();
         for (int i = 0; i < messages.size(); i++) {
@@ -97,11 +98,7 @@ public final class HybridRuntimeCheck {
             );
         }
 
-        for (int i = 0; i < outputs.size(); i++) {
-            String output = outputs.get(i);
-            if (i == truncationCaseIndex) {
-                continue;
-            }
+        for (String output : outputs) {
             if (output.contains("[SECURELOGX_REDACTED_PROCESSING_FAILURE]")) {
                 throw new IllegalStateException(
                         "Hybrid runtime entered fail-closed fallback unexpectedly"
@@ -109,17 +106,11 @@ public final class HybridRuntimeCheck {
             }
         }
 
-        String truncatedOutput = outputs.get(truncationCaseIndex);
-        if (!truncatedOutput.contains(
-                "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
-        )) {
+        String windowedOutput = outputs.get(windowedCaseIndex);
+        if (windowedOutput.contains(tailSensitiveValue)) {
             throw new IllegalStateException(
-                    "Truncated ML input did not fail closed"
-            );
-        }
-        if (truncatedOutput.contains("tail.secret@example.com")) {
-            throw new IllegalStateException(
-                    "Truncated ML input leaked unseen tail content"
+                    "Windowed inference leaked tail SSN beyond the first "
+                            + "model window"
             );
         }
 
@@ -150,16 +141,30 @@ public final class HybridRuntimeCheck {
             );
         }
 
-        if (stats.mlInferenceItems() < 4) {
+        if (stats.mlInferenceItems() < 5) {
             throw new IllegalStateException(
-                    "Expected at least 4 ML-routed records, got "
+                    "Expected at least 5 ML-routed records, got "
                             + stats.mlInferenceItems()
             );
         }
 
-        if (stats.truncatedFailClosedItems() != 1) {
+        if (stats.windowedMlItems() != 1) {
             throw new IllegalStateException(
-                    "Expected exactly one truncation fail-closed route, got "
+                    "Expected exactly one windowed ML record, got "
+                            + stats.windowedMlItems()
+            );
+        }
+
+        if (stats.mlInferenceWindows() <= stats.mlInferenceItems()) {
+            throw new IllegalStateException(
+                    "Expected more inference windows than ML records when "
+                            + "the long-message case is windowed"
+            );
+        }
+
+        if (stats.truncatedFailClosedItems() != 0) {
+            throw new IllegalStateException(
+                    "Windowed tokenizer unexpectedly failed closed, count="
                             + stats.truncatedFailClosedItems()
             );
         }
@@ -185,6 +190,18 @@ public final class HybridRuntimeCheck {
         result.put("ml_invocation_rate", stats.mlInvocationRate());
         result.put("negative_ip_reference_preserved", true);
         result.put("processing_failures", 0);
+        result.put(
+                "windowed_ml_items",
+                stats.windowedMlItems()
+        );
+        result.put(
+                "ml_inference_windows",
+                stats.mlInferenceWindows()
+        );
+        result.put(
+                "average_windows_per_ml_item",
+                stats.averageWindowsPerMlItem()
+        );
         result.put(
                 "truncated_fail_closed_items",
                 stats.truncatedFailClosedItems()
@@ -222,6 +239,14 @@ public final class HybridRuntimeCheck {
         );
         System.out.println("Negative IP reference preserved: true");
         System.out.println("Processing failures: 0");
+        System.out.println(
+                "Windowed ML items: "
+                        + stats.windowedMlItems()
+        );
+        System.out.println(
+                "ML inference windows: "
+                        + stats.mlInferenceWindows()
+        );
         System.out.println(
                 "Truncated fail-closed items: "
                         + stats.truncatedFailClosedItems()
