@@ -254,6 +254,10 @@ public final class RuntimeMemoryRestartSoakBenchmark {
         );
         result.put("batch_size", BATCH_SIZE);
         result.put(
+                "configured_max_inference_windows_per_batch",
+                config.getMaxInferenceWindowsPerBatch()
+        );
+        result.put(
                 "gpu_inference_requested",
                 config.isGpuInferenceEnabled()
         );
@@ -461,6 +465,15 @@ public final class RuntimeMemoryRestartSoakBenchmark {
                 "ml_inference_windows",
                 after.mlInferenceWindows()
                         - before.mlInferenceWindows()
+        );
+        object.put(
+                "onnx_inference_calls",
+                after.onnxInferenceCalls()
+                        - before.onnxInferenceCalls()
+        );
+        object.put(
+                "max_inference_windows_per_call_observed",
+                after.maxInferenceWindowsPerCallObserved()
         );
         object.put(
                 "truncated_fail_closed_records",
