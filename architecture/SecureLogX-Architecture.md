@@ -725,7 +725,7 @@ No failure path may emit the original unmasked message.
 
 ### Long-input / tokenizer-window policy
 
-**Current status: OVERLAPPING-WINDOW INFERENCE IMPLEMENTED; VALIDATION PENDING**
+**Current status: VALIDATED FOR RUNTIME SAFETY; FULL-CORPUS QUALITY RERUN PENDING**
 
 ML-v1.3 currently has a validated maximum sequence length of 384 tokens.
 
@@ -755,9 +755,27 @@ New runtime metrics:
 - `averageWindowsPerMlItem`,
 - `truncatedFailClosedItems` remains a fallback safety counter.
 
-The implementation is not yet production-validated. The first required validation is an end-to-end record containing sensitive content beyond the first model window. It must be successfully masked with zero truncation fail-closed events.
+The overlapping-window runtime path is now validated for the current safety suite.
 
-After runtime validation, the architecture-quality benchmark should be upgraded to score the previous 581-record truncation cohort through the same windowed path and compare full-cohort D0/M0/H1 quality.
+Validated runtime result:
+
+- compile: success,
+- hybrid detection checks: 25/25 passed,
+- security audit: 6,463 records,
+- unsafe bypass: 0,
+- deterministic overmask: 0,
+- ALLOW/gold conflicts: 0,
+- runtime: 11 records,
+- deterministic-only: 6,
+- ML-routed records: 5,
+- windowed ML records: 1,
+- ML inference windows: 11,
+- truncated fail-closed records: 0,
+- processing failures: 0,
+- negative technical IP preserved,
+- sensitive tail value beyond the first model window was masked.
+
+The architecture-quality benchmark has now been upgraded to score the previous 581-record over-window cohort through the same 64-token overlapping-window policy. The next required evidence is a full 6,463-record D0/M0/H1 quality comparison with zero excluded records.
 
 Silent truncation remains prohibited.
 
@@ -1564,6 +1582,48 @@ This run does not invalidate the overlapping-window design because the windowing
 **Backward-compatibility impact**
 
 None. Production runtime behavior is unchanged.
+
+---
+
+### 2026-09-27 — Windowed runtime validated; full-corpus Phase 2 scoring enabled
+
+**Status**
+
+RUNTIME VALIDATED; FULL-CORPUS QUALITY RERUN PENDING
+
+**Change**
+
+Promoted overlapping-window inference to validated-for-runtime-safety status and changed the Phase 2 architecture benchmark to score all records, including the 581 records that previously exceeded one model window.
+
+The comparison now uses the same 64-content-token overlap policy as the runtime, merges same-entity spans in original character coordinates, and uses identical merged ML predictions for M0 and H1.
+
+**Reason**
+
+The runtime validation successfully processed an ML-required long record with sensitive content beyond the first model window, with zero truncation fail-closed events and zero processing failures.
+
+**Evidence / benchmark**
+
+Validated runtime:
+
+- deterministic-only: 6/11
+- ML records: 5/11
+- ML invocation: 45.45%
+- windowed ML records: 1
+- ML inference windows: 11
+- truncated fail-closed: 0
+- processing failures: 0
+- negative technical IP preserved
+
+Full-corpus architecture-quality results are pending.
+
+**Affected modules**
+
+- `ArchitectureComparisonBenchmark`
+- canonical architecture reference
+
+**Backward-compatibility impact**
+
+None. This entry changes evaluation methodology only; production windowed runtime behavior was already implemented and validated.
 
 ---
 
