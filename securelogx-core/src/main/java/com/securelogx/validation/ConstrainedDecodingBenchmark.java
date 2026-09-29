@@ -98,7 +98,11 @@ public final class ConstrainedDecodingBenchmark {
 
         QualityMetrics m0 = new QualityMetrics("M0_ARGMAX");
         QualityMetrics c1 = new QualityMetrics("C1_BIO_VITERBI");
+        QualityMetrics c1s =
+                new QualityMetrics("C1S_BIO_VITERBI_SAFETY_SUPPLEMENT");
         DifferenceDiagnostics differences =
+                new DifferenceDiagnostics();
+        DifferenceDiagnostics c1sDifferences =
                 new DifferenceDiagnostics();
 
         long records = 0;
@@ -136,6 +140,10 @@ public final class ConstrainedDecodingBenchmark {
                         new QualityMetrics("M0_ARGMAX");
                 QualityMetrics sourceC1 =
                         new QualityMetrics("C1_BIO_VITERBI");
+                QualityMetrics sourceC1s =
+                        new QualityMetrics(
+                                "C1S_BIO_VITERBI_SAFETY_SUPPLEMENT"
+                        );
 
                 long sourceRecords = 0;
                 long sourceWindowedRecords = 0;
@@ -172,9 +180,12 @@ public final class ConstrainedDecodingBenchmark {
                                     inference,
                                     m0,
                                     c1,
+                                    c1s,
                                     sourceM0,
                                     sourceC1,
-                                    differences
+                                    sourceC1s,
+                                    differences,
+                                    c1sDifferences
                             );
 
                             records += batch.size();
@@ -208,9 +219,12 @@ public final class ConstrainedDecodingBenchmark {
                                 inference,
                                 m0,
                                 c1,
+                                c1s,
                                 sourceM0,
                                 sourceC1,
-                                differences
+                                sourceC1s,
+                                differences,
+                                c1sDifferences
                         );
 
                         records += batch.size();
@@ -243,6 +257,7 @@ public final class ConstrainedDecodingBenchmark {
                 sourceJson.put("inference_windows", sourceWindows);
                 sourceJson.put("M0", sourceM0.toJson());
                 sourceJson.put("C1", sourceC1.toJson());
+                sourceJson.put("C1S", sourceC1s.toJson());
                 sourceResults.put(source, sourceJson);
             }
         }
@@ -287,10 +302,18 @@ public final class ConstrainedDecodingBenchmark {
         JSONObject decoders = new JSONObject();
         decoders.put("M0_ARGMAX", m0.toJson());
         decoders.put("C1_BIO_VITERBI", c1.toJson());
+        decoders.put(
+                "C1S_BIO_VITERBI_SAFETY_SUPPLEMENT",
+                c1s.toJson()
+        );
         output.put("decoders", decoders);
         output.put(
                 "difference_diagnostics",
                 differences.toJson()
+        );
+        output.put(
+                "c1s_difference_diagnostics",
+                c1sDifferences.toJson()
         );
 
         JSONObject sources = new JSONObject();
@@ -305,6 +328,7 @@ public final class ConstrainedDecodingBenchmark {
                         "C1 non-sensitive-character redaction must not materially increase.",
                         "C1 must reduce or eliminate illegal BIO transitions by construction.",
                         "Any M0-full/C1-not-full regression must be inspected before production consideration.",
+                        "C1-S should eliminate M0-full/C1-S-not-full regressions without materially increasing over-redaction.",
                         "Production decoder remains unchanged unless the full comparison is favorable."
                 ))
         );
@@ -321,7 +345,9 @@ public final class ConstrainedDecodingBenchmark {
 
         printMetrics(m0);
         printMetrics(c1);
-        printDifferences(differences);
+        printMetrics(c1s);
+        printDifferences("C1", differences);
+        printDifferences("C1-S", c1sDifferences);
 
         System.out.println();
         System.out.println("BIO transition diagnostics");
@@ -370,9 +396,12 @@ public final class ConstrainedDecodingBenchmark {
             InferenceSession inference,
             QualityMetrics m0,
             QualityMetrics c1,
+            QualityMetrics c1s,
             QualityMetrics sourceM0,
             QualityMetrics sourceC1,
-            DifferenceDiagnostics differences
+            QualityMetrics sourceC1s,
+            DifferenceDiagnostics differences,
+            DifferenceDiagnostics c1sDifferences
     ) throws Exception {
         List<String> texts =
                 batch.stream().map(RecordItem::text).toList();
@@ -394,6 +423,8 @@ public final class ConstrainedDecodingBenchmark {
                     predicted(predictions.argmaxSpans());
             List<PredictedSpan> c1Spans =
                     predicted(predictions.constrainedSpans());
+            List<PredictedSpan> c1sSpans =
+                    safetySupplement(c1Spans, m0Spans);
 
             m0.addRecord(
                     record.text(),
@@ -405,6 +436,11 @@ public final class ConstrainedDecodingBenchmark {
                     record.gold(),
                     c1Spans
             );
+            c1s.addRecord(
+                    record.text(),
+                    record.gold(),
+                    c1sSpans
+            );
             sourceM0.addRecord(
                     record.text(),
                     record.gold(),
@@ -415,6 +451,11 @@ public final class ConstrainedDecodingBenchmark {
                     record.gold(),
                     c1Spans
             );
+            sourceC1s.addRecord(
+                    record.text(),
+                    record.gold(),
+                    c1sSpans
+            );
 
             differences.compare(
                     source,
@@ -422,6 +463,13 @@ public final class ConstrainedDecodingBenchmark {
                     record.gold(),
                     m0Spans,
                     c1Spans
+            );
+            c1sDifferences.compare(
+                    source,
+                    record.text(),
+                    record.gold(),
+                    m0Spans,
+                    c1sSpans
             );
         }
 
@@ -451,6 +499,50 @@ public final class ConstrainedDecodingBenchmark {
             );
         }
         return List.copyOf(result);
+    }
+
+    private static List<PredictedSpan> safetySupplement(
+            List<PredictedSpan> constrained,
+            List<PredictedSpan> argmax
+    ) {
+        List<PredictedSpan> result =
+                new ArrayList<>(constrained);
+
+        for (PredictedSpan m0Span : argmax) {
+            if (!spanFullyCovered(m0Span, constrained)
+                    && !result.contains(m0Span)) {
+                result.add(m0Span);
+            }
+        }
+
+        result.sort(
+                Comparator.comparingInt(PredictedSpan::start)
+                        .thenComparingInt(PredictedSpan::end)
+                        .thenComparing(PredictedSpan::entityType)
+        );
+        return List.copyOf(result);
+    }
+
+    private static boolean spanFullyCovered(
+            PredictedSpan target,
+            List<PredictedSpan> covering
+    ) {
+        for (int position = target.start();
+             position < target.end();
+             position++) {
+            boolean covered = false;
+            for (PredictedSpan span : covering) {
+                if (span.start() <= position
+                        && span.end() > position) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered) {
+                return false;
+            }
+        }
+        return target.end() > target.start();
     }
 
     private static List<GoldSpan> goldSpans(JSONArray array) {
@@ -545,12 +637,15 @@ public final class ConstrainedDecodingBenchmark {
     }
 
     private static void printDifferences(
+            String candidate,
             DifferenceDiagnostics diagnostics
     ) {
         JSONObject json = diagnostics.toJson();
 
         System.out.println();
-        System.out.println("M0 -> C1 difference diagnostics");
+        System.out.println(
+                "M0 -> " + candidate + " difference diagnostics"
+        );
         System.out.println(
                 "  records with changed predicted spans: "
                         + json.getLong("records_with_changed_predictions")
