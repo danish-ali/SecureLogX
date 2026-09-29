@@ -953,7 +953,7 @@ Where possible, report denominators and confidence intervals.
 
 ## 11. Constrained Decoding Experiment
 
-**Status: PROMISING; REGRESSION REVIEW COMPLETE; SAFETY-SUPPLEMENT EXPERIMENT NEXT**
+**Status: C1 PROMISING; C1-S SAFETY-SUPPLEMENT IMPLEMENTED; FULL-CORPUS RERUN PENDING**
 
 The current production ML pipeline uses token-wise argmax followed by BIO span normalization. Production behavior is unchanged.
 
@@ -1042,16 +1042,21 @@ The two printed name regressions are short names (`Smith`, `Jeff`) that C1 drops
 
 This makes C1 a strong candidate, but dropping even low-frequency PII spans is undesirable for a privacy-protection library.
 
-The next experiment is therefore **C1-S**, a safety-supplemented constrained decoder:
+The next experiment, **C1-S**, is now implemented in the comparison benchmark.
+
+C1-S safety-supplement rule:
 
 1. use C1 BIO-Viterbi spans as the primary prediction,
-2. retain any M0 argmax span only when C1 provides **no overlapping protection** for that span,
-3. merge same-entity overlaps normally,
-4. compare M0, C1, and C1-S from the same frozen logits.
+2. inspect every M0 argmax span,
+3. if C1 does **not fully cover** that M0 span, retain the M0 span as a safety supplement,
+4. preserve all C1 spans,
+5. compare M0, C1, and C1-S from the same frozen logits and same ONNX calls.
+
+This is deliberately not a blind decoder replacement or second model pass. It is a conservative coverage floor around the constrained decoder.
 
 Goal:
 
-> preserve C1's span-coherence/boundary gains while preventing complete loss of an argmax-detected sensitive span.
+> preserve C1's span-coherence/boundary gains while preventing C1 from losing protection that M0 already supplied.
 
 Promotion gate status:
 
@@ -2541,6 +2546,39 @@ Do not promote plain C1 yet. Evaluate a safety-supplemented C1-S decoder that re
 **Backward-compatibility impact**
 
 None. Production decoder remains unchanged. CPU inference-window default remains 4.
+
+---
+
+### 2026-09-28 — C1-S safety-supplement comparison implemented
+
+**Status**
+
+IMPLEMENTED; FULL-CORPUS RERUN PENDING
+
+**Change**
+
+Extended the constrained-decoding benchmark with C1-S, a safety-supplemented BIO-Viterbi output.
+
+C1-S uses C1 as the primary decoder but restores an M0 argmax span whenever C1 does not fully cover that span. It does not run the model again and does not modify production decoding.
+
+**Reason**
+
+Plain C1 produced materially better span/boundary quality but had three M0-full/C1-not-full cases: two PERSON_NAME and one STREET_ADDRESS. A privacy-oriented production decoder should not accept avoidable loss of already-detected sensitive coverage when the same logits can preserve it.
+
+**Promotion target**
+
+C1-S should demonstrate:
+
+- M0-full/C1-S-not-full = 0,
+- high-risk regressions = 0,
+- sensitive-character recall >= M0,
+- full-span and exact-boundary gains close to C1,
+- non-sensitive-character redaction not materially worse than M0,
+- no extra ONNX calls versus C1.
+
+**Backward-compatibility impact**
+
+None. Benchmark-only experiment; production decoder remains unchanged.
 
 ---
 
