@@ -93,7 +93,7 @@ public class SecureLogXConfig {
         int configured = Integer.parseInt(
                 props.getProperty(
                         "securelogx.model.maxInferenceWindowsPerBatch",
-                        "8"
+                        "4"
                 )
         );
         if (configured < 1) {
