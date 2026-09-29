@@ -711,7 +711,7 @@ Target performance metrics remain:
 
 ### Memory ownership and native ONNX budget
 
-**Status: VALIDATED ON CPU; GPU MEMORY VALIDATION PENDING**
+**Status: CPU LIFECYCLE VALIDATED; <1 GiB WINDOW-STRESS TARGET IN PROGRESS; GPU VALIDATION PENDING**
 
 JVM heap is **not** the SecureLogX memory boundary.
 
@@ -838,8 +838,9 @@ Root cause:
 
 Mitigation implemented, pending rerun:
 
-- new property: `securelogx.model.maxInferenceWindowsPerBatch`,
-- conservative default: **8 windows per ONNX call**,
+- property: `securelogx.model.maxInferenceWindowsPerBatch`,
+- validated baseline: **8 windows per ONNX call**,
+- current CPU optimization target: **4 windows per ONNX call**,
 - expanded windows are processed as bounded micro-batches,
 - spans remain accumulated in original coordinates and are merged/resolved once per original log record,
 - runtime stats now expose `onnxInferenceCalls` and `maxInferenceWindowsPerCallObserved`,
@@ -882,9 +883,19 @@ Interpretation:
 - shutdown working-set delta stabilizes rather than climbing monotonically,
 - there is no current evidence of a CPU native-memory lifecycle leak across restart cycles.
 
-The CPU/native-memory phase is therefore validated for the current engineering workload.
+The CPU/native lifecycle and shutdown behavior are validated for the current engineering workload. The 8-window cap is also validated for correctness and materially reduces active-session native memory.
 
-Hard production MiB budgets remain provisional until representative deployment hardware and GPU/CUDA runs are measured. After CPU/GPU deployment baselines, define:
+However, ~1.17 GiB private memory under the long-window stress workload is still above the desired CPU deployment target. The current CPU default has therefore been reduced to **4 windows per ONNX call** for a follow-up memory/performance validation.
+
+Current engineering target:
+
+- long-window stress private memory: **< 1,024 MiB**,
+- preferred target with deployment headroom: **< 950 MiB**,
+- post-shutdown private memory should continue returning near ~220 MiB,
+- no cycle-to-cycle retained native growth,
+- safety and masking quality must remain unchanged.
+
+Hard production MiB budgets remain provisional until the 4-window CPU rerun and representative deployment/GPU measurements are complete. After CPU/GPU deployment baselines, define:
 
 - steady-state working-set/private-memory budget,
 - maximum acceptable retained growth across soak iterations,
@@ -908,7 +919,7 @@ Where possible, report denominators and confidence intervals.
 
 ## 11. Constrained Decoding Experiment
 
-**Status: IMPLEMENTED; FULL-CORPUS RUN PENDING**
+**Status: FULL-CORPUS RESULT PROMISING; 3 REGRESSION CASES REQUIRE REVIEW**
 
 The current production ML pipeline uses token-wise argmax followed by BIO span normalization. Production behavior is unchanged.
 
@@ -934,11 +945,12 @@ C1 constraints:
 
 The decoder uses the frozen ML-v1.3 logits without retraining. It performs an optimized Viterbi pass in O(tokens x labels), rather than evaluating a full 51x51 transition matrix at every token.
 
-The benchmark uses:
+The completed benchmark used:
 
-- the same full 6,463-record non-sealed corpus,
+- the full 6,463-record non-sealed corpus,
+- 581 windowed records,
 - the same 64-token overlapping-window policy,
-- the same configured maximum of 8 windows per ONNX call,
+- the then-validated maximum of 8 windows per ONNX call,
 - one ONNX inference result reused by M0 and C1,
 - zero sealed-challenge access.
 
@@ -959,16 +971,51 @@ Metrics:
 - C1-full/M0-not-full gains,
 - exact-boundary gains/losses.
 
-Promotion gate:
+Full-corpus result:
 
-1. C1 high-risk full-span recall must not be lower than M0.
-2. Sensitive-character recall must not materially regress.
-3. Non-sensitive-character redaction must not materially increase.
-4. Illegal BIO transitions must be eliminated by construction.
-5. Every M0-full/C1-not-full regression must be inspected before production consideration.
-6. Production decoding remains unchanged unless the complete comparison is favorable.
+| Metric | M0 argmax | C1 BIO-Viterbi | Delta |
+|---|---:|---:|---:|
+| Sensitive-character recall | 97.4260% | 97.4243% | -0.0017 pp |
+| Non-sensitive-character redaction | 0.2335% | 0.2325% | -0.0010 pp |
+| Full-span recall | 95.4969% | 95.8216% | +0.3247 pp |
+| Exact-boundary recall | 94.4144% | 94.9773% | +0.5629 pp |
+| High-risk full-span recall | 98.9243% | 99.0837% | +0.1594 pp |
+| Whole-record perfect redaction | 93.3622% | 93.6407% | +0.2785 pp |
+| Partial gold spans | 152 | 107 | -45 |
+| Missed gold spans | 264 | 279 | +15 |
 
-This remains an evaluation item, not an automatic production change.
+Difference diagnostics:
+
+- records with changed predictions: 141,
+- M0 full / C1 not full: **3**,
+- high-risk regressions: **0**,
+- C1 full / M0 not full: **33**,
+- exact-boundary losses / gains: **8 / 60**,
+- illegal argmax BIO transitions: **253**,
+- C1 changed 382 token labels, or **0.3999% of argmax entity tokens**.
+
+Interpretation:
+
+> C1 is materially better on span coherence and boundary quality while preserving high-risk safety. It converts 33 previously non-full spans to full coverage while causing 3 full-span regressions, for a net +30 full spans. It also produces 60 exact-boundary gains versus 8 losses.
+
+The small sensitive-character recall change (-0.0017 percentage points) is negligible in aggregate, but the 3 M0-full/C1-not-full cases must be inspected individually before any production promotion. The increase in missed spans from 264 to 279 also requires explanation even though total full-span recall improves; this suggests C1 is converting many partial spans to full spans while also turning a smaller subset of weak partials into misses.
+
+Promotion gate status:
+
+1. C1 high-risk full-span recall not lower than M0: **PASS**.
+2. Sensitive-character recall no material regression: **PROVISIONAL PASS**, pending 3-case inspection.
+3. Non-sensitive-character redaction not increased: **PASS**.
+4. Illegal BIO paths eliminated by construction: **PASS**.
+5. Every M0-full/C1-not-full regression inspected: **PENDING**.
+6. Production decoder unchanged until review completes: **ENFORCED**.
+
+A report-only helper exists at:
+
+`scripts/show-constrained-decoding-regressions.ps1`
+
+It reads the existing result JSON and prints regression labels, gain labels, and diagnostic samples without rerunning ONNX.
+
+Production `LabelAwareMaskingEngine` remains unchanged.
 
 ---
 
@@ -1282,12 +1329,12 @@ VALIDATED (engineering benchmark)
         v
 Phase 5
 Native-aware memory baseline + lifecycle / retained-growth gate
-VALIDATED ON CPU
+CPU LIFECYCLE VALIDATED; <1 GiB CAP=4 VALIDATION IN PROGRESS
         |
         v
 Phase 6
 Constrained BIO decoding experiment
-IN PROGRESS
+PROMISING; 3 REGRESSION CASES PENDING REVIEW
         |
         v
 Phase 7
@@ -2360,6 +2407,49 @@ C1 must preserve high-risk recall, avoid material sensitive-character regression
 **Backward-compatibility impact**
 
 None. Production decoding is unchanged.
+
+---
+
+### 2026-09-28 — C1 full-corpus result promising; CPU memory target tightened
+
+**Status**
+
+C1 PROMISING / REVIEW REQUIRED; MEMORY CAP=4 VALIDATION PENDING
+
+**Change**
+
+Recorded the first full-corpus strict-BIO Viterbi result and tightened the CPU inference-window micro-batch default from 8 to 4 to pursue a sub-1-GiB long-window stress target.
+
+**C1 evidence**
+
+- 6,463 records scored
+- 581 windowed records
+- sensitive-character recall: 97.4243% vs 97.4260% M0
+- non-sensitive-character redaction: 0.2325% vs 0.2335%
+- full-span recall: 95.8216% vs 95.4969%
+- exact-boundary recall: 94.9773% vs 94.4144%
+- high-risk full-span recall: 99.0837% vs 98.9243%
+- whole-record perfect redaction: 93.6407% vs 93.3622%
+- M0-full/C1-not-full: 3
+- high-risk regressions: 0
+- C1-full/M0-not-full: 33
+- exact-boundary losses/gains: 8/60
+- illegal argmax BIO transitions: 253
+- token labels changed: 382 (0.3999% of argmax entity tokens)
+
+**Memory decision**
+
+The validated 8-window cap reduced post-window private memory from ~2.8 GiB to ~1.17 GiB, but the desired CPU engineering target is now <1,024 MiB, preferably <950 MiB. The CPU default is therefore 4 windows per ONNX call pending safety/performance/memory rerun.
+
+**Affected modules**
+
+- development/config default for `maxInferenceWindowsPerBatch`,
+- constrained-decoding evaluation documentation,
+- report-only constrained regression inspection helper.
+
+**Backward-compatibility impact**
+
+Production decoder is unchanged. Window-heavy CPU inference may use more ONNX calls because the default window micro-batch cap is lower.
 
 ---
 
