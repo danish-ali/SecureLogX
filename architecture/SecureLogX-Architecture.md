@@ -711,7 +711,7 @@ Target performance metrics remain:
 
 ### Memory ownership and native ONNX budget
 
-**Status: CPU LIFECYCLE VALIDATED; <1 GiB WINDOW-STRESS TARGET IN PROGRESS; GPU VALIDATION PENDING**
+**Status: VALIDATED ON CPU AT 4-WINDOW CAP; GPU VALIDATION PENDING**
 
 JVM heap is **not** the SecureLogX memory boundary.
 
@@ -883,19 +883,53 @@ Interpretation:
 - shutdown working-set delta stabilizes rather than climbing monotonically,
 - there is no current evidence of a CPU native-memory lifecycle leak across restart cycles.
 
-The CPU/native lifecycle and shutdown behavior are validated for the current engineering workload. The 8-window cap is also validated for correctness and materially reduces active-session native memory.
+The CPU/native lifecycle and shutdown behavior are validated for the current engineering workload.
 
-However, ~1.17 GiB private memory under the long-window stress workload is still above the desired CPU deployment target. The current CPU default has therefore been reduced to **4 windows per ONNX call** for a follow-up memory/performance validation.
+The 4-window CPU cap is now validated.
 
-Current engineering target:
+Locked safety/runtime result:
 
-- long-window stress private memory: **< 1,024 MiB**,
-- preferred target with deployment headroom: **< 950 MiB**,
-- post-shutdown private memory should continue returning near ~220 MiB,
-- no cycle-to-cycle retained native growth,
-- safety and masking quality must remain unchanged.
+- compile: success,
+- 25/25 hybrid detection checks passed,
+- 6,463-record gate audit passed,
+- unsafe bypass: 0,
+- deterministic overmask: 0,
+- ALLOW/gold conflicts: 0,
+- runtime deterministic-only: 6/11,
+- runtime ML-routed: 5/11,
+- windowed ML records: 1,
+- ML inference windows: 11,
+- ONNX inference calls: 3,
+- maximum windows per ONNX call: 4,
+- truncated fail-closed: 0,
+- processing failures: 0,
+- negative technical IP preserved.
 
-Hard production MiB budgets remain provisional until the 4-window CPU rerun and representative deployment/GPU measurements are complete. After CPU/GPU deployment baselines, define:
+Four-cycle restart soak at cap=4:
+
+| Cycle | Warm-up private | Post-window private | Shutdown private | Shutdown WS vs tokenizer |
+|---|---:|---:|---:|---:|
+| 1 | 640.19 MiB | 902.23 MiB | 221.07 MiB | +27.63 MiB |
+| 2 | 642.15 MiB | 907.06 MiB | 223.29 MiB | +28.40 MiB |
+| 3 | 643.97 MiB | 904.93 MiB | 221.91 MiB | +29.39 MiB |
+| 4 | 640.42 MiB | 907.77 MiB | 221.68 MiB | +28.48 MiB |
+
+Interpretation:
+
+- peak retained private memory under the long-window workload is approximately **908 MiB**,
+- this is below the 1,024 MiB hard engineering target and below the preferred 950 MiB target,
+- compared with the unbounded design (~2.8 GiB), retained active-session private memory is reduced by roughly 68%,
+- compared with the 8-window cap (~1.17 GiB), the 4-window cap reduces the long-window high-water mark by roughly 22%,
+- warm-up/session private memory remains stable near 640 MiB,
+- post-shutdown private memory repeatedly returns near ~222 MiB,
+- shutdown working-set residual stabilizes around +28 to +29 MiB,
+- there is no current evidence of cycle-to-cycle native-memory accumulation.
+
+**Validated CPU default: 4 inference windows per ONNX call.**
+
+The remaining CPU task is to quantify the throughput/latency cost of cap=4 versus the previously measured cap=8 operating envelope. GPU/CUDA memory remains a separate future validation requirement.
+
+Hard production MiB budgets remain deployment-profile dependent. After CPU/GPU deployment baselines, define:
 
 - steady-state working-set/private-memory budget,
 - maximum acceptable retained growth across soak iterations,
@@ -919,7 +953,7 @@ Where possible, report denominators and confidence intervals.
 
 ## 11. Constrained Decoding Experiment
 
-**Status: FULL-CORPUS RESULT PROMISING; 3 REGRESSION CASES REQUIRE REVIEW**
+**Status: PROMISING; REGRESSION REVIEW COMPLETE; SAFETY-SUPPLEMENT EXPERIMENT NEXT**
 
 The current production ML pipeline uses token-wise argmax followed by BIO span normalization. Production behavior is unchanged.
 
@@ -998,7 +1032,26 @@ Interpretation:
 
 > C1 is materially better on span coherence and boundary quality while preserving high-risk safety. It converts 33 previously non-full spans to full coverage while causing 3 full-span regressions, for a net +30 full spans. It also produces 60 exact-boundary gains versus 8 losses.
 
-The small sensitive-character recall change (-0.0017 percentage points) is negligible in aggregate, but the 3 M0-full/C1-not-full cases must be inspected individually before any production promotion. The increase in missed spans from 264 to 279 also requires explanation even though total full-span recall improves; this suggests C1 is converting many partial spans to full spans while also turning a smaller subset of weak partials into misses.
+The 3 full-span regressions have now been reviewed:
+
+- `PERSON_NAME`: 2 regressions,
+- `STREET_ADDRESS`: 1 regression,
+- high-risk regressions: 0.
+
+The two printed name regressions are short names (`Smith`, `Jeff`) that C1 drops entirely. The gain set is much broader: STREET_ADDRESS 12, PERSON_NAME 9, DOB 3, BUSINESS_ID/API_KEY/PHONE 2 each, and SSN/EMAIL/IBAN 1 each. Most observed gains are cases where C1 joins split argmax fragments into one coherent span.
+
+This makes C1 a strong candidate, but dropping even low-frequency PII spans is undesirable for a privacy-protection library.
+
+The next experiment is therefore **C1-S**, a safety-supplemented constrained decoder:
+
+1. use C1 BIO-Viterbi spans as the primary prediction,
+2. retain any M0 argmax span only when C1 provides **no overlapping protection** for that span,
+3. merge same-entity overlaps normally,
+4. compare M0, C1, and C1-S from the same frozen logits.
+
+Goal:
+
+> preserve C1's span-coherence/boundary gains while preventing complete loss of an argmax-detected sensitive span.
 
 Promotion gate status:
 
@@ -1006,7 +1059,7 @@ Promotion gate status:
 2. Sensitive-character recall no material regression: **PROVISIONAL PASS**, pending 3-case inspection.
 3. Non-sensitive-character redaction not increased: **PASS**.
 4. Illegal BIO paths eliminated by construction: **PASS**.
-5. Every M0-full/C1-not-full regression inspected: **PENDING**.
+5. Every M0-full/C1-not-full regression inspected: **PASS / REVIEW COMPLETE**.
 6. Production decoder unchanged until review completes: **ENFORCED**.
 
 A report-only helper exists at:
@@ -1329,7 +1382,7 @@ VALIDATED (engineering benchmark)
         v
 Phase 5
 Native-aware memory baseline + lifecycle / retained-growth gate
-CPU LIFECYCLE VALIDATED; <1 GiB CAP=4 VALIDATION IN PROGRESS
+VALIDATED ON CPU AT CAP=4
         |
         v
 Phase 6
@@ -2450,6 +2503,44 @@ The validated 8-window cap reduced post-window private memory from ~2.8 GiB to ~
 **Backward-compatibility impact**
 
 Production decoder is unchanged. Window-heavy CPU inference may use more ONNX calls because the default window micro-batch cap is lower.
+
+---
+
+### 2026-09-28 — CPU cap=4 meets sub-1-GiB target; C1 regressions reviewed
+
+**Status**
+
+CPU MEMORY VALIDATED; C1-S SAFETY-SUPPLEMENT EXPERIMENT NEXT
+
+**Memory evidence**
+
+At 4 windows per ONNX call:
+
+- peak long-window private memory: ~908 MiB,
+- hard target <1,024 MiB: PASS,
+- preferred target <950 MiB: PASS,
+- warm-up private memory: ~640-644 MiB,
+- post-shutdown private memory: ~221-223 MiB,
+- no cycle-to-cycle private-memory accumulation,
+- locked safety/runtime suite unchanged.
+
+**C1 regression review**
+
+The three M0-full/C1-not-full cases are:
+
+- PERSON_NAME: 2,
+- STREET_ADDRESS: 1,
+- high-risk: 0.
+
+Observed name examples include short spans `Smith` and `Jeff`. C1 gains remain substantially larger and include addresses, names, DOB, API keys, phones, SSN, email, IBAN, and business identifiers.
+
+**Decision**
+
+Do not promote plain C1 yet. Evaluate a safety-supplemented C1-S decoder that restores only M0 spans for which C1 provides no overlapping protection.
+
+**Backward-compatibility impact**
+
+None. Production decoder remains unchanged. CPU inference-window default remains 4.
 
 ---
 
