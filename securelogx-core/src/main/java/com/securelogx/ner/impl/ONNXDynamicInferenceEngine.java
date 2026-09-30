@@ -26,8 +26,13 @@ public class ONNXDynamicInferenceEngine {
 
     private final OrtEnvironment env;
     private final OrtSession session;
-    private final LabelAwareMaskingEngine maskingEngine = new LabelAwareMaskingEngine();
-    private final HybridMaskingPipeline hybridMaskingPipeline = new HybridMaskingPipeline();
+    private final LabelAwareMaskingEngine maskingEngine =
+            new LabelAwareMaskingEngine();
+    private final BioConstrainedSpanDecoder constrainedDecoder =
+            new BioConstrainedSpanDecoder();
+    private final HybridMaskingPipeline hybridMaskingPipeline =
+            new HybridMaskingPipeline();
+    private final MlDecoderMode decoderMode;
     private volatile boolean running = true;
     private  boolean isGpuMode;
     private int optimalBatchSize;
@@ -62,6 +67,7 @@ public class ONNXDynamicInferenceEngine {
         this.env = OrtEnvironment.getEnvironment();
         this.maxInferenceWindowsPerBatch =
                 config.getMaxInferenceWindowsPerBatch();
+        this.decoderMode = config.getMlDecoderMode();
 
         OrtSession createdSession;
         try (OrtSession.SessionOptions opts =
@@ -149,6 +155,9 @@ public class ONNXDynamicInferenceEngine {
         System.out.println(
                 "[SecureLogX INIT] Max inference windows per ONNX call: "
                         + maxInferenceWindowsPerBatch
+        );
+        System.out.println(
+                "[SecureLogX INIT] ML decoder mode: " + decoderMode
         );
     }
 
@@ -347,12 +356,22 @@ public class ONNXDynamicInferenceEngine {
             long inferenceStart = System.currentTimeMillis();
 
             Map<Integer, List<LabelAwareMaskingEngine.EntitySpan>>
-                    spansByOriginal = new LinkedHashMap<>();
+                    argmaxSpansByOriginal = new LinkedHashMap<>();
+            Map<Integer, List<LabelAwareMaskingEngine.EntitySpan>>
+                    constrainedSpansByOriginal = new LinkedHashMap<>();
+
             for (Integer originalIndex : inferenceOriginalIndices) {
-                spansByOriginal.computeIfAbsent(
+                argmaxSpansByOriginal.computeIfAbsent(
                         originalIndex,
                         ignored -> new ArrayList<>()
                 );
+                if (decoderMode
+                        == MlDecoderMode.BIO_VITERBI_SAFETY_SUPPLEMENT) {
+                    constrainedSpansByOriginal.computeIfAbsent(
+                            originalIndex,
+                            ignored -> new ArrayList<>()
+                    );
+                }
             }
 
             for (int windowStart = 0;
@@ -435,7 +454,7 @@ public class ONNXDynamicInferenceEngine {
 
                             List<
                                     LabelAwareMaskingEngine.EntitySpan>
-                                    windowSpans =
+                                    argmaxWindowSpans =
                                     maskingEngine.decodeSpans(
                                             event.getMessage(),
                                             new float[][][]{
@@ -444,9 +463,27 @@ public class ONNXDynamicInferenceEngine {
                                             truncatedOffsets
                                     );
 
-                            spansByOriginal
+                            argmaxSpansByOriginal
                                     .get(originalIndex)
-                                    .addAll(windowSpans);
+                                    .addAll(argmaxWindowSpans);
+
+                            if (decoderMode
+                                    == MlDecoderMode
+                                            .BIO_VITERBI_SAFETY_SUPPLEMENT) {
+                                BioConstrainedSpanDecoder.DecodeResult
+                                        constrainedResult =
+                                        constrainedDecoder.decode(
+                                                event.getMessage(),
+                                                logits[localIndex],
+                                                truncatedOffsets
+                                        );
+
+                                constrainedSpansByOriginal
+                                        .get(originalIndex)
+                                        .addAll(
+                                                constrainedResult.spans()
+                                        );
+                            }
                         }
                     }
                 }
@@ -464,17 +501,39 @@ public class ONNXDynamicInferenceEngine {
             for (Map.Entry<
                     Integer,
                     List<LabelAwareMaskingEngine.EntitySpan>>
-                    entry : spansByOriginal.entrySet()) {
+                    entry : argmaxSpansByOriginal.entrySet()) {
                 int originalIndex = entry.getKey();
                 LogEvent event = batch.get(originalIndex);
 
-                List<LabelAwareMaskingEngine.EntitySpan> mergedSpans =
+                List<LabelAwareMaskingEngine.EntitySpan> mergedArgmax =
                         mergeWindowSpans(entry.getValue());
+
+                List<LabelAwareMaskingEngine.EntitySpan> selectedSpans;
+                if (decoderMode
+                        == MlDecoderMode.BIO_VITERBI_SAFETY_SUPPLEMENT) {
+                    List<LabelAwareMaskingEngine.EntitySpan>
+                            mergedConstrained =
+                            mergeWindowSpans(
+                                    constrainedSpansByOriginal
+                                            .getOrDefault(
+                                                    originalIndex,
+                                                    List.of()
+                                            )
+                            );
+
+                    selectedSpans =
+                            BioConstrainedSpanDecoder.safetySupplement(
+                                    mergedConstrained,
+                                    mergedArgmax
+                            );
+                } else {
+                    selectedSpans = mergedArgmax;
+                }
 
                 String masked = hybridMaskingPipeline.maskWithMl(
                         event.getMessage(),
                         scans.get(originalIndex),
-                        mergedSpans,
+                        selectedSpans,
                         event.shouldShowLastFour()
                 );
 
