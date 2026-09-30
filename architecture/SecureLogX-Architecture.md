@@ -925,9 +925,29 @@ Interpretation:
 - shutdown working-set residual stabilizes around +28 to +29 MiB,
 - there is no current evidence of cycle-to-cycle native-memory accumulation.
 
-**Validated CPU default: 4 inference windows per ONNX call.**
+**Validated expanded-window CPU cap: 4 inference windows per ONNX call.**
 
-The remaining CPU task is to quantify the throughput/latency cost of cap=4 versus the previously measured cap=8 operating envelope. GPU/CUDA memory remains a separate future validation requirement.
+A first global-cap=4 performance run showed:
+
+| Scenario | M0 throughput | H1 throughput | Speedup | H1 ML invocation |
+|---|---:|---:|---:|---:|
+| A | 26.389 rec/s | 154.622 rec/s | 5.859x | 5% |
+| B | 24.442 rec/s | 83.090 rec/s | 3.400x | 15% |
+| C | 30.085 rec/s | 43.621 rec/s | 1.450x | 35% |
+| D | 32.680 rec/s | 26.360 rec/s | 0.807x | 60% |
+
+That run applied the 4-window cap to **all** ML inference, including ordinary single-window records. This was unnecessarily conservative and explains much of the C/D throughput loss.
+
+The runtime has therefore been refined:
+
+- ordinary single-window ML records use the normal runtime batch size,
+- only records that expand into multiple overlapping windows are subject to the 4-window native-memory cap,
+- windowed-call metrics are tracked separately from ordinary ONNX calls,
+- the safety assertion applies specifically to expanded-window calls.
+
+This adaptive batching change is pending performance/memory rerun. The objective is to retain the ~908 MiB long-window memory bound while recovering throughput on ML-heavy short-record traffic.
+
+GPU/CUDA memory remains a separate future validation requirement.
 
 Hard production MiB budgets remain deployment-profile dependent. After CPU/GPU deployment baselines, define:
 
@@ -953,7 +973,7 @@ Where possible, report denominators and confidence intervals.
 
 ## 11. Constrained Decoding Experiment
 
-**Status: C1 PROMISING; C1-S SAFETY-SUPPLEMENT IMPLEMENTED; FULL-CORPUS RERUN PENDING**
+**Status: C1-S QUALITY GATE PASSED; PRODUCTION-PATH VALIDATION IN PROGRESS**
 
 The current production ML pipeline uses token-wise argmax followed by BIO span normalization. Production behavior is unchanged.
 
@@ -1053,6 +1073,37 @@ C1-S safety-supplement rule:
 5. compare M0, C1, and C1-S from the same frozen logits and same ONNX calls.
 
 This is deliberately not a blind decoder replacement or second model pass. It is a conservative coverage floor around the constrained decoder.
+
+Full-corpus C1-S result:
+
+| Metric | M0 argmax | C1-S | Delta |
+|---|---:|---:|---:|
+| Sensitive-character recall | 97.4260% | **97.5172%** | +0.0912 pp |
+| Non-sensitive-character redaction | 0.2335% | **0.2422%** | +0.0087 pp |
+| Full-span recall | 95.4969% | **95.8541%** | +0.3572 pp |
+| Exact-boundary recall | 94.4144% | **94.9989%** | +0.5845 pp |
+| High-risk full-span recall | 98.9243% | **99.0837%** | +0.1594 pp |
+| Whole-record perfect redaction | 93.3622% | **93.5169%** | +0.1547 pp |
+| Partial gold spans | 152 | **119** | -33 |
+| Missed gold spans | 264 | **264** | 0 |
+
+M0 -> C1-S diagnostics:
+
+- records with changed predictions: 105,
+- M0 full / C1-S not full: **0**,
+- high-risk regressions: **0**,
+- C1-S full / M0 not full: **33**,
+- exact-boundary losses / gains: **6 / 60**.
+
+Interpretation:
+
+> C1-S preserves M0's full-span coverage floor while retaining C1's span-coherence improvements. It adds 33 full-span recoveries with zero full-span regressions and zero high-risk regressions.
+
+The non-sensitive-character redaction increase is +0.0087 percentage points absolute. This is small but must remain visible as a precision tradeoff rather than being hidden.
+
+C1-S therefore passes the ML-only quality promotion gate. Production promotion still requires locked hybrid/runtime validation and full H1+C1-S architecture comparison through the shared production decoder implementation.
+
+The benchmark and production runtime now share the same `BioConstrainedSpanDecoder` implementation. The development validation profile selects `BIO_VITERBI_SAFETY_SUPPLEMENT`, while the code-level fallback remains `ARGMAX_LEGACY`.
 
 Goal:
 
@@ -1387,12 +1438,12 @@ VALIDATED (engineering benchmark)
         v
 Phase 5
 Native-aware memory baseline + lifecycle / retained-growth gate
-VALIDATED ON CPU AT CAP=4
+CAP=4 MEMORY VALIDATED; ADAPTIVE BATCH PERFORMANCE RERUN PENDING
         |
         v
 Phase 6
 Constrained BIO decoding experiment
-PROMISING; 3 REGRESSION CASES PENDING REVIEW
+C1-S QUALITY GATE PASSED; PRODUCTION-PATH VALIDATION IN PROGRESS
         |
         v
 Phase 7
@@ -2579,6 +2630,55 @@ C1-S should demonstrate:
 **Backward-compatibility impact**
 
 None. Benchmark-only experiment; production decoder remains unchanged.
+
+---
+
+### 2026-09-29 — C1-S passes full-corpus quality gate; adaptive batching integrated
+
+**Status**
+
+C1-S PRODUCTION CANDIDATE; PRODUCTION-PATH VALIDATION PENDING
+
+**C1-S full-corpus evidence**
+
+- 6,463 records scored,
+- 581 windowed records,
+- max 4 windows per benchmark ONNX call,
+- sensitive-character recall: 97.5172%,
+- non-sensitive-character redaction: 0.2422%,
+- full-span recall: 95.8541%,
+- exact-boundary recall: 94.9989%,
+- high-risk full-span recall: 99.0837%,
+- whole-record perfect redaction: 93.5169%,
+- partial/missed: 119 / 264,
+- M0-full/C1-S-not-full: 0,
+- high-risk regressions: 0,
+- C1-S-full/M0-not-full: 33,
+- exact-boundary losses/gains: 6/60.
+
+**Production integration**
+
+- added shared `BioConstrainedSpanDecoder`,
+- added configurable `MlDecoderMode`,
+- dev validation profile selects `BIO_VITERBI_SAFETY_SUPPLEMENT`,
+- code fallback remains `ARGMAX_LEGACY`,
+- production ONNX runtime now uses the same shared decoder implementation as the benchmark,
+- full architecture benchmark now includes `H1_C1S`.
+
+**Adaptive memory/performance refinement**
+
+The 4-window memory cap is now applied only to expanded long-record window segments. Ordinary single-window ML records retain the normal runtime batch size. This is intended to preserve the validated <950 MiB long-window memory target without imposing the same micro-batch limit on ordinary ML traffic.
+
+**Next validation**
+
+1. locked hybrid validation with production decoder mode reported as `BIO_VITERBI_SAFETY_SUPPLEMENT`,
+2. full architecture comparison including `H1_C1S`,
+3. restart memory soak to confirm expanded-window cap remains <=4 and private high-water remains <950 MiB,
+4. performance comparison to confirm adaptive batching recovers C/D throughput.
+
+**Backward-compatibility impact**
+
+Decoder behavior is configurable and legacy argmax remains available for rollback. The development validation profile now opts into the production candidate.
 
 ---
 
