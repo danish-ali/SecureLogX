@@ -9,6 +9,8 @@ import java.util.Properties;
 import java.util.Map;
 import java.util.HashMap;
 
+import com.securelogx.ner.impl.MlDecoderMode;
+
 /**
  * Configuration loader for SecureLogX.
  * Reads properties from classpath: securelogx-<env>.properties
@@ -103,6 +105,15 @@ public class SecureLogXConfig {
             );
         }
         return configured;
+    }
+
+    public MlDecoderMode getMlDecoderMode() {
+        return MlDecoderMode.fromConfig(
+                props.getProperty(
+                        "securelogx.model.decoder",
+                        "ARGMAX_LEGACY"
+                )
+        );
     }
 
     public String getLogFilePath() {
