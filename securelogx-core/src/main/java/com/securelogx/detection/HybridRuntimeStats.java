@@ -7,6 +7,8 @@ public record HybridRuntimeStats(
         long mlInferenceWindows,
         long onnxInferenceCalls,
         long maxInferenceWindowsPerCallObserved,
+        long windowedOnnxInferenceCalls,
+        long maxWindowedInferenceWindowsPerCallObserved,
         long truncatedFailClosedItems
 ) {
     public long totalRoutedItems() {
