@@ -57,6 +57,8 @@ public class ONNXDynamicInferenceEngine {
     private long mlInferenceWindows = 0;
     private long onnxInferenceCalls = 0;
     private long maxInferenceWindowsPerCallObserved = 0;
+    private long windowedOnnxInferenceCalls = 0;
+    private long maxWindowedInferenceWindowsPerCallObserved = 0;
     private long truncatedFailClosedItems = 0;
 
     public ONNXDynamicInferenceEngine(String modelPath, com.securelogx.config.SecureLogXConfig config) throws Exception {
@@ -374,13 +376,35 @@ public class ONNXDynamicInferenceEngine {
                 }
             }
 
-            for (int windowStart = 0;
-                 windowStart < inferenceEncoded.size();
-                 windowStart += maxInferenceWindowsPerBatch) {
-                int windowEnd = Math.min(
-                        windowStart + maxInferenceWindowsPerBatch,
-                        inferenceEncoded.size()
-                );
+            int windowStart = 0;
+            while (windowStart < inferenceEncoded.size()) {
+                int firstOriginalIndex =
+                        inferenceOriginalIndices.get(windowStart);
+                boolean windowExpandedSegment =
+                        windowedOriginalIndices.contains(
+                                firstOriginalIndex
+                        );
+
+                int batchLimit = windowExpandedSegment
+                        ? maxInferenceWindowsPerBatch
+                        : optimalBatchSize;
+
+                int windowEnd = windowStart;
+                while (windowEnd < inferenceEncoded.size()
+                        && windowEnd - windowStart < batchLimit) {
+                    int candidateOriginalIndex =
+                            inferenceOriginalIndices.get(windowEnd);
+                    boolean candidateWindowExpanded =
+                            windowedOriginalIndices.contains(
+                                    candidateOriginalIndex
+                            );
+
+                    if (candidateWindowExpanded
+                            != windowExpandedSegment) {
+                        break;
+                    }
+                    windowEnd++;
+                }
 
                 List<TokenizedInput> windowBatch =
                         inferenceEncoded.subList(windowStart, windowEnd);
@@ -494,6 +518,17 @@ public class ONNXDynamicInferenceEngine {
                         maxInferenceWindowsPerCallObserved,
                         inferenceBatchSize
                 );
+
+                if (windowExpandedSegment) {
+                    windowedOnnxInferenceCalls++;
+                    maxWindowedInferenceWindowsPerCallObserved =
+                            Math.max(
+                                    maxWindowedInferenceWindowsPerCallObserved,
+                                    inferenceBatchSize
+                            );
+                }
+
+                windowStart = windowEnd;
             }
 
             // 4) Merge duplicate/overlapping same-entity spans across all
@@ -848,6 +883,8 @@ public class ONNXDynamicInferenceEngine {
                 mlInferenceWindows,
                 onnxInferenceCalls,
                 maxInferenceWindowsPerCallObserved,
+                windowedOnnxInferenceCalls,
+                maxWindowedInferenceWindowsPerCallObserved,
                 truncatedFailClosedItems
         );
     }
