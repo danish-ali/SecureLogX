@@ -5,6 +5,7 @@ import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtSession;
 import com.securelogx.config.SecureLogXConfig;
 import com.securelogx.ner.TokenizedInput;
+import com.securelogx.ner.impl.BioConstrainedSpanDecoder;
 import com.securelogx.ner.impl.LabelAwareMaskingEngine;
 import com.securelogx.ner.impl.ParallelTokenizer;
 import com.securelogx.util.ArtifactIntegrityVerifier;
@@ -424,7 +425,12 @@ public final class ConstrainedDecodingBenchmark {
             List<PredictedSpan> c1Spans =
                     predicted(predictions.constrainedSpans());
             List<PredictedSpan> c1sSpans =
-                    safetySupplement(c1Spans, m0Spans);
+                    predicted(
+                            BioConstrainedSpanDecoder.safetySupplement(
+                                    predictions.constrainedSpans(),
+                                    predictions.argmaxSpans()
+                            )
+                    );
 
             m0.addRecord(
                     record.text(),
@@ -499,50 +505,6 @@ public final class ConstrainedDecodingBenchmark {
             );
         }
         return List.copyOf(result);
-    }
-
-    private static List<PredictedSpan> safetySupplement(
-            List<PredictedSpan> constrained,
-            List<PredictedSpan> argmax
-    ) {
-        List<PredictedSpan> result =
-                new ArrayList<>(constrained);
-
-        for (PredictedSpan m0Span : argmax) {
-            if (!spanFullyCovered(m0Span, constrained)
-                    && !result.contains(m0Span)) {
-                result.add(m0Span);
-            }
-        }
-
-        result.sort(
-                Comparator.comparingInt(PredictedSpan::start)
-                        .thenComparingInt(PredictedSpan::end)
-                        .thenComparing(PredictedSpan::entityType)
-        );
-        return List.copyOf(result);
-    }
-
-    private static boolean spanFullyCovered(
-            PredictedSpan target,
-            List<PredictedSpan> covering
-    ) {
-        for (int position = target.start();
-             position < target.end();
-             position++) {
-            boolean covered = false;
-            for (PredictedSpan span : covering) {
-                if (span.start() <= position
-                        && span.end() > position) {
-                    covered = true;
-                    break;
-                }
-            }
-            if (!covered) {
-                return false;
-            }
-        }
-        return target.end() > target.start();
     }
 
     private static List<GoldSpan> goldSpans(JSONArray array) {
@@ -687,8 +649,8 @@ public final class ConstrainedDecodingBenchmark {
         private final OrtSession session;
         private final LabelAwareMaskingEngine argmaxDecoder =
                 new LabelAwareMaskingEngine();
-        private final BioConstrainedDecoder constrainedDecoder =
-                new BioConstrainedDecoder();
+        private final BioConstrainedSpanDecoder constrainedDecoder =
+                new BioConstrainedSpanDecoder();
         private final int maxInferenceWindowsPerBatch;
 
         private InferenceSession(
