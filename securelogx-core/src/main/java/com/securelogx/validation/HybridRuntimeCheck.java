@@ -168,11 +168,12 @@ public final class HybridRuntimeCheck {
             );
         }
 
-        if (stats.maxInferenceWindowsPerCallObserved()
+        if (stats.maxWindowedInferenceWindowsPerCallObserved()
                 > config.getMaxInferenceWindowsPerBatch()) {
             throw new IllegalStateException(
-                    "ONNX window micro-batch cap exceeded. observed="
-                            + stats.maxInferenceWindowsPerCallObserved()
+                    "Expanded-window ONNX micro-batch cap exceeded. "
+                            + "observed="
+                            + stats.maxWindowedInferenceWindowsPerCallObserved()
                             + " configured="
                             + config.getMaxInferenceWindowsPerBatch()
             );
@@ -223,7 +224,15 @@ public final class HybridRuntimeCheck {
                 stats.maxInferenceWindowsPerCallObserved()
         );
         result.put(
-                "configured_max_inference_windows_per_batch",
+                "windowed_onnx_inference_calls",
+                stats.windowedOnnxInferenceCalls()
+        );
+        result.put(
+                "max_windowed_inference_windows_per_call_observed",
+                stats.maxWindowedInferenceWindowsPerCallObserved()
+        );
+        result.put(
+                "configured_max_windowed_inference_windows_per_batch",
                 config.getMaxInferenceWindowsPerBatch()
         );
         result.put(
@@ -294,6 +303,14 @@ public final class HybridRuntimeCheck {
         System.out.println(
                 "Max windows per ONNX call: "
                         + stats.maxInferenceWindowsPerCallObserved()
+        );
+        System.out.println(
+                "Expanded-window ONNX calls: "
+                        + stats.windowedOnnxInferenceCalls()
+        );
+        System.out.println(
+                "Max expanded windows per ONNX call: "
+                        + stats.maxWindowedInferenceWindowsPerCallObserved()
                         + "/"
                         + config.getMaxInferenceWindowsPerBatch()
         );
