@@ -241,6 +241,10 @@ public final class HybridRuntimeCheck {
         result.put("fail_closed_policy_enabled", true);
         result.put("model_sha256", config.getModelSha256());
         result.put("tokenizer_sha256", config.getTokenizerSha256());
+        result.put(
+                "ml_decoder_mode",
+                config.getMlDecoderMode().name()
+        );
         result.put("sealed_challenge_inference", false);
 
         Path parent = resultPath.getParent();
@@ -271,6 +275,10 @@ public final class HybridRuntimeCheck {
         );
         System.out.println("Negative IP reference preserved: true");
         System.out.println("Processing failures: 0");
+        System.out.println(
+                "ML decoder mode: "
+                        + config.getMlDecoderMode().name()
+        );
         System.out.println(
                 "Windowed ML items: "
                         + stats.windowedMlItems()
