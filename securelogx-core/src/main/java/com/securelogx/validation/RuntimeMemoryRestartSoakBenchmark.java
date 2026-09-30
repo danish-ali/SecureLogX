@@ -476,6 +476,15 @@ public final class RuntimeMemoryRestartSoakBenchmark {
                 after.maxInferenceWindowsPerCallObserved()
         );
         object.put(
+                "windowed_onnx_inference_calls",
+                after.windowedOnnxInferenceCalls()
+                        - before.windowedOnnxInferenceCalls()
+        );
+        object.put(
+                "max_windowed_inference_windows_per_call_observed",
+                after.maxWindowedInferenceWindowsPerCallObserved()
+        );
+        object.put(
                 "truncated_fail_closed_records",
                 after.truncatedFailClosedItems()
                         - before.truncatedFailClosedItems()
