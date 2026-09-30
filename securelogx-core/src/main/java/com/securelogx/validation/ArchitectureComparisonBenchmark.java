@@ -12,6 +12,7 @@ import com.securelogx.detection.HybridContextResolver;
 import com.securelogx.detection.ResolutionAction;
 import com.securelogx.detection.ResolvedSpan;
 import com.securelogx.ner.TokenizedInput;
+import com.securelogx.ner.impl.BioConstrainedSpanDecoder;
 import com.securelogx.ner.impl.LabelAwareMaskingEngine;
 import com.securelogx.ner.impl.ParallelTokenizer;
 import com.securelogx.util.ArtifactIntegrityVerifier;
@@ -111,7 +112,11 @@ public final class ArchitectureComparisonBenchmark {
         ArchitectureMetrics d0 = new ArchitectureMetrics("D0");
         ArchitectureMetrics m0 = new ArchitectureMetrics("M0");
         ArchitectureMetrics h1 = new ArchitectureMetrics("H1");
+        ArchitectureMetrics h1C1s =
+                new ArchitectureMetrics("H1_C1S");
         HybridRegressionDiagnostics regressionDiagnostics =
+                new HybridRegressionDiagnostics();
+        HybridRegressionDiagnostics c1sRegressionDiagnostics =
                 new HybridRegressionDiagnostics();
 
         Map<String, SourceMetrics> bySource = new LinkedHashMap<>();
@@ -179,8 +184,10 @@ public final class ArchitectureComparisonBenchmark {
                                             d0,
                                             m0,
                                             h1,
+                                            h1C1s,
                                             sourceMetrics,
                                             regressionDiagnostics,
+                                            c1sRegressionDiagnostics,
                                             windowingDiagnostics
                                     );
                             h1MlRecords += batchResult.h1MlRecords();
@@ -204,8 +211,10 @@ public final class ArchitectureComparisonBenchmark {
                                         d0,
                                         m0,
                                         h1,
+                                        h1C1s,
                                         sourceMetrics,
                                         regressionDiagnostics,
+                                        c1sRegressionDiagnostics,
                                         windowingDiagnostics
                                 );
                         h1MlRecords += batchResult.h1MlRecords();
@@ -221,6 +230,7 @@ public final class ArchitectureComparisonBenchmark {
         d0.setMlInvocation(0, scoredRecords);
         m0.setMlInvocation(scoredRecords, scoredRecords);
         h1.setMlInvocation(h1MlRecords, scoredRecords);
+        h1C1s.setMlInvocation(h1MlRecords, scoredRecords);
 
         JSONObject result = new JSONObject();
         result.put(
@@ -257,6 +267,7 @@ public final class ArchitectureComparisonBenchmark {
         architectures.put("D0", d0.toJson());
         architectures.put("M0", m0.toJson());
         architectures.put("H1", h1.toJson());
+        architectures.put("H1_C1S", h1C1s.toJson());
 
         JSONObject h2 = new JSONObject();
         h2.put("status", "EXPERIMENTAL_NOT_IMPLEMENTED");
@@ -270,6 +281,10 @@ public final class ArchitectureComparisonBenchmark {
         result.put(
                 "m0_h1_regression_diagnostics",
                 regressionDiagnostics.toJson()
+        );
+        result.put(
+                "m0_h1_c1s_regression_diagnostics",
+                c1sRegressionDiagnostics.toJson()
         );
         result.put(
                 "windowing_diagnostics",
@@ -295,7 +310,11 @@ public final class ArchitectureComparisonBenchmark {
         printSummary(d0);
         printSummary(m0);
         printSummary(h1);
+        printSummary(h1C1s);
         printRegressionDiagnostics(regressionDiagnostics);
+        System.out.println();
+        System.out.println("M0 -> H1_C1S regression diagnostics");
+        printRegressionDiagnostics(c1sRegressionDiagnostics);
         System.out.println();
         System.out.println("Windowed cohort");
         System.out.println("  input records: " + inputRecords);
@@ -340,8 +359,10 @@ public final class ArchitectureComparisonBenchmark {
             ArchitectureMetrics d0,
             ArchitectureMetrics m0,
             ArchitectureMetrics h1,
+            ArchitectureMetrics h1C1s,
             SourceMetrics sourceMetrics,
             HybridRegressionDiagnostics regressionDiagnostics,
+            HybridRegressionDiagnostics c1sRegressionDiagnostics,
             WindowingDiagnostics windowingDiagnostics
     ) throws Exception {
         for (RecordItem record : batch) {
@@ -366,7 +387,9 @@ public final class ArchitectureComparisonBenchmark {
         InferenceBatchResult inferenceResult =
                 inference.infer(texts, tokenizer);
         List<List<LabelAwareMaskingEngine.EntitySpan>> mlPredictions =
-                inferenceResult.predictions();
+                inferenceResult.argmaxPredictions();
+        List<List<LabelAwareMaskingEngine.EntitySpan>> c1sPredictions =
+                inferenceResult.c1sPredictions();
 
         long h1MlRecords = 0;
 
@@ -374,6 +397,8 @@ public final class ArchitectureComparisonBenchmark {
             RecordItem record = batch.get(i);
             List<LabelAwareMaskingEngine.EntitySpan> mlSpans =
                     mlPredictions.get(i);
+            List<LabelAwareMaskingEngine.EntitySpan> c1sMlSpans =
+                    c1sPredictions.get(i);
 
             DeterministicScanResult scan =
                     detector.scan(record.text());
@@ -384,17 +409,26 @@ public final class ArchitectureComparisonBenchmark {
             List<PredictedSpan> m0Spans = mlMaskSpans(mlSpans);
 
             List<LabelAwareMaskingEngine.EntitySpan> h1MlSpans;
+            List<LabelAwareMaskingEngine.EntitySpan> h1C1sMlSpans;
             if (scan.requiresMl()) {
                 h1MlRecords++;
                 h1MlSpans = mlSpans;
+                h1C1sMlSpans = c1sMlSpans;
             } else {
                 h1MlSpans = List.of();
+                h1C1sMlSpans = List.of();
             }
 
             List<PredictedSpan> h1Spans = resolvedMaskSpans(
                     resolver.resolve(
                             scan.evidence(),
                             h1MlSpans
+                    )
+            );
+            List<PredictedSpan> h1C1sSpans = resolvedMaskSpans(
+                    resolver.resolve(
+                            scan.evidence(),
+                            h1C1sMlSpans
                     )
             );
 
@@ -406,10 +440,23 @@ public final class ArchitectureComparisonBenchmark {
                     h1Spans,
                     scan.evidence()
             );
+            c1sRegressionDiagnostics.compare(
+                    source,
+                    record.text(),
+                    record.gold(),
+                    m0Spans,
+                    h1C1sSpans,
+                    scan.evidence()
+            );
 
             d0.addRecord(record.text(), record.gold(), d0Spans);
             m0.addRecord(record.text(), record.gold(), m0Spans);
             h1.addRecord(record.text(), record.gold(), h1Spans);
+            h1C1s.addRecord(
+                    record.text(),
+                    record.gold(),
+                    h1C1sSpans
+            );
 
             sourceMetrics.d0.addRecord(
                     record.text(),
@@ -425,6 +472,11 @@ public final class ArchitectureComparisonBenchmark {
                     record.text(),
                     record.gold(),
                     h1Spans
+            );
+            sourceMetrics.h1C1s.addRecord(
+                    record.text(),
+                    record.gold(),
+                    h1C1sSpans
             );
 
             sourceMetrics.records++;
@@ -646,34 +698,43 @@ public final class ArchitectureComparisonBenchmark {
         private final OrtEnvironment env;
         private final OrtSession session;
         private final LabelAwareMaskingEngine decoder;
+        private final BioConstrainedSpanDecoder constrainedDecoder;
         private final int maxSequenceLength;
+        private final int maxInferenceWindowsPerBatch;
 
         private ValidationInferenceSession(
                 SecureLogXConfig config
         ) throws Exception {
             env = OrtEnvironment.getEnvironment();
-            OrtSession.SessionOptions options =
-                    new OrtSession.SessionOptions();
 
-            if (config.isCpuMultithreadingEnabled()) {
-                options.setIntraOpNumThreads(
-                        Math.max(
-                                1,
-                                Math.min(
-                                        config.getMaxCpuThreads(),
-                                        Runtime.getRuntime()
-                                                .availableProcessors()
-                                )
-                        )
+            OrtSession createdSession;
+            try (OrtSession.SessionOptions options =
+                         new OrtSession.SessionOptions()) {
+                if (config.isCpuMultithreadingEnabled()) {
+                    options.setIntraOpNumThreads(
+                            Math.max(
+                                    1,
+                                    Math.min(
+                                            config.getMaxCpuThreads(),
+                                            Runtime.getRuntime()
+                                                    .availableProcessors()
+                                    )
+                            )
+                    );
+                }
+
+                createdSession = env.createSession(
+                        config.getModelPath().replace("\\", "/"),
+                        options
                 );
             }
 
-            session = env.createSession(
-                    config.getModelPath().replace("\\", "/"),
-                    options
-            );
+            session = createdSession;
             decoder = new LabelAwareMaskingEngine();
+            constrainedDecoder = new BioConstrainedSpanDecoder();
             maxSequenceLength = config.getMaxSequenceLength();
+            maxInferenceWindowsPerBatch =
+                    config.getMaxInferenceWindowsPerBatch();
         }
 
         private InferenceBatchResult infer(
@@ -681,7 +742,11 @@ public final class ArchitectureComparisonBenchmark {
                 ParallelTokenizer tokenizer
         ) throws Exception {
             if (texts.isEmpty()) {
-                return new InferenceBatchResult(List.of(), 0);
+                return new InferenceBatchResult(
+                        List.of(),
+                        List.of(),
+                        0
+                );
             }
 
             List<TokenizedInput> flatWindows = new ArrayList<>();
@@ -714,17 +779,23 @@ public final class ArchitectureComparisonBenchmark {
                 }
             }
 
-            List<List<LabelAwareMaskingEngine.EntitySpan>> predictions =
+            List<List<LabelAwareMaskingEngine.EntitySpan>>
+                    argmaxPredictions =
                     new ArrayList<>(texts.size());
+            List<List<LabelAwareMaskingEngine.EntitySpan>>
+                    constrainedPredictions =
+                    new ArrayList<>(texts.size());
+
             for (int i = 0; i < texts.size(); i++) {
-                predictions.add(new ArrayList<>());
+                argmaxPredictions.add(new ArrayList<>());
+                constrainedPredictions.add(new ArrayList<>());
             }
 
             for (int chunkStart = 0;
                  chunkStart < flatWindows.size();
-                 chunkStart += INFERENCE_BATCH_SIZE) {
+                 chunkStart += maxInferenceWindowsPerBatch) {
                 int chunkEnd = Math.min(
-                        chunkStart + INFERENCE_BATCH_SIZE,
+                        chunkStart + maxInferenceWindowsPerBatch,
                         flatWindows.size()
                 );
                 List<TokenizedInput> chunk =
@@ -776,7 +847,7 @@ public final class ArchitectureComparisonBenchmark {
                             TokenizedInput window = chunk.get(localIndex);
 
                             List<LabelAwareMaskingEngine.EntitySpan>
-                                    windowSpans =
+                                    argmaxWindowSpans =
                                     decoder.decodeSpans(
                                             texts.get(originalIndex),
                                             new float[][][]{
@@ -784,23 +855,51 @@ public final class ArchitectureComparisonBenchmark {
                                             },
                                             window.getOffsets()
                                     );
+                            BioConstrainedSpanDecoder.DecodeResult
+                                    constrainedResult =
+                                    constrainedDecoder.decode(
+                                            texts.get(originalIndex),
+                                            logits[localIndex],
+                                            window.getOffsets()
+                                    );
 
-                            predictions.get(originalIndex)
-                                    .addAll(windowSpans);
+                            argmaxPredictions.get(originalIndex)
+                                    .addAll(argmaxWindowSpans);
+                            constrainedPredictions.get(originalIndex)
+                                    .addAll(constrainedResult.spans());
                         }
                     }
                 }
             }
 
-            List<List<LabelAwareMaskingEngine.EntitySpan>> merged =
+            List<List<LabelAwareMaskingEngine.EntitySpan>>
+                    mergedArgmax =
                     new ArrayList<>(texts.size());
-            for (List<LabelAwareMaskingEngine.EntitySpan> spans
-                    : predictions) {
-                merged.add(mergeWindowSpans(spans));
+            List<List<LabelAwareMaskingEngine.EntitySpan>>
+                    mergedC1s =
+                    new ArrayList<>(texts.size());
+
+            for (int i = 0; i < texts.size(); i++) {
+                List<LabelAwareMaskingEngine.EntitySpan> argmaxSpans =
+                        mergeWindowSpans(argmaxPredictions.get(i));
+                List<LabelAwareMaskingEngine.EntitySpan>
+                        constrainedSpans =
+                        mergeWindowSpans(
+                                constrainedPredictions.get(i)
+                        );
+
+                mergedArgmax.add(argmaxSpans);
+                mergedC1s.add(
+                        BioConstrainedSpanDecoder.safetySupplement(
+                                constrainedSpans,
+                                argmaxSpans
+                        )
+                );
             }
 
             return new InferenceBatchResult(
-                    List.copyOf(merged),
+                    List.copyOf(mergedArgmax),
+                    List.copyOf(mergedC1s),
                     flatWindows.size()
             );
         }
@@ -1441,11 +1540,15 @@ public final class ArchitectureComparisonBenchmark {
     }
 
     private record InferenceBatchResult(
-            List<List<LabelAwareMaskingEngine.EntitySpan>> predictions,
+            List<List<LabelAwareMaskingEngine.EntitySpan>>
+                    argmaxPredictions,
+            List<List<LabelAwareMaskingEngine.EntitySpan>>
+                    c1sPredictions,
             long inferenceWindows
     ) {
         private InferenceBatchResult {
-            predictions = List.copyOf(predictions);
+            argmaxPredictions = List.copyOf(argmaxPredictions);
+            c1sPredictions = List.copyOf(c1sPredictions);
         }
     }
 
@@ -1460,11 +1563,14 @@ public final class ArchitectureComparisonBenchmark {
                 new ArchitectureMetrics("M0");
         private final ArchitectureMetrics h1 =
                 new ArchitectureMetrics("H1");
+        private final ArchitectureMetrics h1C1s =
+                new ArchitectureMetrics("H1_C1S");
 
         private JSONObject toJson() {
             d0.setMlInvocation(0, records);
             m0.setMlInvocation(records, records);
             h1.setMlInvocation(h1MlRecords, records);
+            h1C1s.setMlInvocation(h1MlRecords, records);
 
             JSONObject object = new JSONObject();
             object.put("input_records", inputRecords);
@@ -1474,6 +1580,7 @@ public final class ArchitectureComparisonBenchmark {
             object.put("D0", d0.toJson());
             object.put("M0", m0.toJson());
             object.put("H1", h1.toJson());
+            object.put("H1_C1S", h1C1s.toJson());
             return object;
         }
     }
