@@ -1,36 +1,83 @@
 package com.securelogx.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.securelogx.model.LogLevel;
 import com.securelogx.util.CachedClock;
-import java.util.UUID;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Immutable SecureLogX event envelope.
+ *
+ * Severity is preserved from the source logging framework. Protection is not
+ * inferred from severity; standard INFO/WARN/ERROR/etc. events are eligible
+ * for SecureLogX inspection just like the legacy SECURE level.
+ */
 public class LogEvent {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String PROCESS_INSTANCE_ID =
+            UUID.randomUUID().toString();
+
+    private static final Pattern RAW_PATTERN = Pattern.compile(
+            "timestamp=(\\S+) level=(\\S+) traceId=(\\S+) seq=(\\d+)"
+                    + "(?: instanceId=(\\S+))? message=\\\"(.*)\\\""
+    );
+
     private final String message;
     private final LogLevel level;
     private final boolean showLastFour;
     private final String traceId;
-    private final int sequenceNumber;
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-    private long timestamp;
-    private String id;
+    private final long sequenceNumber;
+    private final long eventTimestamp;
+    private final long ingestTimestamp;
+    private final String id;
 
-    public LogEvent(String message, LogLevel level, boolean showLastFour, String traceId, int sequenceNumber) {
+    /**
+     * Compatibility constructor. The event timestamp is the current time.
+     */
+    public LogEvent(
+            String message,
+            LogLevel level,
+            boolean showLastFour,
+            String traceId,
+            long sequenceNumber
+    ) {
+        this(
+                message,
+                level,
+                showLastFour,
+                traceId,
+                sequenceNumber,
+                CachedClock.now()
+        );
+    }
+
+    /**
+     * Constructor for appender/framework integration where the original event
+     * timestamp is already known.
+     */
+    public LogEvent(
+            String message,
+            LogLevel level,
+            boolean showLastFour,
+            String traceId,
+            long sequenceNumber,
+            long eventTimestamp
+    ) {
         this.message = message;
         this.level = level;
         this.showLastFour = showLastFour;
         this.traceId = traceId;
         this.sequenceNumber = sequenceNumber;
-        this.timestamp = CachedClock.now(); // 🔥 Efficient timestamping
-        this.id = level + "-" + timestamp + "-" + sequenceNumber; // Stable unique ID
-
+        this.eventTimestamp = eventTimestamp;
+        this.ingestTimestamp = CachedClock.now();
+        this.id = PROCESS_INSTANCE_ID + "-" + sequenceNumber;
     }
-
-    private static final Pattern RAW_PATTERN = Pattern.compile(
-            "timestamp=\\S+ level=(\\S+) traceId=(\\S+) seq=(\\d+) message=\\\"(.*)\\\""
-    );
 
     public String getMessage() {
         return message;
@@ -44,21 +91,65 @@ public class LogEvent {
         return showLastFour;
     }
 
+    /**
+     * All application severities are eligible for protection. H1 determines
+     * whether the record is deterministic-only or requires ML.
+     */
+    public boolean requiresProtection() {
+        return true;
+    }
+
+    /**
+     * Compatibility alias retained for older integrations.
+     */
+    @Deprecated(forRemoval = false)
     public boolean requiresNER() {
-        return level == LogLevel.SECURE;
+        return requiresProtection();
     }
 
     public String getTraceId() {
         return traceId;
     }
 
-    public int getSequenceNumber() {
+    public long getSequenceNumber() {
         return sequenceNumber;
     }
 
-    public long getTimestamp() { return timestamp; }
+    /**
+     * Backward-compatible timestamp accessor. This is now the original event
+     * timestamp rather than the later masking/write completion time.
+     */
+    public long getTimestamp() {
+        return eventTimestamp;
+    }
 
-    public String getId() { return id; }
+    public long getEventTimestamp() {
+        return eventTimestamp;
+    }
+
+    public long getIngestTimestamp() {
+        return ingestTimestamp;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public String getInstanceId() {
+        return PROCESS_INSTANCE_ID;
+    }
+
+    public String formatWithMessage(String outputMessage) {
+        return String.format(
+                "timestamp=%s level=%s traceId=%s seq=%d instanceId=%s message=\\\"%s\\\"",
+                Instant.ofEpochMilli(eventTimestamp),
+                level,
+                traceId,
+                sequenceNumber,
+                PROCESS_INSTANCE_ID,
+                outputMessage
+        );
+    }
 
     public String toJson() {
         try {
@@ -77,24 +168,47 @@ public class LogEvent {
     }
 
     public static LogEvent fromRaw(String raw) {
-        Matcher m = RAW_PATTERN.matcher(raw);
-        if (m.matches()) {
-            LogLevel lvl = LogLevel.valueOf(m.group(1));
-            String trace = m.group(2);
-            int seq = Integer.parseInt(m.group(3));
-            String msg = m.group(4);
-            return new LogEvent(msg, lvl, false, trace, seq);
-        } else {
-            // Fallback: treat the entire raw string as the message
+        Matcher matcher = RAW_PATTERN.matcher(raw);
+        if (matcher.matches()) {
+            long timestamp = parseTimestampMillis(matcher.group(1));
+            LogLevel level = LogLevel.valueOf(matcher.group(2));
+            String traceId = matcher.group(3);
+            long sequence = Long.parseLong(matcher.group(4));
+            String message = matcher.group(6);
+
             return new LogEvent(
-                    raw,
-                    LogLevel.INFO,
+                    message,
+                    level,
                     false,
-                    UUID.randomUUID().toString(),
-                    0
+                    traceId,
+                    sequence,
+                    timestamp
             );
         }
+
+        // Compatibility fallback for unstructured input. A proper SecureLogX
+        // ingress path should replace sequence 0 with a process-wide sequence.
+        return new LogEvent(
+                raw,
+                LogLevel.INFO,
+                false,
+                UUID.randomUUID().toString(),
+                0L
+        );
     }
 
-
+    private static long parseTimestampMillis(String rawTimestamp) {
+        try {
+            return Instant.parse(rawTimestamp).toEpochMilli();
+        } catch (Exception ignored) {
+            try {
+                return LocalDateTime.parse(rawTimestamp)
+                        .atZone(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli();
+            } catch (Exception ignoredAgain) {
+                return CachedClock.now();
+            }
+        }
+    }
 }
