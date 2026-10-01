@@ -239,18 +239,18 @@ public class SecureLogX {
         // System.out.println("[DEBUG] Entering process(), mode=" + mode);
         if (mode == Mode.KAFKA) {
             // System.out.println("[DEBUG] In KAFKA branch, about to sendRaw");
-            kafkaProducer.sendRaw(formatLog(log, ts, log.getMessage()));
+            kafkaProducer.sendRaw(formatLog(log, log.getMessage()));
             // System.out.println("[DEBUG] After sendRaw, returning");
             return;
         }
 
-        boolean needMask = log.requiresNER()
+        boolean needMask = log.requiresProtection()
                 && config.isMaskingEnabled()
                 && config.shouldMaskInCurrentEnv();
 
         // No masking → immediate write
         if (!needMask) {
-            writeLine(formatLog(log, ts, log.getMessage()));
+            writeLine(formatLog(log, log.getMessage()));
             return;
         }
 
