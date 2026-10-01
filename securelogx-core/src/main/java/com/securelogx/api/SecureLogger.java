@@ -49,6 +49,35 @@ public class SecureLogger {
         }
     }
 
+    /**
+     * Appender/framework ingress preserving source severity, trace ID, and
+     * original event timestamp. SecureLogX assigns the process-wide sequence.
+     */
+    public static void log(
+            LogLevel level,
+            String message,
+            boolean showLastFour,
+            String traceId,
+            long eventTimestamp
+    ) {
+        SecureLogX engine = getEngineInstance();
+        if (engine != null) {
+            engine.process(
+                    message,
+                    level,
+                    showLastFour,
+                    traceId,
+                    eventTimestamp
+            );
+        } else {
+            System.err.println(
+                    "[SecureLogger] Skipping log "
+                            + "(engine not initialized): "
+                            + message
+            );
+        }
+    }
+
     public static SecureLogX getEngine() {
         return getEngineInstance();
     }
