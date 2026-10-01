@@ -10,6 +10,7 @@ import com.securelogx.util.ArtifactIntegrityVerifier;
 import org.json.JSONObject;
 
 import java.nio.file.Files;
+import java.time.Instant;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -69,15 +70,33 @@ public final class HybridRuntimeCheck {
         messages.add(longMessage.toString());
         int windowedCaseIndex = messages.size() - 1;
 
+        List<LogLevel> levels = List.of(
+                LogLevel.INFO,
+                LogLevel.WARN,
+                LogLevel.ERROR,
+                LogLevel.DEBUG,
+                LogLevel.INFO,
+                LogLevel.WARN,
+                LogLevel.DEBUG,
+                LogLevel.INFO,
+                LogLevel.WARN,
+                LogLevel.ERROR,
+                LogLevel.INFO
+        );
+
+        long baseEventTimestamp =
+                Instant.parse("2026-10-01T10:00:00Z").toEpochMilli();
+
         List<LogEvent> events = new ArrayList<>();
         for (int i = 0; i < messages.size(); i++) {
             events.add(
                     new LogEvent(
                             messages.get(i),
-                            LogLevel.SECURE,
+                            levels.get(i),
                             false,
                             "hybrid-runtime-check",
-                            i + 1
+                            i + 1L,
+                            baseEventTimestamp + i
                     )
             );
         }
@@ -98,10 +117,51 @@ public final class HybridRuntimeCheck {
             );
         }
 
-        for (String output : outputs) {
+        for (int i = 0; i < outputs.size(); i++) {
+            String output = outputs.get(i);
             if (output.contains("[SECURELOGX_REDACTED_PROCESSING_FAILURE]")) {
                 throw new IllegalStateException(
                         "Hybrid runtime entered fail-closed fallback unexpectedly"
+                );
+            }
+
+            String expectedLevel = "level=" + levels.get(i).name();
+            if (!output.contains(expectedLevel)) {
+                throw new IllegalStateException(
+                        "Source log severity was not preserved. expected="
+                                + expectedLevel
+                                + " output="
+                                + output
+                );
+            }
+
+            String expectedSequence = "seq=" + (i + 1L);
+            if (!output.contains(expectedSequence)) {
+                throw new IllegalStateException(
+                        "Log sequence was not preserved. expected="
+                                + expectedSequence
+                                + " output="
+                                + output
+                );
+            }
+
+            String expectedTimestamp =
+                    "timestamp="
+                            + Instant.ofEpochMilli(
+                                    baseEventTimestamp + i
+                            );
+            if (!output.contains(expectedTimestamp)) {
+                throw new IllegalStateException(
+                        "Original event timestamp was not preserved. expected="
+                                + expectedTimestamp
+                                + " output="
+                                + output
+                );
+            }
+
+            if (!output.contains("instanceId=")) {
+                throw new IllegalStateException(
+                        "SecureLogX instanceId missing from output envelope"
                 );
             }
         }
@@ -206,6 +266,11 @@ public final class HybridRuntimeCheck {
         result.put("ml_inference_items", stats.mlInferenceItems());
         result.put("ml_invocation_rate", stats.mlInvocationRate());
         result.put("negative_ip_reference_preserved", true);
+        result.put("standard_log_levels_protected", true);
+        result.put("source_severity_preserved", true);
+        result.put("event_timestamp_preserved", true);
+        result.put("sequence_preserved", true);
+        result.put("instance_id_present", true);
         result.put("processing_failures", 0);
         result.put(
                 "windowed_ml_items",
@@ -283,6 +348,11 @@ public final class HybridRuntimeCheck {
                         + String.format("%.2f%%", stats.mlInvocationRate() * 100.0)
         );
         System.out.println("Negative IP reference preserved: true");
+        System.out.println("Standard INFO/WARN/ERROR/DEBUG protected: true");
+        System.out.println("Source severity preserved: true");
+        System.out.println("Event timestamp preserved: true");
+        System.out.println("Sequence metadata preserved: true");
+        System.out.println("Instance ID present: true");
         System.out.println("Processing failures: 0");
         System.out.println(
                 "ML decoder mode: "
