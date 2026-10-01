@@ -141,7 +141,7 @@ public class LogEvent {
 
     public String formatWithMessage(String outputMessage) {
         return String.format(
-                "timestamp=%s level=%s traceId=%s seq=%d instanceId=%s message=\\\"%s\\\"",
+                "timestamp=%s level=%s traceId=%s seq=%d instanceId=%s message=\"%s\"",
                 Instant.ofEpochMilli(eventTimestamp),
                 level,
                 traceId,
