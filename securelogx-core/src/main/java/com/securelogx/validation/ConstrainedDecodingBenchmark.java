@@ -804,7 +804,7 @@ public final class ConstrainedDecodingBenchmark {
                                             tokenized.getOffsets()
                                     );
 
-                            BioConstrainedDecoder.DecodeResult
+                            BioConstrainedSpanDecoder.DecodeResult
                                     constrained =
                                     constrainedDecoder.decode(
                                             text,
