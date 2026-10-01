@@ -43,7 +43,7 @@ import java.util.Map;
 public final class PerformanceComparisonBenchmark {
 
     private static final int DEFAULT_SAMPLE_PER_SCENARIO = 160;
-    private static final int DEFAULT_ITERATIONS = 3;
+    private static final int DEFAULT_ITERATIONS = 6;
     private static final int BATCH_SIZE = 32;
     private static final int WARMUP_RECORDS = 32;
     private static final int WINDOW_OVERLAP_CONTENT_TOKENS = 64;
@@ -67,9 +67,15 @@ public final class PerformanceComparisonBenchmark {
                     "samplePerScenario must be at least " + BATCH_SIZE
             );
         }
-        if (iterations < 1) {
+        if (iterations < 2) {
             throw new IllegalArgumentException(
-                    "iterations must be at least 1"
+                    "iterations must be at least 2"
+            );
+        }
+        if (iterations % 2 != 0) {
+            throw new IllegalArgumentException(
+                    "iterations must be even so M0 and H1 execute first "
+                            + "the same number of times"
             );
         }
 
@@ -137,19 +143,17 @@ public final class PerformanceComparisonBenchmark {
                 String scenarioId = entry.getKey();
                 List<String> messages = entry.getValue();
 
-                Measurement m0Measurement = measure(
-                        messages,
-                        iterations,
-                        m0::run
-                );
-
                 HybridRuntimeStats before = h1.stats();
-                Measurement h1Measurement = measure(
+                PairedMeasurement paired = measureInterleaved(
                         messages,
                         iterations,
+                        m0::run,
                         h1::run
                 );
                 HybridRuntimeStats after = h1.stats();
+
+                Measurement m0Measurement = paired.m0();
+                Measurement h1Measurement = paired.h1();
 
                 long h1Deterministic = after.deterministicOnlyItems()
                         - before.deterministicOnlyItems();
@@ -180,6 +184,10 @@ public final class PerformanceComparisonBenchmark {
                                 m0Measurement.totalNanos,
                                 h1Measurement.totalNanos
                         )
+                );
+                scenario.put(
+                        "interleaved_measurement",
+                        paired.toJson()
                 );
                 scenario.put("h1_deterministic_records", h1Deterministic);
                 scenario.put("h1_ml_records", h1Ml);
@@ -236,6 +244,8 @@ public final class PerformanceComparisonBenchmark {
                     "notes",
                     new JSONArray(List.of(
                             "Warm-up is excluded from measured samples.",
+                            "Measured rounds alternate execution order: M0->H1, then H1->M0, reducing JIT/thermal/order bias.",
+                            "Default measured rounds are even so each runner executes first equally often.",
                             "Batch latency percentiles are computed across 32-record benchmark calls.",
                             "M0 and H1 use the same frozen model/tokenizer and overlapping-window policy.",
                             "This benchmark does not yet report allocation rate or peak RSS; use JFR/JMH/profiler work in the later performance-hardening phase."
@@ -271,6 +281,38 @@ public final class PerformanceComparisonBenchmark {
             h1.close();
             m0.close();
         }
+    }
+
+    private static PairedMeasurement measureInterleaved(
+            List<String> messages,
+            int rounds,
+            BatchRunner m0Runner,
+            BatchRunner h1Runner
+    ) throws Exception {
+        List<Measurement> m0Rounds = new ArrayList<>(rounds);
+        List<Measurement> h1Rounds = new ArrayList<>(rounds);
+        List<String> order = new ArrayList<>(rounds);
+
+        for (int round = 0; round < rounds; round++) {
+            boolean m0First = round % 2 == 0;
+            if (m0First) {
+                order.add("M0->H1");
+                m0Rounds.add(measure(messages, 1, m0Runner));
+                h1Rounds.add(measure(messages, 1, h1Runner));
+            } else {
+                order.add("H1->M0");
+                h1Rounds.add(measure(messages, 1, h1Runner));
+                m0Rounds.add(measure(messages, 1, m0Runner));
+            }
+        }
+
+        return new PairedMeasurement(
+                Measurement.combine(m0Rounds),
+                Measurement.combine(h1Rounds),
+                List.copyOf(m0Rounds),
+                List.copyOf(h1Rounds),
+                List.copyOf(order)
+        );
     }
 
     private static Measurement measure(
@@ -452,6 +494,29 @@ public final class PerformanceComparisonBenchmark {
             return nanosToMillis(ordered.get(index));
         }
 
+        private static Measurement combine(
+                List<Measurement> measurements
+        ) {
+            long records = 0;
+            long totalNanos = 0;
+            long checksum = 0;
+            List<Long> batchNanos = new ArrayList<>();
+
+            for (Measurement measurement : measurements) {
+                records += measurement.records;
+                totalNanos += measurement.totalNanos;
+                checksum += measurement.checksum;
+                batchNanos.addAll(measurement.batchNanos);
+            }
+
+            return new Measurement(
+                    records,
+                    totalNanos,
+                    batchNanos,
+                    checksum
+            );
+        }
+
         private JSONObject toJson() {
             JSONObject object = new JSONObject();
             object.put("records", records);
@@ -463,6 +528,154 @@ public final class PerformanceComparisonBenchmark {
             object.put("batch_p99_ms", percentileMillis(0.99));
             object.put("output_checksum", checksum);
             return object;
+        }
+    }
+
+    private record PairedMeasurement(
+            Measurement m0,
+            Measurement h1,
+            List<Measurement> m0Rounds,
+            List<Measurement> h1Rounds,
+            List<String> order
+    ) {
+        private JSONObject toJson() {
+            JSONObject object = new JSONObject();
+            JSONArray rounds = new JSONArray();
+
+            for (int i = 0; i < order.size(); i++) {
+                Measurement m0Round = m0Rounds.get(i);
+                Measurement h1Round = h1Rounds.get(i);
+
+                JSONObject round = new JSONObject();
+                round.put("round", i + 1);
+                round.put("order", order.get(i));
+                round.put(
+                        "m0_throughput_records_per_second",
+                        m0Round.throughput()
+                );
+                round.put(
+                        "h1_throughput_records_per_second",
+                        h1Round.throughput()
+                );
+                round.put(
+                        "speedup_m0_over_h1",
+                        ratio(
+                                m0Round.totalNanos,
+                                h1Round.totalNanos
+                        )
+                );
+                rounds.put(round);
+            }
+
+            object.put("rounds", rounds);
+            object.put(
+                    "m0_throughput_coefficient_of_variation",
+                    coefficientOfVariation(m0Rounds)
+            );
+            object.put(
+                    "h1_throughput_coefficient_of_variation",
+                    coefficientOfVariation(h1Rounds)
+            );
+            object.put(
+                    "median_round_speedup",
+                    medianRoundSpeedup(m0Rounds, h1Rounds)
+            );
+            object.put(
+                    "min_round_speedup",
+                    minRoundSpeedup(m0Rounds, h1Rounds)
+            );
+            object.put(
+                    "max_round_speedup",
+                    maxRoundSpeedup(m0Rounds, h1Rounds)
+            );
+            return object;
+        }
+
+        private static double coefficientOfVariation(
+                List<Measurement> rounds
+        ) {
+            if (rounds.isEmpty()) {
+                return 0.0;
+            }
+
+            double mean = rounds.stream()
+                    .mapToDouble(Measurement::throughput)
+                    .average()
+                    .orElse(0.0);
+            if (mean == 0.0) {
+                return 0.0;
+            }
+
+            double variance = rounds.stream()
+                    .mapToDouble(Measurement::throughput)
+                    .map(value -> {
+                        double delta = value - mean;
+                        return delta * delta;
+                    })
+                    .average()
+                    .orElse(0.0);
+
+            return Math.sqrt(variance) / mean;
+        }
+
+        private static double medianRoundSpeedup(
+                List<Measurement> m0Rounds,
+                List<Measurement> h1Rounds
+        ) {
+            List<Double> ratios =
+                    roundSpeedups(m0Rounds, h1Rounds);
+            ratios.sort(Double::compareTo);
+            int size = ratios.size();
+            if (size == 0) {
+                return 0.0;
+            }
+            if (size % 2 == 1) {
+                return ratios.get(size / 2);
+            }
+            return (
+                    ratios.get(size / 2 - 1)
+                            + ratios.get(size / 2)
+            ) / 2.0;
+        }
+
+        private static double minRoundSpeedup(
+                List<Measurement> m0Rounds,
+                List<Measurement> h1Rounds
+        ) {
+            return roundSpeedups(m0Rounds, h1Rounds)
+                    .stream()
+                    .mapToDouble(Double::doubleValue)
+                    .min()
+                    .orElse(0.0);
+        }
+
+        private static double maxRoundSpeedup(
+                List<Measurement> m0Rounds,
+                List<Measurement> h1Rounds
+        ) {
+            return roundSpeedups(m0Rounds, h1Rounds)
+                    .stream()
+                    .mapToDouble(Double::doubleValue)
+                    .max()
+                    .orElse(0.0);
+        }
+
+        private static List<Double> roundSpeedups(
+                List<Measurement> m0Rounds,
+                List<Measurement> h1Rounds
+        ) {
+            List<Double> result =
+                    new ArrayList<>(m0Rounds.size());
+
+            for (int i = 0; i < m0Rounds.size(); i++) {
+                result.add(
+                        ratio(
+                                m0Rounds.get(i).totalNanos,
+                                h1Rounds.get(i).totalNanos
+                        )
+                );
+            }
+            return result;
         }
     }
 
