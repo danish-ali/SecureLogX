@@ -682,7 +682,7 @@ public final class PerformanceComparisonBenchmark {
     private static final class HybridRunner implements AutoCloseable {
         private final ParallelTokenizer tokenizer;
         private final ONNXDynamicInferenceEngine engine;
-        private int sequence;
+        private long sequence;
 
         private HybridRunner(
                 SecureLogXConfig config,
@@ -701,7 +701,7 @@ public final class PerformanceComparisonBenchmark {
                 events.add(
                         new LogEvent(
                                 message,
-                                LogLevel.SECURE,
+                                LogLevel.INFO,
                                 false,
                                 "performance-benchmark",
                                 ++sequence
@@ -730,6 +730,7 @@ public final class PerformanceComparisonBenchmark {
         private final LabelAwareMaskingEngine decoder =
                 new LabelAwareMaskingEngine();
         private final MaskingPolicy maskingPolicy = new MaskingPolicy();
+        private long sequence;
 
         private MlOnlyRunner(
                 SecureLogXConfig config,
@@ -763,6 +764,19 @@ public final class PerformanceComparisonBenchmark {
         }
 
         private List<String> run(List<String> messages) throws Exception {
+            List<LogEvent> events = new ArrayList<>(messages.size());
+            for (String message : messages) {
+                events.add(
+                        new LogEvent(
+                                message,
+                                LogLevel.INFO,
+                                false,
+                                "performance-benchmark",
+                                ++sequence
+                        )
+                );
+            }
+
             List<TokenizedInput> flatWindows = new ArrayList<>();
             List<Integer> originalIndices = new ArrayList<>();
 
@@ -878,12 +892,13 @@ public final class PerformanceComparisonBenchmark {
                             )
                     );
                 }
+                String masked = maskingPolicy.apply(
+                        messages.get(i),
+                        resolved,
+                        false
+                );
                 outputs.add(
-                        maskingPolicy.apply(
-                                messages.get(i),
-                                resolved,
-                                false
-                        )
+                        events.get(i).formatWithMessage(masked)
                 );
             }
             return outputs;
