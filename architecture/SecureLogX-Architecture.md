@@ -1046,6 +1046,19 @@ Interpretation:
 
 Because absolute throughput and speedup varied materially across earlier engineering runs, these exact ratios are not yet release/publication claims. A repeatability benchmark with interleaved M0/H1 ordering is required before reporting stable performance numbers externally.
 
+The repeatability harness now defaults to **6 measured rounds** and alternates order:
+
+```text
+round 1: M0 -> H1
+round 2: H1 -> M0
+round 3: M0 -> H1
+...
+```
+
+Odd round counts are rejected so each architecture executes first equally often. The PowerShell runner has been aligned to the same 6-round default.
+
+The benchmark also now equalizes final event-envelope work: both M0 and H1 construct normal `INFO` `LogEvent` instances and serialize the protected result through the same canonical event-envelope formatter. This prevents H1 from being charged for timestamp/sequence/instance formatting that M0 did not previously perform.
+
 GPU/CUDA memory remains a separate future validation requirement.
 
 Hard production MiB budgets remain deployment-profile dependent. After CPU/GPU deployment baselines, define:
@@ -2860,7 +2873,9 @@ appender-oriented event metadata contract.
 
 The hybrid runtime smoke now uses normal INFO/WARN/ERROR/DEBUG events and checks
 that protection still occurs while source severity, event timestamp, sequence,
-and instance ID survive the masking path.
+and instance ID survive the masking path. It also parses a formatted protected
+line back through `LogEvent.fromRaw(...)` and verifies that severity, timestamp,
+sequence, and originating `instanceId` survive the round trip.
 
 **Performance runner fix**
 
@@ -2868,6 +2883,31 @@ The PowerShell performance runner now defaults to 6 rounds and rejects odd
 round counts, matching the interleaved benchmark contract. This fixes the
 previous `iterations must be even` failure caused by the runner still passing
 3 iterations.
+
+---
+
+### 2026-10-01 — Performance runner repaired and envelope work equalized
+
+**Status**
+
+IMPLEMENTED; LOCAL COMPILE/RUNTIME VALIDATION NEXT
+
+**Changes**
+
+- PowerShell performance runner default changed from 3 to 6 rounds.
+- Odd performance-round counts are rejected explicitly.
+- M0/H1 measured execution order alternates to reduce order/JIT/thermal bias.
+- M0 and H1 now both construct normal INFO-level events and perform the same
+  canonical event-envelope formatting before checksum/output accounting.
+- Hybrid runtime validation now exercises standard application severities and
+  verifies formatted metadata round-trip preservation.
+
+**Reason**
+
+The interleaved Java benchmark required an even round count, but the existing
+PowerShell runner still supplied 3. The previous M0 path also omitted final
+event-envelope formatting, making end-to-end performance comparison slightly
+asymmetric.
 
 ---
 
