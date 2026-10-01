@@ -945,7 +945,24 @@ The runtime has therefore been refined:
 - windowed-call metrics are tracked separately from ordinary ONNX calls,
 - the safety assertion applies specifically to expanded-window calls.
 
-This adaptive batching change is pending performance/memory rerun. The objective is to retain the ~908 MiB long-window memory bound while recovering throughput on ML-heavy short-record traffic.
+The adaptive batching memory and performance reruns are complete.
+
+Adaptive-batching performance result:
+
+| Scenario | M0 throughput | H1 throughput | Speedup | H1 ML invocation |
+|---|---:|---:|---:|---:|
+| A | 15.954 rec/s | **171.724 rec/s** | **10.764x** | 5% |
+| B | 16.290 rec/s | **113.412 rec/s** | **6.962x** | 15% |
+| C | 28.091 rec/s | **109.414 rec/s** | **3.895x** | 35% |
+| D | 34.920 rec/s | **71.489 rec/s** | **2.047x** | 60% |
+
+H1 batch p50 was approximately 5 ms in A/B, 148 ms in C, and 453 ms in D. Fail-closed count was 0 in every scenario.
+
+Interpretation:
+
+> adaptive batching removes the unnecessary global 4-window throttle from ordinary ML traffic while preserving the 4-window cap for expanded long-record inference. In this engineering run, H1 was faster than M0 in every scenario, including the 60%-ML stress mix.
+
+Because absolute throughput and speedup varied materially across earlier engineering runs, these exact ratios are not yet release/publication claims. A repeatability benchmark with interleaved M0/H1 ordering is required before reporting stable performance numbers externally.
 
 GPU/CUDA memory remains a separate future validation requirement.
 
@@ -973,7 +990,7 @@ Where possible, report denominators and confidence intervals.
 
 ## 11. Constrained Decoding Experiment
 
-**Status: C1-S QUALITY GATE PASSED; PRODUCTION-PATH VALIDATION IN PROGRESS**
+**Status: H1+C1-S PRODUCTION-CANDIDATE QUALITY VALIDATED**
 
 The current production ML pipeline uses token-wise argmax followed by BIO span normalization. Production behavior is unchanged.
 
@@ -1101,13 +1118,31 @@ Interpretation:
 
 The non-sensitive-character redaction increase is +0.0087 percentage points absolute. This is small but must remain visible as a precision tradeoff rather than being hidden.
 
-C1-S therefore passes the ML-only quality promotion gate. Production promotion still requires locked hybrid/runtime validation and full H1+C1-S architecture comparison through the shared production decoder implementation.
+C1-S passes the ML-only quality promotion gate. The shared production decoder has also passed the locked hybrid/runtime validation and the full H1+C1-S architecture comparison.
 
 The benchmark and production runtime now share the same `BioConstrainedSpanDecoder` implementation. The development validation profile selects `BIO_VITERBI_SAFETY_SUPPLEMENT`, while the code-level fallback remains `ARGMAX_LEGACY`.
 
 Goal:
 
 > preserve C1's span-coherence/boundary gains while preventing C1 from losing protection that M0 already supplied.
+
+Production-path H1+C1-S result on all 6,463 non-sealed records:
+
+| Metric | H1 legacy | H1+C1-S |
+|---|---:|---:|
+| Sensitive-character recall | 97.4497% | **97.5374%** |
+| Non-sensitive-character redaction | 0.2335% | 0.2422% |
+| Full-span recall | 95.5510% | **95.8866%** |
+| High-risk full-span recall | 98.9641% | **99.0837%** |
+| Whole-record perfect redaction | 93.4086% | **93.5479%** |
+
+M0 -> H1+C1-S diagnostics:
+
+- M0-full / H1+C1-S-not-full: **0**,
+- high-risk regressions: **0**,
+- H1+C1-S full / M0 not full: **36**.
+
+The production runtime validation also passed with decoder mode `BIO_VITERBI_SAFETY_SUPPLEMENT`, 0 fail-closed records, 0 processing failures, and the expanded-window cap enforced.
 
 Promotion gate status:
 
@@ -2679,6 +2714,37 @@ The 4-window memory cap is now applied only to expanded long-record window segme
 **Backward-compatibility impact**
 
 Decoder behavior is configurable and legacy argmax remains available for rollback. The development validation profile now opts into the production candidate.
+
+---
+
+### 2026-10-01 — H1+C1-S inference architecture reaches production-candidate freeze
+
+**Status**
+
+BEHAVIORAL ARCHITECTURE VALIDATED; PERFORMANCE CLAIMS REQUIRE REPEATABILITY PASS
+
+**Evidence**
+
+- locked hybrid detection/resolver checks passed,
+- 6,463-record gate audit: 0 unsafe bypass, 0 deterministic overmask, 0 ALLOW/gold conflicts,
+- production runtime decoder: `BIO_VITERBI_SAFETY_SUPPLEMENT`,
+- full H1+C1-S architecture comparison: 0 M0 full-span losses, 0 high-risk regressions, 36 full-span gains,
+- high-risk full-span recall: 99.0837%,
+- long-window private memory: ~905-909 MiB,
+- post-shutdown private memory: ~218-224 MiB,
+- adaptive performance run: H1 faster than M0 in A-D, fail-closed 0.
+
+**Decision**
+
+Freeze the inference behavior as the production candidate:
+
+- H1 deterministic/contextual routing,
+- C1-S BIO-constrained decoding with M0 coverage floor,
+- 64-token overlapping windows,
+- 4-window cap only for expanded long-record inference,
+- fail-closed processing behavior.
+
+Do not freeze or publish exact speedup ratios until an interleaved repeatability benchmark confirms stable measurements.
 
 ---
 
