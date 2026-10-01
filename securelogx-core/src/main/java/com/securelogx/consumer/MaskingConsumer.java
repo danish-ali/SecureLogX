@@ -85,6 +85,12 @@ public class MaskingConsumer {
             while (true) {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(500));
                 for (ConsumerRecord<String, String> rec : records) {
+                    if (!config.isMaskingEnabled()
+                            || !config.shouldMaskInCurrentEnv()) {
+                        appender.write(rec.value());
+                        continue;
+                    }
+
                     LogEvent event = LogEvent.fromRaw(rec.value());
                     protectedBatch.add(event);
                     if (protectedBatch.size() >= BATCH_SIZE) {
