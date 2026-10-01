@@ -173,7 +173,7 @@ public class SecureLogX {
             long eventTimestamp
     ) {
         long sequence = ingestSequence.incrementAndGet();
-        process(
+        processStamped(
                 new LogEvent(
                         message,
                         level,
@@ -185,7 +185,7 @@ public class SecureLogX {
         );
     }
 
-/*    public void process(LogEvent log) {
+/*    private void processStamped(LogEvent log) {
         System.out.println("[DEBUG] Entering process(), mode=" + mode);
         String ts = LocalDateTime.now().toString();
         if (mode == Mode.KAFKA) {
