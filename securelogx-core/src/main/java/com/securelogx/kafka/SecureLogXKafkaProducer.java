@@ -7,7 +7,6 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.serialization.StringSerializer;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Future;
@@ -80,15 +79,7 @@ public class SecureLogXKafkaProducer {
      * @return a {@link Future} containing {@link RecordMetadata} when the send completes
      */
     public Future<RecordMetadata> sendLogEvent(LogEvent event) {
-        String formatted = String.format(
-                "timestamp=%s level=%s traceId=%s seq=%d message=\"%s\"",
-                LocalDateTime.now(),
-                event.getLevel(),
-                event.getTraceId(),
-                event.getSequenceNumber(),
-                event.getMessage()
-        );
-        return sendRaw(formatted);
+        return sendRaw(event.formatWithMessage(event.getMessage()));
     }
 
     /**
