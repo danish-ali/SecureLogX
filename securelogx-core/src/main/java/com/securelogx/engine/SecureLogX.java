@@ -185,56 +185,11 @@ public class SecureLogX {
         );
     }
 
-/*    private void processStamped(LogEvent log) {
-        System.out.println("[DEBUG] Entering process(), mode=" + mode);
-        String ts = LocalDateTime.now().toString();
-        if (mode == Mode.KAFKA) {
-            System.out.println("[DEBUG] In KAFKA branch, about to sendRaw");
-            kafkaProducer.sendRaw(formatLog(log, log.getMessage()));
-            System.out.println("[DEBUG] After sendRaw, returning");
-            return;
-        }
-        // Multi-threaded: enqueue for the batcher
-        else {
-            // Monitor queue health
-            int queueSize = inferenceQueue.size();
-            if (queueSize > INFERENCE_QUEUE_CAPACITY * 0.8) {
-                System.err.println("[SecureLogX] WARNING: Inference queue " + queueSize + "/" + INFERENCE_QUEUE_CAPACITY + " (80%+ full)");
-            }
-
-            try {
-                inferenceQueue.put(log);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                System.err.println("[SecureLogX] Interrupted while queueing log for inference");
-            }
-        }
-
-
-        boolean needMask = log.requiresProtection()
-                && config.isMaskingEnabled()
-                && config.shouldMaskInCurrentEnv();
-
-        // No masking → immediate write
-        if (!needMask) {
-            writeLine(formatLog(log, log.getMessage()));
-            return;
-        }
-
-        // Single-threaded: do inference synchronously
-        if (WRITER_THREAD_COUNT <= 1) {
-            List<String> masked = inferenceEngine.runBatch(tokenizer, List.of(log));
-            writeLine(masked.get(0));
-        }
-        // Multi-threaded: enqueue for the batcher
-        else {
-            inferenceQueue.offer(log);
-        }
-    } */
 
 
 
-    public void process(LogEvent log) {
+
+    private void processStamped(LogEvent log) {
         // Remove expensive debug logging in production
         // System.out.println("[DEBUG] Entering process(), mode=" + mode);
         if (mode == Mode.KAFKA) {
