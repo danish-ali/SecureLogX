@@ -166,6 +166,17 @@ public final class HybridRuntimeCheck {
             }
         }
 
+        LogEvent roundTrip = LogEvent.fromRaw(outputs.get(0));
+        if (roundTrip.getLevel() != levels.get(0)
+                || roundTrip.getSequenceNumber() != 1L
+                || roundTrip.getEventTimestamp() != baseEventTimestamp
+                || !roundTrip.getInstanceId()
+                        .equals(events.get(0).getInstanceId())) {
+            throw new IllegalStateException(
+                    "Formatted LogEvent metadata did not survive round-trip"
+            );
+        }
+
         String windowedOutput = outputs.get(windowedCaseIndex);
         if (windowedOutput.contains(tailSensitiveValue)) {
             throw new IllegalStateException(
@@ -271,6 +282,7 @@ public final class HybridRuntimeCheck {
         result.put("event_timestamp_preserved", true);
         result.put("sequence_preserved", true);
         result.put("instance_id_present", true);
+        result.put("formatted_event_round_trip_preserved", true);
         result.put("processing_failures", 0);
         result.put(
                 "windowed_ml_items",
@@ -353,6 +365,7 @@ public final class HybridRuntimeCheck {
         System.out.println("Event timestamp preserved: true");
         System.out.println("Sequence metadata preserved: true");
         System.out.println("Instance ID present: true");
+        System.out.println("Formatted event round-trip preserved: true");
         System.out.println("Processing failures: 0");
         System.out.println(
                 "ML decoder mode: "
