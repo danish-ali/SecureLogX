@@ -102,6 +102,86 @@ MASK / ALLOW evidence              ML-v1.3 BERT
       Log4j2         Kafka              File/SIEM
 ```
 
+### Appender ingress and event-envelope contract
+
+**Status: IMPLEMENTED IN CORE; LOG4J2 ADAPTER VALIDATION PENDING**
+
+Moving SecureLogX toward an appender integration changes the meaning of log
+severity and ordering metadata.
+
+#### Severity is not the protection gate
+
+Application severity must be preserved:
+
+- TRACE remains TRACE,
+- DEBUG remains DEBUG,
+- INFO remains INFO,
+- WARN remains WARN,
+- ERROR remains ERROR.
+
+The legacy `SECURE` level remains available for backward compatibility with
+the original `logger.secure(...)` API, but SecureLogX protection is no longer
+conditioned on `level == SECURE`.
+
+All application severities entering a SecureLogX protection path are inspected
+by H1 when masking is enabled. The deterministic gate then decides whether the
+record can be resolved without ML or requires contextual inference.
+
+A future appender marker such as `SECURELOGX` / `FORCE_SECURE` may be used
+as an explicit policy hint, but it must not imply that unmarked INFO/WARN/ERROR
+records bypass protection.
+
+#### Sequence contract
+
+SecureLogX owns a process-wide monotonic `long` ingress sequence.
+
+The sequence is assigned:
+
+1. when the event enters SecureLogX,
+2. before inference queues,
+3. before batching,
+4. before ONNX execution,
+5. before writer queues.
+
+Therefore `seq` represents **SecureLogX ingestion order**, not completion or
+physical file-write order.
+
+Asynchronous inference and multiple writer threads may complete events out of
+order; `seq` is the stable field used to reconstruct ingress ordering.
+
+The old per-request/thread-local sequence has been removed. Request context now
+owns correlation (`traceId`) only.
+
+#### Timestamp and identity contract
+
+The event envelope separates:
+
+- original source event timestamp,
+- local SecureLogX ingest timestamp,
+- source severity,
+- trace/correlation ID,
+- process/JVM `instanceId`,
+- process-wide `seq`.
+
+The formatted protected log preserves the **original event timestamp** instead
+of substituting the later inference/write time.
+
+Event identity is:
+
+```text
+instanceId + "-" + seq
+```
+
+`instanceId` is generated once for the SecureLogX JVM/classloader and is
+preserved when a formatted event crosses a Kafka hop. `traceId` remains a
+correlation identifier and is intentionally separate from sequence/order.
+
+The public API now includes an appender/framework ingress overload that accepts
+the source severity, trace ID, and original event timestamp while SecureLogX
+assigns the sequence internally.
+
+---
+
 The deterministic layer is not intended to replace ML.
 
 Its roles are:
@@ -650,7 +730,9 @@ Default measurement design:
 - 160 deterministically sampled records per scenario,
 - 32-record benchmark batches,
 - warm-up excluded from measurements,
-- 3 measured iterations,
+- 6 measured rounds by default,
+- alternating M0->H1 / H1->M0 execution order,
+- an even round count so each runner executes first equally often,
 - same frozen model/tokenizer,
 - same 64-token overlapping-window policy,
 - initialization measured separately,
@@ -2745,6 +2827,47 @@ Freeze the inference behavior as the production candidate:
 - fail-closed processing behavior.
 
 Do not freeze or publish exact speedup ratios until an interleaved repeatability benchmark confirms stable measurements.
+
+---
+
+### 2026-10-01 — Appender event contract and sequence ownership defined
+
+**Status**
+
+IMPLEMENTED IN CORE; VALIDATION PENDING
+
+**Change**
+
+Decoupled protection from the legacy `SECURE` severity and defined the
+appender-oriented event metadata contract.
+
+**Decisions**
+
+- preserve original TRACE/DEBUG/INFO/WARN/ERROR severity,
+- retain `SECURE` only for backward compatibility,
+- inspect all severities through H1 when masking is enabled,
+- assign a process-wide monotonic `long` sequence at SecureLogX ingress,
+- keep `traceId` for correlation rather than ordering,
+- preserve the original event timestamp through deterministic/ML/Kafka output,
+- add local ingest timestamp separately,
+- add process/JVM `instanceId`,
+- use `instanceId + seq` as event identity,
+- prevent callers from injecting production sequence values through a public
+  `process(LogEvent)` path,
+- preserve origin `instanceId` when parsing formatted Kafka records.
+
+**Validation change**
+
+The hybrid runtime smoke now uses normal INFO/WARN/ERROR/DEBUG events and checks
+that protection still occurs while source severity, event timestamp, sequence,
+and instance ID survive the masking path.
+
+**Performance runner fix**
+
+The PowerShell performance runner now defaults to 6 rounds and rejects odd
+round counts, matching the interleaved benchmark contract. This fixes the
+previous `iterations must be even` failure caused by the runner still passing
+3 iterations.
 
 ---
 
