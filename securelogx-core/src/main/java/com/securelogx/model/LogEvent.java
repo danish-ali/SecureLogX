@@ -35,6 +35,7 @@ public class LogEvent {
     private final long sequenceNumber;
     private final long eventTimestamp;
     private final long ingestTimestamp;
+    private final String instanceId;
     private final String id;
 
     /**
@@ -69,6 +70,26 @@ public class LogEvent {
             long sequenceNumber,
             long eventTimestamp
     ) {
+        this(
+                message,
+                level,
+                showLastFour,
+                traceId,
+                sequenceNumber,
+                eventTimestamp,
+                PROCESS_INSTANCE_ID
+        );
+    }
+
+    private LogEvent(
+            String message,
+            LogLevel level,
+            boolean showLastFour,
+            String traceId,
+            long sequenceNumber,
+            long eventTimestamp,
+            String instanceId
+    ) {
         this.message = message;
         this.level = level;
         this.showLastFour = showLastFour;
@@ -76,7 +97,8 @@ public class LogEvent {
         this.sequenceNumber = sequenceNumber;
         this.eventTimestamp = eventTimestamp;
         this.ingestTimestamp = CachedClock.now();
-        this.id = PROCESS_INSTANCE_ID + "-" + sequenceNumber;
+        this.instanceId = instanceId;
+        this.id = instanceId + "-" + sequenceNumber;
     }
 
     public String getMessage() {
@@ -136,7 +158,7 @@ public class LogEvent {
     }
 
     public String getInstanceId() {
-        return PROCESS_INSTANCE_ID;
+        return instanceId;
     }
 
     public String formatWithMessage(String outputMessage) {
@@ -146,7 +168,7 @@ public class LogEvent {
                 level,
                 traceId,
                 sequenceNumber,
-                PROCESS_INSTANCE_ID,
+                instanceId,
                 outputMessage
         );
     }
@@ -174,6 +196,7 @@ public class LogEvent {
             LogLevel level = LogLevel.valueOf(matcher.group(2));
             String traceId = matcher.group(3);
             long sequence = Long.parseLong(matcher.group(4));
+            String parsedInstanceId = matcher.group(5);
             String message = matcher.group(6);
 
             return new LogEvent(
@@ -182,7 +205,10 @@ public class LogEvent {
                     false,
                     traceId,
                     sequence,
-                    timestamp
+                    timestamp,
+                    parsedInstanceId == null
+                            ? PROCESS_INSTANCE_ID
+                            : parsedInstanceId
             );
         }
 
