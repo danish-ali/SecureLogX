@@ -10,11 +10,12 @@ import com.securelogx.ner.TokenizerEngine;
 import com.securelogx.ner.impl.ONNXDynamicInferenceEngine;
 import com.securelogx.ner.impl.ParallelTokenizer;
 import com.securelogx.util.ArtifactIntegrityVerifier;
+import com.securelogx.util.CachedClock;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * SecureLogX supports four modes:
@@ -40,6 +41,7 @@ public class SecureLogX {
     private final List<Thread> writerThreads = new ArrayList<>();
     private final Map<String, SecureFileAppender> writerAppenders = new ConcurrentHashMap<>();
     private final AtomicInteger writerIndex = new AtomicInteger(0);
+    private final AtomicLong ingestSequence = new AtomicLong(0);
     private volatile boolean running = true;
     private Thread batchThread;
 
@@ -149,8 +151,38 @@ public class SecureLogX {
 
     public void process(String message, LogLevel level, boolean showLastFour) {
         RequestContext ctx = requestContext.get();
-        int seq = ctx.sequence.incrementAndGet();
-        process(new LogEvent(message, level, showLastFour, ctx.traceId, seq));
+        process(
+                message,
+                level,
+                showLastFour,
+                ctx.traceId,
+                CachedClock.now()
+        );
+    }
+
+    /**
+     * Appender/framework ingress. SecureLogX owns the process-wide sequence
+     * while the source logging framework supplies the original timestamp and
+     * trace/correlation identifier.
+     */
+    public void process(
+            String message,
+            LogLevel level,
+            boolean showLastFour,
+            String traceId,
+            long eventTimestamp
+    ) {
+        long sequence = ingestSequence.incrementAndGet();
+        process(
+                new LogEvent(
+                        message,
+                        level,
+                        showLastFour,
+                        traceId,
+                        sequence,
+                        eventTimestamp
+                )
+        );
     }
 
 /*    public void process(LogEvent log) {
@@ -158,7 +190,7 @@ public class SecureLogX {
         String ts = LocalDateTime.now().toString();
         if (mode == Mode.KAFKA) {
             System.out.println("[DEBUG] In KAFKA branch, about to sendRaw");
-            kafkaProducer.sendRaw(formatLog(log, ts, log.getMessage()));
+            kafkaProducer.sendRaw(formatLog(log, log.getMessage()));
             System.out.println("[DEBUG] After sendRaw, returning");
             return;
         }
@@ -179,13 +211,13 @@ public class SecureLogX {
         }
 
 
-        boolean needMask = log.requiresNER()
+        boolean needMask = log.requiresProtection()
                 && config.isMaskingEnabled()
                 && config.shouldMaskInCurrentEnv();
 
         // No masking → immediate write
         if (!needMask) {
-            writeLine(formatLog(log, ts, log.getMessage()));
+            writeLine(formatLog(log, log.getMessage()));
             return;
         }
 
@@ -205,8 +237,6 @@ public class SecureLogX {
     public void process(LogEvent log) {
         // Remove expensive debug logging in production
         // System.out.println("[DEBUG] Entering process(), mode=" + mode);
-        String ts = LocalDateTime.now().toString();
-
         if (mode == Mode.KAFKA) {
             // System.out.println("[DEBUG] In KAFKA branch, about to sendRaw");
             kafkaProducer.sendRaw(formatLog(log, ts, log.getMessage()));
@@ -318,11 +348,8 @@ public class SecureLogX {
         }
     }
 
-    private String formatLog(LogEvent log, String ts, String msg) {
-        return String.format(
-                "timestamp=%s level=%s traceId=%s seq=%d message=\"%s\"",
-                ts, log.getLevel(), log.getTraceId(), log.getSequenceNumber(), msg
-        );
+    private String formatLog(LogEvent log, String msg) {
+        return log.formatWithMessage(msg);
     }
 
     public void shutdown() throws Exception {
@@ -352,9 +379,14 @@ public class SecureLogX {
 
     private static class RequestContext {
         final String traceId;
-        final AtomicInteger sequence = new AtomicInteger(0);
-        RequestContext() { this.traceId = UUID.randomUUID().toString(); }
-        RequestContext(String traceId) { this.traceId = traceId; }
+
+        RequestContext() {
+            this.traceId = UUID.randomUUID().toString();
+        }
+
+        RequestContext(String traceId) {
+            this.traceId = traceId;
+        }
     }
 
     /**
