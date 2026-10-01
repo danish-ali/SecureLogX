@@ -1,9 +1,13 @@
 param(
     [int]$SamplePerScenario = 160,
-    [int]$Iterations = 3
+    [int]$Iterations = 6
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Iterations -lt 2 -or ($Iterations % 2) -ne 0) {
+    throw "Iterations must be an even integer >= 2 because M0/H1 execution order is balanced across rounds."
+}
 
 $root = (Resolve-Path ".").Path
 $resultPath = Join-Path $root "reports\performance-comparison\result.json"
