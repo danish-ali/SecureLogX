@@ -17,10 +17,11 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Kafka consumer that masks SECURE-level messages and writes all logs to a file.
+ * Kafka consumer that applies SecureLogX protection to application log events
+ * while preserving their original severity.
  * <p>
- * Subscribes to a Kafka topic, batches SECURE events for NER masking, and
- * outputs both masked and unmasked records to disk.
+ * Protection is no longer gated by the legacy SECURE level. H1 decides whether
+ * each record is deterministic-only or requires ML.
  */
 public class MaskingConsumer {
     private static final int BATCH_SIZE = 8;
@@ -79,23 +80,19 @@ public class MaskingConsumer {
      * Starts the polling loop, processing messages until interrupted.
      */
     public void run() {
-        List<LogEvent> secureBatch = new ArrayList<>(BATCH_SIZE);
+        List<LogEvent> protectedBatch = new ArrayList<>(BATCH_SIZE);
         try {
             while (true) {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(500));
                 for (ConsumerRecord<String, String> rec : records) {
                     LogEvent event = LogEvent.fromRaw(rec.value());
-                    if (event.requiresNER()) {
-                        secureBatch.add(event);
-                        if (secureBatch.size() >= BATCH_SIZE) {
-                            flushSecureBatch(secureBatch);
-                        }
-                    } else {
-                        appender.write(rec.value());
+                    protectedBatch.add(event);
+                    if (protectedBatch.size() >= BATCH_SIZE) {
+                        flushProtectedBatch(protectedBatch);
                     }
                 }
-                if (!secureBatch.isEmpty()) {
-                    flushSecureBatch(secureBatch);
+                if (!protectedBatch.isEmpty()) {
+                    flushProtectedBatch(protectedBatch);
                 }
                 consumer.commitSync();
             }
@@ -106,7 +103,7 @@ public class MaskingConsumer {
         }
     }
 
-    private void flushSecureBatch(List<LogEvent> batch) {
+    private void flushProtectedBatch(List<LogEvent> batch) {
         try {
             List<String> masked = engine.runBatch(tokenizer, batch);
             for (String line : masked) {
