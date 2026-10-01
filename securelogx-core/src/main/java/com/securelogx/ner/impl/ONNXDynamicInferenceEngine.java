@@ -698,15 +698,7 @@ public class ONNXDynamicInferenceEngine {
     }
 
     private String formatMaskedEvent(LogEvent event, String masked) {
-        String timestamp = java.time.LocalDateTime.now().toString();
-        return String.format(
-                "timestamp=%s level=%s traceId=%s seq=%d message=\"%s\"",
-                timestamp,
-                event.getLevel().name(),
-                event.getTraceId(),
-                event.getSequenceNumber(),
-                masked
-        );
+        return event.formatWithMessage(masked);
     }
 
     private List<String> createFallbackResults(List<LogEvent> batch) {
