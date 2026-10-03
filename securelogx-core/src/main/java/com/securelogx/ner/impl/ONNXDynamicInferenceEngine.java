@@ -2,6 +2,8 @@
 package com.securelogx.ner.impl;
 
 import ai.onnxruntime.*;
+import com.securelogx.api.MaskedResult;
+import com.securelogx.api.MaskReasonCode;
 import com.securelogx.detection.DeterministicScanResult;
 import com.securelogx.detection.HybridMaskingPipeline;
 import com.securelogx.detection.HybridRuntimeStats;
@@ -221,30 +223,59 @@ public class ONNXDynamicInferenceEngine {
         }
     }
 
-    public List<String> runBatch(TokenizerEngine tokenizer, List<LogEvent> batch) {
+    /**
+     * Compatibility wrapper for callers that expect a formatted SecureLogX
+     * line. New integrations should prefer {@link #maskBatch}.
+     */
+    public List<String> runBatch(
+            TokenizerEngine tokenizer,
+            List<LogEvent> batch
+    ) {
+        List<MaskedResult> results = maskBatch(tokenizer, batch);
+        List<String> formatted = new ArrayList<>(results.size());
+
+        for (int i = 0; i < results.size(); i++) {
+            formatted.add(
+                    batch.get(i).formatWithMessage(
+                            results.get(i).maskedText()
+                    )
+            );
+        }
+        return formatted;
+    }
+
+    /**
+     * Framework-neutral masking path for integration adapters.
+     */
+    public List<MaskedResult> maskBatch(
+            TokenizerEngine tokenizer,
+            List<LogEvent> batch
+    ) {
         long batchStartTime = System.currentTimeMillis();
+        List<MaskedResult> allResults = new ArrayList<>();
 
-        // Adaptive batch sizing based on GPU memory pressure
-        int actualBatchSize = Math.min(optimalBatchSize, batch.size());
-        List<LogEvent> currentBatch = batch.subList(0, actualBatchSize);
-        List<String> allResults = new ArrayList<>();
-
-        // Process in optimal-sized chunks
         for (int i = 0; i < batch.size(); i += optimalBatchSize) {
             int endIdx = Math.min(i + optimalBatchSize, batch.size());
             List<LogEvent> subBatch = batch.subList(i, endIdx);
-            allResults.addAll(processBatchChunk(tokenizer, subBatch, batchStartTime));
+            allResults.addAll(
+                    processBatchChunk(
+                            tokenizer,
+                            subBatch,
+                            batchStartTime
+                    )
+            );
         }
 
         return allResults;
     }
 
-    private List<String> processBatchChunk(
+    private List<MaskedResult> processBatchChunk(
             TokenizerEngine tokenizer,
             List<LogEvent> batch,
             long overallStartTime
     ) {
-        String[] orderedOutput = new String[batch.size()];
+        MaskedResult[] orderedOutput =
+                new MaskedResult[batch.size()];
 
         try {
             List<DeterministicScanResult> scans = new ArrayList<>(batch.size());
@@ -267,7 +298,13 @@ public class ONNXDynamicInferenceEngine {
                             scan,
                             event.shouldShowLastFour()
                     );
-                    orderedOutput[i] = formatMaskedEvent(event, masked);
+                    orderedOutput[i] = maskingResult(
+                            event,
+                            masked,
+                            false,
+                            false,
+                            MaskReasonCode.DETERMINISTIC_RESOLVED
+                    );
                     deterministicOnlyItems++;
                 }
             }
@@ -307,9 +344,12 @@ public class ONNXDynamicInferenceEngine {
 
                 if (windows == null || windows.isEmpty()) {
                     orderedOutput[originalIndex] =
-                            formatMaskedEvent(
+                            maskingResult(
                                     event,
-                                    "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
+                                    "[SECURELOGX_REDACTED_PROCESSING_FAILURE]",
+                                    false,
+                                    true,
+                                    MaskReasonCode.PROCESSING_FAILURE
                             );
                     truncatedFailClosedItems++;
                     continue;
@@ -320,9 +360,12 @@ public class ONNXDynamicInferenceEngine {
                 );
                 if (invalidWindow) {
                     orderedOutput[originalIndex] =
-                            formatMaskedEvent(
+                            maskingResult(
                                     event,
-                                    "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
+                                    "[SECURELOGX_REDACTED_PROCESSING_FAILURE]",
+                                    false,
+                                    true,
+                                    MaskReasonCode.PROCESSING_FAILURE
                             );
                     truncatedFailClosedItems++;
                     System.err.println(
@@ -573,7 +616,13 @@ public class ONNXDynamicInferenceEngine {
                 );
 
                 orderedOutput[originalIndex] =
-                        formatMaskedEvent(event, masked);
+                        maskingResult(
+                                event,
+                                masked,
+                                true,
+                                false,
+                                MaskReasonCode.ML_RESOLVED
+                        );
                 mlInferenceItems++;
                 if (windowedOriginalIndices.contains(originalIndex)) {
                     windowedMlItems++;
@@ -613,19 +662,19 @@ public class ONNXDynamicInferenceEngine {
                     "[ERROR] Hybrid tokenization interrupted: " + e.getMessage()
             );
             Thread.currentThread().interrupt();
-            return createFallbackResults(batch);
+            return createFallbackResults(batch, false);
         } catch (ExecutionException e) {
             System.err.println(
                     "[ERROR] Hybrid tokenization failed: " + e.getMessage()
             );
-            return createFallbackResults(batch);
+            return createFallbackResults(batch, false);
         } catch (Exception e) {
             System.err.println(
                     "[ERROR] Hybrid inference failed for batch size: "
                             + batch.size()
             );
             e.printStackTrace();
-            return createFallbackResults(batch);
+            return createFallbackResults(batch, true);
         }
     }
 
@@ -697,17 +746,38 @@ public class ONNXDynamicInferenceEngine {
         return List.copyOf(merged);
     }
 
-    private String formatMaskedEvent(LogEvent event, String masked) {
-        return event.formatWithMessage(masked);
+    private static MaskedResult maskingResult(
+            LogEvent event,
+            String maskedText,
+            boolean mlInvoked,
+            boolean failClosed,
+            MaskReasonCode reasonCode
+    ) {
+        return new MaskedResult(
+                maskedText,
+                mlInvoked,
+                failClosed,
+                reasonCode,
+                event.getSequenceNumber(),
+                event.getInstanceId()
+        );
     }
 
-    private List<String> createFallbackResults(List<LogEvent> batch) {
-        List<String> fallbackResults = new ArrayList<>();
+    private List<MaskedResult> createFallbackResults(
+            List<LogEvent> batch,
+            boolean mlInvoked
+    ) {
+        List<MaskedResult> fallbackResults =
+                new ArrayList<>(batch.size());
+
         for (LogEvent event : batch) {
             fallbackResults.add(
-                    formatMaskedEvent(
+                    maskingResult(
                             event,
-                            "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
+                            "[SECURELOGX_REDACTED_PROCESSING_FAILURE]",
+                            mlInvoked,
+                            true,
+                            MaskReasonCode.PROCESSING_FAILURE
                     )
             );
         }
