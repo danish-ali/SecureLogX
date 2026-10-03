@@ -136,6 +136,23 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             List<MaskedResult> results =
                     masker.maskAll(plan.texts());
 
+            boolean maskingDisabled = results.stream()
+                    .anyMatch(
+                            result -> result.reasonCode()
+                                    == MaskReasonCode.MASKING_DISABLED
+                    );
+            if (maskingDisabled) {
+                StatusLogger.getLogger().error(
+                        "SecureLogX RewritePolicy is installed while "
+                                + "masking is disabled; failing closed"
+                );
+                return failClosedEvent(
+                        original,
+                        secureSequence,
+                        "MASKING_DISABLED"
+                );
+            }
+
             return plan.rebuild(
                     original,
                     results,
