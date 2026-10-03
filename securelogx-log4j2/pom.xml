@@ -49,6 +49,12 @@
               <version>${log4j2.version}</version>
             </path>
           </annotationProcessorPaths>
+          <annotationProcessors>
+            <processor>org.apache.logging.log4j.core.config.plugins.processor.PluginProcessor</processor>
+          </annotationProcessors>
+          <compilerArgs>
+            <arg>-Alog4j.plugin.processor.minAllowedMessageKind=WARNING</arg>
+          </compilerArgs>
         </configuration>
       </plugin>
     </plugins>
