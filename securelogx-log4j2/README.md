@@ -104,6 +104,23 @@ to:
 The failure path does not forward the original message, MDC values, context
 stack, or throwable message.
 
+## Startup fail-fast validation
+
+Per-event validation remains a fail-closed safety net, but production
+applications should also reject unsafe topology during bootstrap, after Log4j2
+has loaded its complete configuration and before the application reports
+readiness:
+
+```java
+SecureLogXLog4j2ConfigurationValidator.validateCurrentContextOrThrow(
+        "SecureLogXRewrite",
+        true
+);
+```
+
+Do not run this from the RewritePolicy plugin factory; at that point Log4j may
+still be constructing the configuration graph.
+
 ## Configuration enforcement
 
 With `strictConfiguration=true`, unsafe topology causes each event to fail
@@ -129,3 +146,18 @@ intercept:
 Applications should still avoid intentionally logging secrets. SecureLogX is a
 defense-in-depth redaction layer, not a substitute for secure application
 logging practices.
+
+## Current assurance boundary
+
+SecureLogX does **not** claim that sensitive/NPI data can never appear in an
+application log. Current frozen H1+C1-S evaluation measured approximately
+99.08% high-risk full-span recall and 93.55% whole-record perfect redaction on
+the locked 6,463-record corpus. Residual misses remain.
+
+Production-routing ML invocation rates must be measured on representative
+application logs. The 5%/15%/35%/60% rates used in engineering benchmarks are
+synthetic workload mixes, not deployment SLAs.
+
+Timeout/backpressure and hot application-server redeploy lifecycle are still
+open production-hardening items. Until they are validated, do not describe the
+Log4j2 integration as fully production-ready for those operating modes.
