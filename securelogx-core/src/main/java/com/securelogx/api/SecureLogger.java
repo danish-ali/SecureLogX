@@ -4,9 +4,13 @@ import com.securelogx.engine.SecureLogX;
 import com.securelogx.model.LogLevel;
 
 /**
- * Public logging API for external use.
- * Includes trace-aware logging and secure masking options.
+ * Legacy SecureLogX logging facade.
+ *
+ * @deprecated Production integrations should use {@link SecureMasker} or a
+ * framework adapter such as securelogx-log4j2. This class is retained only for
+ * compatibility and research/runtime harnesses.
  */
+@Deprecated(forRemoval = false)
 public class SecureLogger {
 
     private static volatile SecureLogX logxInstance;
@@ -18,8 +22,11 @@ public class SecureLogger {
                     try {
                         logxInstance = new SecureLogX();
                     } catch (Exception e) {
-                        System.err.println("[SecureLogger] Failed to initialize SecureLogX: " + e.getMessage());
-                        e.printStackTrace();
+                        System.err.println(
+                                "[SecureLogger] SecureLogX initialization "
+                                        + "failed closed: "
+                                        + e.getClass().getSimpleName()
+                        );
                         return null;
                     }
                 }
@@ -45,7 +52,10 @@ public class SecureLogger {
         if (engine != null) {
             engine.process(message, level, showLastFour);
         } else {
-            System.err.println("[SecureLogger] Skipping log (engine not initialized): " + message);
+            System.err.println(
+                    "[SecureLogger] Log suppressed because SecureLogX "
+                            + "is unavailable (fail-closed)."
+            );
         }
     }
 
@@ -71,9 +81,8 @@ public class SecureLogger {
             );
         } else {
             System.err.println(
-                    "[SecureLogger] Skipping log "
-                            + "(engine not initialized): "
-                            + message
+                    "[SecureLogger] Log suppressed because SecureLogX "
+                            + "is unavailable (fail-closed)."
             );
         }
     }
