@@ -13,14 +13,8 @@ import com.securelogx.ner.TokenizedInput;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 
 
 public class ONNXDynamicInferenceEngine {
@@ -45,8 +39,6 @@ public class ONNXDynamicInferenceEngine {
     private final Map<String, Queue<OnnxTensor>> tensorPool = new ConcurrentHashMap<>();
     private final Object tensorLock = new Object();
 
-    // Async tokenization pipeline
-    private final ThreadPoolExecutor tokenizerExecutor;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     // Performance metrics
@@ -144,10 +136,6 @@ public class ONNXDynamicInferenceEngine {
         }
 
         this.session = createdSession;
-
-        // Initialize async tokenizer pool (smaller for GPU to reduce contention)
-        int tokenizerThreads = isGpuMode ? 2 : Math.min(4, Runtime.getRuntime().availableProcessors());
-        this.tokenizerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(tokenizerThreads);
 
         // GPU warmup with optimal batch size
         if (isGpuMode) {
@@ -251,17 +239,36 @@ public class ONNXDynamicInferenceEngine {
             TokenizerEngine tokenizer,
             List<LogEvent> batch
     ) {
+        return maskBatch(
+                tokenizer,
+                batch,
+                MaskingExecutionControl.unbounded()
+        );
+    }
+
+    /**
+     * Framework-neutral masking path with cooperative deadline/cancellation.
+     */
+    public List<MaskedResult> maskBatch(
+            TokenizerEngine tokenizer,
+            List<LogEvent> batch,
+            MaskingExecutionControl control
+    ) {
+        Objects.requireNonNull(control, "control");
         long batchStartTime = System.currentTimeMillis();
         List<MaskedResult> allResults = new ArrayList<>();
 
         for (int i = 0; i < batch.size(); i += optimalBatchSize) {
+            control.checkpoint();
+
             int endIdx = Math.min(i + optimalBatchSize, batch.size());
             List<LogEvent> subBatch = batch.subList(i, endIdx);
             allResults.addAll(
                     processBatchChunk(
                             tokenizer,
                             subBatch,
-                            batchStartTime
+                            batchStartTime,
+                            control
                     )
             );
         }
@@ -272,7 +279,8 @@ public class ONNXDynamicInferenceEngine {
     private List<MaskedResult> processBatchChunk(
             TokenizerEngine tokenizer,
             List<LogEvent> batch,
-            long overallStartTime
+            long overallStartTime,
+            MaskingExecutionControl control
     ) {
         MaskedResult[] orderedOutput =
                 new MaskedResult[batch.size()];
@@ -284,6 +292,7 @@ public class ONNXDynamicInferenceEngine {
 
             // 1) Cheap deterministic scan and conservative ML gate.
             for (int i = 0; i < batch.size(); i++) {
+                control.checkpoint();
                 LogEvent event = batch.get(i);
                 DeterministicScanResult scan =
                         hybridMaskingPipeline.scan(event.getMessage());
@@ -315,29 +324,28 @@ public class ONNXDynamicInferenceEngine {
                 return Arrays.asList(orderedOutput);
             }
 
-            // 2) Tokenize only unresolved records. Over-window inputs are
-            // split into overlapping windows with original-text offsets.
-            CompletableFuture<List<List<TokenizedInput>>> tokenizationFuture =
-                    CompletableFuture.supplyAsync(
-                            () -> mlBatch.parallelStream()
-                                    .map(
-                                            event -> tokenizer.tokenizeWindows(
-                                                    event.getMessage(),
-                                                    WINDOW_OVERLAP_CONTENT_TOKENS
-                                            )
-                                    )
-                                    .collect(Collectors.toList()),
-                            tokenizerExecutor
-                    );
-
+            // 2) Tokenize only unresolved records on the bounded masking
+            // worker. No inner executor/queue exists in the production path.
             List<List<TokenizedInput>> windowSets =
-                    tokenizationFuture.get();
+                    new ArrayList<>(mlBatch.size());
+
+            for (LogEvent event : mlBatch) {
+                control.checkpoint();
+                windowSets.add(
+                        tokenizer.tokenizeWindows(
+                                event.getMessage(),
+                                WINDOW_OVERLAP_CONTENT_TOKENS
+                        )
+                );
+                control.checkpoint();
+            }
 
             List<TokenizedInput> inferenceEncoded = new ArrayList<>();
             List<Integer> inferenceOriginalIndices = new ArrayList<>();
             Set<Integer> windowedOriginalIndices = new HashSet<>();
 
             for (int mlIndex = 0; mlIndex < windowSets.size(); mlIndex++) {
+                control.checkpoint();
                 List<TokenizedInput> windows = windowSets.get(mlIndex);
                 int originalIndex = mlOriginalIndices.get(mlIndex);
                 LogEvent event = batch.get(originalIndex);
@@ -421,6 +429,8 @@ public class ONNXDynamicInferenceEngine {
 
             int windowStart = 0;
             while (windowStart < inferenceEncoded.size()) {
+                control.checkpoint();
+
                 int firstOriginalIndex =
                         inferenceOriginalIndices.get(windowStart);
                 boolean windowExpandedSegment =
@@ -494,13 +504,17 @@ public class ONNXDynamicInferenceEngine {
                             "token_type_ids", typeTensor
                     );
 
-                    try (OrtSession.Result result = session.run(inputs)) {
-                        float[][][] logits =
-                                (float[][][]) result.get(0).getValue();
+                    try (OrtSession.RunOptions runOptions =
+                                 new OrtSession.RunOptions()) {
+                        control.attachRunOptions(runOptions);
+                        try (OrtSession.Result result =
+                                     session.run(inputs, runOptions)) {
+                            float[][][] logits =
+                                    (float[][][]) result.get(0).getValue();
 
-                        for (int localIndex = 0;
-                             localIndex < inferenceBatchSize;
-                             localIndex++) {
+                            for (int localIndex = 0;
+                                 localIndex < inferenceBatchSize;
+                                 localIndex++) {
                             int flatWindowIndex =
                                     windowStart + localIndex;
                             int originalIndex =
@@ -551,9 +565,13 @@ public class ONNXDynamicInferenceEngine {
                                                 constrainedResult.spans()
                                         );
                             }
+                        } finally {
+                            control.detachRunOptions(runOptions);
                         }
                     }
                 }
+
+                control.checkpoint();
 
                 mlInferenceWindows += inferenceBatchSize;
                 onnxInferenceCalls++;
@@ -580,6 +598,7 @@ public class ONNXDynamicInferenceEngine {
                     Integer,
                     List<LabelAwareMaskingEngine.EntitySpan>>
                     entry : argmaxSpansByOriginal.entrySet()) {
+                control.checkpoint();
                 int originalIndex = entry.getKey();
                 LogEvent event = batch.get(originalIndex);
 
@@ -657,24 +676,29 @@ public class ONNXDynamicInferenceEngine {
 
             return Arrays.asList(orderedOutput);
 
-        } catch (InterruptedException e) {
-            System.err.println(
-                    "[ERROR] Hybrid tokenization interrupted: " + e.getMessage()
-            );
-            Thread.currentThread().interrupt();
-            return createFallbackResults(batch, false);
-        } catch (ExecutionException e) {
-            System.err.println(
-                    "[ERROR] Hybrid tokenization failed: " + e.getMessage()
-            );
-            return createFallbackResults(batch, false);
+        } catch (CancellationException e) {
+            MaskReasonCode reason = control.isDeadlineExceeded()
+                    ? MaskReasonCode.DEADLINE_EXCEEDED
+                    : MaskReasonCode.PROCESSING_FAILURE;
+            return createFallbackResults(batch, false, reason);
         } catch (Exception e) {
+            if (control.isDeadlineExceeded()) {
+                return createFallbackResults(
+                        batch,
+                        true,
+                        MaskReasonCode.DEADLINE_EXCEEDED
+                );
+            }
+
             System.err.println(
-                    "[ERROR] Hybrid inference failed for batch size: "
-                            + batch.size()
+                    "[ERROR] SecureLogX inference failed closed: "
+                            + e.getClass().getSimpleName()
             );
-            e.printStackTrace();
-            return createFallbackResults(batch, true);
+            return createFallbackResults(
+                    batch,
+                    true,
+                    MaskReasonCode.PROCESSING_FAILURE
+            );
         }
     }
 
@@ -767,6 +791,18 @@ public class ONNXDynamicInferenceEngine {
             List<LogEvent> batch,
             boolean mlInvoked
     ) {
+        return createFallbackResults(
+                batch,
+                mlInvoked,
+                MaskReasonCode.PROCESSING_FAILURE
+        );
+    }
+
+    private List<MaskedResult> createFallbackResults(
+            List<LogEvent> batch,
+            boolean mlInvoked,
+            MaskReasonCode reasonCode
+    ) {
         List<MaskedResult> fallbackResults =
                 new ArrayList<>(batch.size());
 
@@ -777,7 +813,7 @@ public class ONNXDynamicInferenceEngine {
                             "[SECURELOGX_REDACTED_PROCESSING_FAILURE]",
                             mlInvoked,
                             true,
-                            MaskReasonCode.PROCESSING_FAILURE
+                            reasonCode
                     )
             );
         }
@@ -898,19 +934,6 @@ public class ONNXDynamicInferenceEngine {
         }
 
         this.running = false;
-
-        // Shutdown tokenizer executor
-        if (tokenizerExecutor != null) {
-            tokenizerExecutor.shutdown();
-            try {
-                if (!tokenizerExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    tokenizerExecutor.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                tokenizerExecutor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
 
         // Clean up tensor pool
         synchronized (tensorLock) {
