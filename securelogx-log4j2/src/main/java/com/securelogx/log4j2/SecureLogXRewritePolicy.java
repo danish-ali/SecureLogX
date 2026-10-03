@@ -158,18 +158,31 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             List<MaskedResult> results =
                     masker.maskAll(plan.texts());
 
-            boolean fieldFailure = results.stream()
-                    .anyMatch(MaskedResult::failClosed);
-            if (fieldFailure) {
+            MaskedResult failedField = results.stream()
+                    .filter(MaskedResult::failClosed)
+                    .findFirst()
+                    .orElse(null);
+            if (failedField != null) {
+                String failureReason = switch (
+                        failedField.reasonCode()
+                ) {
+                    case OVERLOAD_REJECTED ->
+                            "OVERLOAD_REJECTED";
+                    case DEADLINE_EXCEEDED ->
+                            "DEADLINE_EXCEEDED";
+                    default ->
+                            "FIELD_PROCESSING_FAILURE";
+                };
+
                 StatusLogger.getLogger().error(
-                        "SecureLogX field masking failed; failing entire "
-                                + "LogEvent closed"
+                        "SecureLogX field masking failed closed: {}",
+                        failureReason
                 );
                 return failClosedEvent(
                         original,
                         secureSequence,
                         secureInstanceId,
-                        "FIELD_PROCESSING_FAILURE"
+                        failureReason
                 );
             }
 
