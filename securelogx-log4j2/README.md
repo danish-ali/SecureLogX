@@ -154,6 +154,29 @@ Applications should still avoid intentionally logging secrets. SecureLogX is a
 defense-in-depth redaction layer, not a substitute for secure application
 logging practices.
 
+## Bounded masking runtime
+
+The pilot runtime now uses one bounded masking worker and a bounded request
+queue. A single absolute deadline covers queue wait, Java tokenization, and
+ONNX inference.
+
+On queue rejection or deadline expiry, SecureLogX emits only:
+
+```text
+[SECURELOGX_REDACTED_PROCESSING_FAILURE]
+```
+
+and records `OVERLOAD_REJECTED` or `DEADLINE_EXCEEDED` in SecureLogX event
+metadata/metrics. Raw payload is never used as an overload fallback.
+
+ONNX calls use request-specific `OrtSession.RunOptions`; deadline cancellation
+signals `setTerminate(true)` on an active native run. Java tokenization is
+cooperatively interruptible.
+
+Current pilot defaults are a 64-request queue, 2000 ms end-to-end deadline, and
+one active masking worker. These are not release SLAs and must be load-tested
+before 1.0.
+
 ## Current assurance boundary
 
 SecureLogX does **not** claim that sensitive/NPI data can never appear in an
