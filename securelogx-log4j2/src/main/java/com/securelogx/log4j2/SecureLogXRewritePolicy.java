@@ -158,6 +158,21 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             List<MaskedResult> results =
                     masker.maskAll(plan.texts());
 
+            boolean fieldFailure = results.stream()
+                    .anyMatch(MaskedResult::failClosed);
+            if (fieldFailure) {
+                StatusLogger.getLogger().error(
+                        "SecureLogX field masking failed; failing entire "
+                                + "LogEvent closed"
+                );
+                return failClosedEvent(
+                        original,
+                        secureSequence,
+                        secureInstanceId,
+                        "FIELD_PROCESSING_FAILURE"
+                );
+            }
+
             boolean maskingDisabled = results.stream()
                     .anyMatch(
                             result -> result.reasonCode()
@@ -171,6 +186,7 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
                 return failClosedEvent(
                         original,
                         secureSequence,
+                        secureInstanceId,
                         "MASKING_DISABLED"
                 );
             }
