@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 
 /**
  * Pure Java tokenizer for bert-base-cased WordPiece.
@@ -69,6 +70,7 @@ public class PureJavaTokenizer {
      * Preserves historical single-window behavior and reports truncation.
      */
     public TokenizedInput encode(String text) {
+        checkInterrupted();
         List<WordPiece> pieces = tokenizePieces(text);
         int contentLimit = maxSequenceLength - 2;
         int end = Math.min(contentLimit, pieces.size());
@@ -94,6 +96,7 @@ public class PureJavaTokenizer {
             String text,
             int overlapContentTokens
     ) {
+        checkInterrupted();
         int contentLimit = maxSequenceLength - 2;
         if (overlapContentTokens < 0
                 || overlapContentTokens >= contentLimit) {
@@ -120,6 +123,7 @@ public class PureJavaTokenizer {
 
         int start = 0;
         while (start < pieces.size()) {
+            checkInterrupted();
             int end = Math.min(start + contentLimit, pieces.size());
             windows.add(
                     buildWindow(
@@ -155,6 +159,7 @@ public class PureJavaTokenizer {
 
         int coveredCharacterEnd = 0;
         for (int i = startIndex; i < endIndex; i++) {
+            checkInterrupted();
             WordPiece piece = pieces.get(i);
             tokenIds.add(
                     vocab.getOrDefault(piece.text(), unkTokenId)
@@ -186,6 +191,7 @@ public class PureJavaTokenizer {
     private List<WordPiece> tokenizePieces(String text) {
         List<WordPiece> pieces = new ArrayList<>();
         for (BasicToken token : preTokenize(text)) {
+            checkInterrupted();
             pieces.addAll(wordpieceTokenize(token));
         }
         return pieces;
@@ -196,6 +202,7 @@ public class PureJavaTokenizer {
         int index = 0;
 
         while (index < text.length()) {
+            checkInterrupted();
             char c = text.charAt(index);
 
             if (isWhitespace(c) || isControl(c)) {
@@ -218,6 +225,7 @@ public class PureJavaTokenizer {
             int start = index;
             StringBuilder value = new StringBuilder();
             while (index < text.length()) {
+                checkInterrupted();
                 c = text.charAt(index);
                 if (isWhitespace(c)
                         || isControl(c)
@@ -259,11 +267,13 @@ public class PureJavaTokenizer {
 
         int start = 0;
         while (start < word.length()) {
+            checkInterrupted();
             int end = word.length();
             String matched = null;
             int matchedEnd = -1;
 
             while (start < end) {
+                checkInterrupted();
                 String candidate = word.substring(start, end);
                 if (start > 0) {
                     candidate = "##" + candidate;
@@ -299,6 +309,14 @@ public class PureJavaTokenizer {
         }
 
         return pieces;
+    }
+
+    private static void checkInterrupted() {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new CancellationException(
+                    "SecureLogX tokenization interrupted"
+            );
+        }
     }
 
     private static boolean isWhitespace(char c) {
