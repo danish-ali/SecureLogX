@@ -3355,6 +3355,59 @@ Across the reactor this checkpoint therefore exercised **9 passing tests**:
 
 ---
 
+### 2026-10-03 — Real ONNX bounded-runtime harness added
+
+**Status**
+
+IMPLEMENTED; LOCAL REAL-MODEL VALIDATION PENDING
+
+**Harness**
+
+`scripts/run-bounded-runtime-onnx-check.ps1`
+
+**Phase A — native ONNX cancellation**
+
+- starts a real H1+C1-S ML-routed long record,
+- waits until request-specific `OrtSession.RunOptions` is attached to an
+  actual `session.run(...)`,
+- signals `DEADLINE_EXCEEDED`,
+- calls `RunOptions.setTerminate(true)`,
+- interrupts cooperative Java tokenization/worker state,
+- requires the worker to exit before the validation call continues,
+- requires fail-closed output with no raw SSN,
+- records cancellation-to-worker-exit latency.
+
+The bounded runtime deadline path was also tightened so it no longer returns
+immediately after signalling cancellation. It waits until the masking worker
+has actually unwound, avoiding an abandoned native inference task.
+
+**Phase B — real-model saturation**
+
+Using the public `SecureMasker` with one worker and queue capacity 1:
+
+1. first long ML request becomes active,
+2. second long ML request occupies the queue,
+3. third sensitive request must be rejected immediately as
+   `OVERLOAD_REJECTED`,
+4. raw payload must not appear in the rejection,
+5. the first two accepted requests must complete safely,
+6. runtime must return to active=0, queued=0.
+
+Process/private/JVM memory snapshots are recorded before and after the phases.
+
+**Runtime validation overrides**
+
+Only the new bounded-runtime settings support Java system-property overrides
+for deterministic validation:
+
+- `securelogx.runtime.maskingQueueCapacity`,
+- `securelogx.runtime.maskingDeadlineMillis`,
+- `securelogx.runtime.shutdownWaitMillis`.
+
+Model, tokenizer, decoder, hashes, and H1/C1-S behavior are unchanged.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
