@@ -104,7 +104,7 @@ MASK / ALLOW evidence              ML-v1.3 BERT
 
 ### Appender ingress and event-envelope contract
 
-**Status: IMPLEMENTED IN CORE; LOG4J2 ADAPTER VALIDATION PENDING**
+**Status: CORE + LOG4J2 REWRITE INTEGRATION IMPLEMENTED; LOCAL MODULE VALIDATION PENDING**
 
 Moving SecureLogX toward an appender integration changes the meaning of log
 severity and ordering metadata.
@@ -179,6 +179,82 @@ correlation identifier and is intentionally separate from sequence/order.
 The public API now includes an appender/framework ingress overload that accepts
 the source severity, trace ID, and original event timestamp while SecureLogX
 assigns the sequence internally.
+
+#### Log4j2 production integration
+
+SecureLogX uses Apache Log4j2's existing `RewriteAppender`. SecureLogX does
+not implement a competing destination appender.
+
+The `securelogx-log4j2` module provides:
+
+- `SecureLogXRewritePolicy`,
+- strict topology validation,
+- structured-field sanitization,
+- process/classloader-stable rewrite sequence and instance identity,
+- fail-closed event replacement,
+- generated Log4j plugin metadata,
+- model-free CI tests.
+
+Required pre-queue topology:
+
+```text
+Synchronous Logger / LoggerConfig
+        |
+        v
+SecureLogX RewriteAppender
+        |
+        v
+AsyncAppender (optional)
+        |
+        +--> RollingFile
+        +--> Console
+        +--> KafkaAppender
+```
+
+When `requirePreQueueSanitization=true`, the validator rejects:
+
+- missing expected RewriteAppender,
+- a root logger that does not reference the rewrite,
+- direct/sibling destination appenders that bypass the rewrite,
+- `AsyncRoot`,
+- `AsyncLogger`,
+- AsyncLogger context selectors.
+
+The rewrite sanitizes:
+
+- formatted message,
+- message format,
+- message parameters,
+- MapMessage values,
+- MDC/ThreadContext values,
+- ThreadContext stack,
+- throwable messages,
+- cause/suppressed throwable messages.
+
+If any payload-bearing field reports a processing failure, the **entire**
+LogEvent is replaced with
+`[SECURELOGX_REDACTED_PROCESSING_FAILURE]`. The original message, MDC values,
+context stack, and throwable message are not forwarded on that path.
+
+Rewrite sequence and `instanceId` live outside individual policy instances so
+Log4j configuration reload does not reset event identity.
+
+A previous JVM shutdown hook in the Log4j2 registry was removed because a
+library-owned shutdown-hook thread can retain an application classloader during
+redeploy. Explicit hot-redeploy/native-session lifecycle closure is still a
+production-hardening item and must be validated before claiming application-
+server redeploy support.
+
+Scope boundary:
+
+- direct `System.out` / `System.err` are outside the integration,
+- direct `Throwable.printStackTrace()` is outside the integration,
+- direct Kafka clients are outside the integration,
+- upstream Log4j AsyncLogger modes do not satisfy a pre-queue raw-data
+  exclusion guarantee.
+
+Canonical configuration and constraints are documented in
+`securelogx-log4j2/README.md`.
 
 ---
 
@@ -2908,6 +2984,41 @@ The interleaved Java benchmark required an even round count, but the existing
 PowerShell runner still supplied 3. The previous M0 path also omitted final
 event-envelope formatting, making end-to-end performance comparison slightly
 asymmetric.
+
+---
+
+### 2026-10-03 — Existing Log4j2 RewriteAppender integration hardened
+
+**Status**
+
+IMPLEMENTED; LOCAL COMPILE/TEST PENDING
+
+**Decision**
+
+Use Apache Log4j2's existing `RewriteAppender` as the integration point.
+SecureLogX owns only the rewrite policy and security/configuration contract.
+
+**Hardening changes**
+
+- root logger must explicitly reference the SecureLogX rewrite,
+- direct sibling appenders are treated as bypass violations,
+- AsyncLogger/AsyncRoot/upstream async selectors are rejected when pre-queue
+  sanitization is required,
+- event sequence and instance identity survive RewritePolicy recreation,
+- any field-level masking failure now fails the entire LogEvent closed,
+- library-owned JVM shutdown hook removed to avoid a classloader retention
+  root,
+- model-free JUnit tests added for structured masking, fail-closed behavior,
+  identity continuity, and unsafe root configuration,
+- canonical safe XML topology documented,
+- one-command integration check added:
+  `scripts/run-log4j2-integration-check.ps1`.
+
+**Open hardening item**
+
+Automatic ONNX/native-session closure during application-server hot redeploy is
+not yet validated. Do not claim hot-redeploy lifecycle support until an
+explicit lifecycle mechanism and redeploy test are complete.
 
 ---
 
