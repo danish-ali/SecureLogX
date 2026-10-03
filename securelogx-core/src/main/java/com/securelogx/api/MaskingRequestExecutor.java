@@ -51,6 +51,7 @@ final class MaskingRequestExecutor implements AutoCloseable {
     private final LongAdder completedRequests = new LongAdder();
     private final LongAdder overloadRejectedRequests = new LongAdder();
     private final LongAdder deadlineExceededRequests = new LongAdder();
+    private final LongAdder nativeTerminationSignals = new LongAdder();
     private final LongAdder executionFailureRequests = new LongAdder();
 
     private final Map<
@@ -188,6 +189,9 @@ final class MaskingRequestExecutor implements AutoCloseable {
                     MaskingExecutionControl.CancelReason
                             .DEADLINE_EXCEEDED
             );
+            if (control.nativeTerminationSignalled()) {
+                nativeTerminationSignals.increment();
+            }
 
             boolean removedBeforeStart = executor.remove(task);
             if (removedBeforeStart) {
@@ -273,6 +277,7 @@ final class MaskingRequestExecutor implements AutoCloseable {
                 completedRequests.sum(),
                 overloadRejectedRequests.sum(),
                 deadlineExceededRequests.sum(),
+                nativeTerminationSignals.sum(),
                 executionFailureRequests.sum(),
                 executor.getActiveCount(),
                 executor.getQueue().size(),
