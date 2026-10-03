@@ -1,6 +1,8 @@
 package com.securelogx.log4j2;
 
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.appender.rewrite.RewriteAppender;
 import org.apache.logging.log4j.core.async.AsyncLoggerConfig;
 import org.apache.logging.log4j.core.async.AsyncLoggerContextSelector;
@@ -98,6 +100,31 @@ public final class SecureLogXLog4j2ConfigurationValidator {
         }
 
         return List.copyOf(violations);
+    }
+
+    /**
+     * Startup/bootstrap validation for the fully initialized Log4j2 context.
+     *
+     * Call this after Log4j2 configuration is loaded but before the
+     * application reports readiness or begins accepting traffic.
+     */
+    public static void validateCurrentContextOrThrow(
+            String expectedRewriteAppenderName,
+            boolean requirePreQueueSanitization
+    ) {
+        Object context = LogManager.getContext(false);
+        if (!(context instanceof LoggerContext loggerContext)) {
+            throw new IllegalStateException(
+                    "SecureLogX requires a Log4j2 LoggerContext for "
+                            + "startup topology validation"
+            );
+        }
+
+        validateOrThrow(
+                loggerContext.getConfiguration(),
+                expectedRewriteAppenderName,
+                requirePreQueueSanitization
+        );
     }
 
     public static void validateOrThrow(
