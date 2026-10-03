@@ -3022,6 +3022,52 @@ explicit lifecycle mechanism and redeploy test are complete.
 
 ---
 
+### 2026-10-03 — Legacy leak paths removed; startup fail-fast added
+
+**Status**
+
+IMMEDIATE DEFECTS CLOSED; TIMEOUT/BACKPRESSURE + REDEPLOY LIFECYCLE OPEN
+
+**Fixes**
+
+- deprecated `SecureLogger` no longer prints application payload when the
+  engine is unavailable,
+- initialization failure logging no longer prints a stack trace or exception
+  message that could expose unnecessary runtime details,
+- unsupported `SecureLogXKafkaListener` direct ingress removed,
+- Log4j2 startup API added:
+  `SecureLogXLog4j2ConfigurationValidator.validateCurrentContextOrThrow(...)`,
+- per-event topology validation remains as a fail-closed secondary safety net.
+
+**Open production gates**
+
+1. **Bounded execution / timeout / overload**
+   - tokenizer wait is currently unbounded,
+   - ONNX `session.run()` is synchronous,
+   - no safe cancellation contract exists yet,
+   - a superficial caller timeout must not be used because abandoned native
+     inference could continue running.
+
+2. **Hot redeploy lifecycle**
+   - registry shutdown-hook classloader retention was removed,
+   - explicit native-session close on application-server undeploy/redeploy is
+     not yet implemented/validated.
+
+3. **Claims**
+   - H1+C1-S measured high-risk full-span recall remains ~99.08%,
+   - whole-record perfect redaction remains ~93.55%,
+   - residual misses must be disclosed,
+   - routing percentages from synthetic A-D workloads are not deployment ML
+     invocation SLAs,
+   - no claim that NPI/sensitive data can never appear in logs is permitted.
+
+**Release implication**
+
+Do not call the Log4j2 integration fully production-ready until bounded
+execution/overload behavior and redeploy lifecycle are validated.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
