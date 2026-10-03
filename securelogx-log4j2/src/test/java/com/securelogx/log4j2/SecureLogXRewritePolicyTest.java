@@ -181,7 +181,7 @@ class SecureLogXRewritePolicyTest {
                         .getValue("securelogx.reason")
         );
         assertNull(rewritten.getContextData().getValue("patient"));
-        assertTrue(rewritten.getContextStack().isEmpty());
+        assertEquals(0, rewritten.getContextStack().getDepth());
         assertFalse(rewritten.getThrown().toString().contains(RAW));
     }
 
