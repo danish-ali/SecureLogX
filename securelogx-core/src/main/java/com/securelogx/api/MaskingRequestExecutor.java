@@ -150,8 +150,19 @@ final class MaskingRequestExecutor implements AutoCloseable {
         }
 
         try {
+            long remainingNanos =
+                    deadlineNanos - System.nanoTime();
+            if (remainingNanos <= 0) {
+                throw new TimeoutException(
+                        "SecureLogX masking deadline expired"
+                );
+            }
+
             List<MaskedResult> results =
-                    task.get(deadlineMillis, TimeUnit.MILLISECONDS);
+                    task.get(
+                            remainingNanos,
+                            TimeUnit.NANOSECONDS
+                    );
             completedRequests.increment();
             recordFailClosedOutcome(results);
             return results;
@@ -205,9 +216,13 @@ final class MaskingRequestExecutor implements AutoCloseable {
             );
         } catch (ExecutionException e) {
             executionFailureRequests.increment();
+            Throwable cause = e.getCause();
             System.err.println(
                     "[SecureLogX] Masking request failed closed: "
-                            + e.getCause().getClass().getSimpleName()
+                            + (cause == null
+                                    ? "ExecutionException"
+                                    : cause.getClass()
+                                            .getSimpleName())
             );
             return failClosed(
                     events,
