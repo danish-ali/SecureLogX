@@ -28,6 +28,58 @@ The guiding principle is:
 
 > **Use deterministic logic where evidence is structurally strong, and use contextual ML where semantics or ambiguity require it.**
 
+### Current release posture
+
+**Public positioning:** SecureLogX is currently a **research runtime + Log4j2
+pilot**, not a universally adoptable 1.0 product.
+
+Do not change that positioning until all five OPEN production gates in the
+scorecard below are closed and validated under load.
+
+### Production-readiness scorecard
+
+```text
+H1_C1S model/quality             VALIDATED
+Hybrid resolver                  VALIDATED
+Long-input handling              VALIDATED
+CPU memory                       VALIDATED
+Log4j Rewrite architecture       IMPLEMENTED
+Structured LogEvent masking      IMPLEMENTED
+Config bypass detection          IMPLEMENTED
+Startup fail-fast API            IMPLEMENTED
+Legacy payload leak              FIXED
+Unsupported Kafka ingress        REMOVED
+
+Timeout/backpressure             OPEN
+Concurrency saturation policy    OPEN
+Hot redeploy/native lifecycle    OPEN
+Real application log benchmark   OPEN
+Multi-hour soak                  OPEN
+```
+
+The five OPEN items are release gates, not documentation TODOs.
+
+For timeout/backpressure specifically, do **not** wrap
+`tokenizationFuture.get()` with a caller timeout and call that bounded. The
+current inference path includes asynchronous tokenization followed by
+synchronous `OrtSession.run()`. A caller deadline could return while abandoned
+tokenization or ONNX work continues consuming CPU/native memory.
+
+The required design is:
+
+```text
+bounded admission
+  -> bounded executor/queue
+  -> deadline covering tokenize + ONNX
+  -> success
+  or fail-closed synthetic event + overload metric
+```
+
+Queue-full, rejection, timeout, and overload must never forward raw payload.
+The default target behavior is a synthetic fail-closed event plus a metric.
+Drop-without-forward may exist only as an explicit, documented, metered policy
+and must be load-tested before 1.0.
+
 ---
 
 ## 2. Repository Boundaries
@@ -3065,6 +3117,37 @@ IMMEDIATE DEFECTS CLOSED; TIMEOUT/BACKPRESSURE + REDEPLOY LIFECYCLE OPEN
 
 Do not call the Log4j2 integration fully production-ready until bounded
 execution/overload behavior and redeploy lifecycle are validated.
+
+---
+
+### 2026-10-03 — Freeze public posture and five-gate 1.0 scorecard
+
+**Status**
+
+RESEARCH RUNTIME + LOG4J2 PILOT
+
+**Public line**
+
+SecureLogX is not yet a universally adoptable 1.0 product.
+
+**Five OPEN release gates**
+
+1. timeout/backpressure,
+2. concurrency saturation policy,
+3. hot redeploy/native lifecycle,
+4. representative real-application log benchmark,
+5. multi-hour soak.
+
+**Hard timeout rule**
+
+A caller-side timeout around the current unbounded tokenization wait or
+synchronous ONNX call is not accepted as a production bound. Admission,
+execution capacity, end-to-end deadline, overload behavior, and metrics must be
+bounded together.
+
+Raw payload must never be forwarded on queue-full, rejection, timeout, or
+overload. The default design target is synthetic fail-closed output plus a
+metric.
 
 ---
 
