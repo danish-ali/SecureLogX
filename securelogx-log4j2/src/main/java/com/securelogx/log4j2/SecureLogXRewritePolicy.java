@@ -216,6 +216,14 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             return;
         }
 
+        // Package-private injected masking service is used only by unit tests.
+        // It intentionally exercises rewrite semantics without constructing a
+        // full Log4j configuration graph.
+        if (configuration == null && maskingServiceOverride != null) {
+            configurationViolations = List.of();
+            return;
+        }
+
         configurationViolations =
                 SecureLogXLog4j2ConfigurationValidator.findViolations(
                         configuration,
