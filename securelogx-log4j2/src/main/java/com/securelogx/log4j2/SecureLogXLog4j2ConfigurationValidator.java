@@ -41,8 +41,7 @@ public final class SecureLogXLog4j2ConfigurationValidator {
             );
         }
 
-        validateLoggerConfig(
-                "root",
+        validateRootLogger(
                 configuration.getRootLogger(),
                 expectedRewriteAppenderName,
                 violations
@@ -118,6 +117,42 @@ public final class SecureLogXLog4j2ConfigurationValidator {
                             + String.join("; ", violations)
             );
         }
+    }
+
+    private static void validateRootLogger(
+            LoggerConfig rootLogger,
+            String expectedRewriteAppenderName,
+            List<String> violations
+    ) {
+        if (rootLogger == null) {
+            violations.add("Root logger configuration is missing");
+            return;
+        }
+
+        Map<String, Appender> appenders = rootLogger.getAppenders();
+        Appender secureAppender =
+                appenders.get(expectedRewriteAppenderName);
+
+        if (secureAppender == null) {
+            violations.add(
+                    "Root logger does not reference SecureLogX RewriteAppender '"
+                            + expectedRewriteAppenderName
+                            + "'"
+            );
+        } else if (!(secureAppender instanceof RewriteAppender)) {
+            violations.add(
+                    "Root logger appender '"
+                            + expectedRewriteAppenderName
+                            + "' is not a RewriteAppender"
+            );
+        }
+
+        validateLoggerConfig(
+                "root",
+                rootLogger,
+                expectedRewriteAppenderName,
+                violations
+        );
     }
 
     private static void validateLoggerConfig(
