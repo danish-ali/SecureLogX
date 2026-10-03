@@ -70,15 +70,23 @@ public final class MaskingExecutionControl {
 
     public void attachRunOptions(
             OrtSession.RunOptions runOptions
-    ) throws Exception {
+    ) {
         activeRunOptions.set(runOptions);
 
-        if (isDeadlineExpired()) {
-            cancel(CancelReason.DEADLINE_EXCEEDED);
-        }
+        try {
+            if (isDeadlineExpired()) {
+                cancel(CancelReason.DEADLINE_EXCEEDED);
+            }
 
-        if (cancelReason.get() != CancelReason.NONE) {
-            runOptions.setTerminate(true);
+            if (cancelReason.get() != CancelReason.NONE) {
+                runOptions.setTerminate(true);
+            }
+        } catch (Exception e) {
+            activeRunOptions.compareAndSet(runOptions, null);
+            throw new IllegalStateException(
+                    "Failed to configure ONNX run cancellation",
+                    e
+            );
         }
     }
 
