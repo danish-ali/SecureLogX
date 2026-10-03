@@ -45,6 +45,17 @@ public class SecureLogXConfig {
         }
     }
 
+    private String runtimeProperty(
+            String name,
+            String defaultValue
+    ) {
+        String systemValue = System.getProperty(name);
+        if (systemValue != null && !systemValue.isBlank()) {
+            return systemValue.trim();
+        }
+        return props.getProperty(name, defaultValue).trim();
+    }
+
     public String getMode() {
         return props.getProperty("securelogx.mode", "CPU_SINGLE");
     }
@@ -109,7 +120,7 @@ public class SecureLogXConfig {
 
     public int getMaskingQueueCapacity() {
         int configured = Integer.parseInt(
-                props.getProperty(
+                runtimeProperty(
                         "securelogx.runtime.maskingQueueCapacity",
                         "64"
                 )
@@ -125,7 +136,7 @@ public class SecureLogXConfig {
 
     public long getMaskingDeadlineMillis() {
         long configured = Long.parseLong(
-                props.getProperty(
+                runtimeProperty(
                         "securelogx.runtime.maskingDeadlineMillis",
                         "2000"
                 )
@@ -141,7 +152,7 @@ public class SecureLogXConfig {
 
     public long getMaskingShutdownWaitMillis() {
         long configured = Long.parseLong(
-                props.getProperty(
+                runtimeProperty(
                         "securelogx.runtime.shutdownWaitMillis",
                         "5000"
                 )
