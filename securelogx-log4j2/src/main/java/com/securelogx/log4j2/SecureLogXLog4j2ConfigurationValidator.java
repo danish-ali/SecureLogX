@@ -14,12 +14,12 @@ import java.util.Map;
 /**
  * Detects Log4j2 configurations that can bypass SecureLogX protection.
  */
-final class SecureLogXLog4j2ConfigurationValidator {
+public final class SecureLogXLog4j2ConfigurationValidator {
 
     private SecureLogXLog4j2ConfigurationValidator() {
     }
 
-    static List<String> findViolations(
+    public static List<String> findViolations(
             Configuration configuration,
             String expectedRewriteAppenderName,
             boolean requirePreQueueSanitization
@@ -59,7 +59,20 @@ final class SecureLogXLog4j2ConfigurationValidator {
         }
 
         if (requirePreQueueSanitization) {
-            if (AsyncLoggerContextSelector.isSelected()) {
+            String selector = System.getProperty(
+                    "log4j2.contextSelector",
+                    System.getProperty("Log4jContextSelector", "")
+            );
+            boolean asyncSelectorConfigured =
+                    AsyncLoggerContextSelector.isSelected()
+                            || selector.contains(
+                                    "AsyncLoggerContextSelector"
+                            )
+                            || selector.contains(
+                                    "BasicAsyncLoggerContextSelector"
+                            );
+
+            if (asyncSelectorConfigured) {
                 violations.add(
                         "AsyncLogger context selector is enabled; raw events "
                                 + "can enter the Disruptor before rewrite"
@@ -86,6 +99,25 @@ final class SecureLogXLog4j2ConfigurationValidator {
         }
 
         return List.copyOf(violations);
+    }
+
+    public static void validateOrThrow(
+            Configuration configuration,
+            String expectedRewriteAppenderName,
+            boolean requirePreQueueSanitization
+    ) {
+        List<String> violations = findViolations(
+                configuration,
+                expectedRewriteAppenderName,
+                requirePreQueueSanitization
+        );
+
+        if (!violations.isEmpty()) {
+            throw new IllegalStateException(
+                    "Unsafe SecureLogX Log4j2 configuration: "
+                            + String.join("; ", violations)
+            );
+        }
     }
 
     private static void validateLoggerConfig(
