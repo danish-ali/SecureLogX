@@ -2,7 +2,6 @@ package com.securelogx.log4j2;
 
 import com.securelogx.api.MaskedResult;
 import com.securelogx.api.MaskReasonCode;
-import com.securelogx.api.SecureMasker;
 import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.core.Core;
 import org.apache.logging.log4j.core.LogEvent;
@@ -27,9 +26,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * SecureLogX RewritePolicy for Apache Log4j2's existing RewriteAppender.
@@ -54,9 +51,8 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
     private final boolean strictConfiguration;
     private final boolean requirePreQueueSanitization;
     private final Configuration configuration;
+    private final SecureMaskingService maskingServiceOverride;
     private final AtomicBoolean validated = new AtomicBoolean();
-    private final AtomicLong eventSequence = new AtomicLong();
-    private final String instanceId = UUID.randomUUID().toString();
 
     private volatile List<String> configurationViolations = List.of();
 
@@ -67,6 +63,24 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             boolean requirePreQueueSanitization,
             Configuration configuration
     ) {
+        this(
+                environment,
+                expectedAppenderName,
+                strictConfiguration,
+                requirePreQueueSanitization,
+                configuration,
+                null
+        );
+    }
+
+    SecureLogXRewritePolicy(
+            String environment,
+            String expectedAppenderName,
+            boolean strictConfiguration,
+            boolean requirePreQueueSanitization,
+            Configuration configuration,
+            SecureMaskingService maskingServiceOverride
+    ) {
         this.environment = normalize(environment, "dev");
         this.expectedAppenderName =
                 normalize(expectedAppenderName, "SecureLogXRewrite");
@@ -74,6 +88,7 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
         this.requirePreQueueSanitization =
                 requirePreQueueSanitization;
         this.configuration = configuration;
+        this.maskingServiceOverride = maskingServiceOverride;
     }
 
     @PluginFactory
@@ -103,7 +118,10 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
         }
 
         LogEvent original = source.toImmutable();
-        long secureSequence = eventSequence.incrementAndGet();
+        long secureSequence =
+                SecureLogXLog4j2Runtime.nextSequence();
+        String secureInstanceId =
+                SecureLogXLog4j2Runtime.instanceId();
 
         validateOnce();
         if (strictConfiguration
@@ -111,13 +129,16 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             return failClosedEvent(
                     original,
                     secureSequence,
+                    secureInstanceId,
                     "CONFIGURATION_INVALID"
             );
         }
 
-        SecureMasker masker;
+        SecureMaskingService masker;
         try {
-            masker = SecureMaskerRegistry.get(environment);
+            masker = maskingServiceOverride != null
+                    ? maskingServiceOverride
+                    : SecureMaskerRegistry.get(environment);
         } catch (Exception e) {
             StatusLogger.getLogger().error(
                     "SecureLogX masker initialization failed: {}",
@@ -126,6 +147,7 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             return failClosedEvent(
                     original,
                     secureSequence,
+                    secureInstanceId,
                     "MASKER_INITIALIZATION_FAILURE"
             );
         }
@@ -157,7 +179,7 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
                     original,
                     results,
                     secureSequence,
-                    instanceId
+                    secureInstanceId
             );
         } catch (Exception e) {
             StatusLogger.getLogger().error(
@@ -167,6 +189,7 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             return failClosedEvent(
                     original,
                     secureSequence,
+                    secureInstanceId,
                     "REWRITE_FAILURE"
             );
         }
@@ -195,13 +218,14 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
     private LogEvent failClosedEvent(
             LogEvent source,
             long secureSequence,
+            String secureInstanceId,
             String reason
     ) {
         StringMap context = new SortedArrayStringMap();
         addSecureMetadata(
                 context,
                 secureSequence,
-                instanceId,
+                secureInstanceId,
                 false,
                 true,
                 reason
