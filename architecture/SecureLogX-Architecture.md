@@ -43,9 +43,9 @@ H1_C1S model/quality             VALIDATED
 Hybrid resolver                  VALIDATED
 Long-input handling              VALIDATED
 CPU memory                       VALIDATED
-Log4j Rewrite architecture       VALIDATED (module-level)
-Structured LogEvent masking      VALIDATED (unit/integration)
-Config bypass detection          VALIDATED (module-level)
+Log4j Rewrite architecture       VALIDATED (real File + Console topology)
+Structured LogEvent masking      VALIDATED (real destination path)
+Config bypass detection          VALIDATED (including sibling bypass)
 Startup fail-fast API            IMPLEMENTED
 Legacy payload leak              FIXED
 Unsupported Kafka ingress        REMOVED
@@ -3181,6 +3181,59 @@ semantics. It does **not** yet close:
 - multi-hour soak.
 
 The public posture therefore remains **research runtime + Log4j2 pilot**.
+
+---
+
+### 2026-10-03 — Real Log4j2 File + Console topology validated
+
+**Status**
+
+VALIDATED
+
+**Observed result**
+
+- branch: `chatgpt/hybrid-detection-pipeline`,
+- build JVM: JDK 25,
+- Maven: 3.9.11,
+- compiler target: Java 21,
+- `BUILD SUCCESS`,
+- tests: 6 run, 0 failures, 0 errors,
+- configuration-validator test: 1 passed,
+- rewrite-policy tests: 3 passed,
+- real topology tests: 2 passed,
+- expected fail-closed diagnostic observed,
+- NER/model code unchanged.
+
+**Topology validated**
+
+```text
+Root LoggerConfig
+  -> Apache RewriteAppender
+    -> SecureLogXRewritePolicy
+      -> FileAppender
+      -> ConsoleAppender
+```
+
+The integration test verifies that a sensitive value placed in message,
+parameter, MDC, and throwable text does not reach either destination raw.
+
+A deliberately unsafe sibling destination appender is detected and rejected by
+startup/configuration validation.
+
+**Release implication**
+
+The real Log4j2 destination-topology gate is closed.
+
+Remaining OPEN 1.0 gates:
+
+1. timeout/backpressure,
+2. concurrency saturation policy,
+3. hot redeploy/native lifecycle,
+4. representative real-application log benchmark,
+5. multi-hour soak.
+
+Public posture remains **research runtime + Log4j2 pilot** until those gates
+are closed.
 
 ---
 
