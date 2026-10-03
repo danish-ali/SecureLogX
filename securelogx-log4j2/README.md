@@ -36,8 +36,7 @@ LogEvent before a RewriteAppender can sanitize it.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN"
-               packages="com.securelogx.log4j2">
+<Configuration status="WARN">
   <Appenders>
     <RollingFile name="ProtectedFile"
                  fileName="logs/application.log"
@@ -76,7 +75,8 @@ LogEvent before a RewriteAppender can sanitize it.
 ```
 
 The referenced destination appenders must be declared before the rewrite so
-Log4j can stop the dependency chain cleanly.
+Log4j can stop the dependency chain cleanly. The SecureLogX artifact includes
+generated Log4j plugin metadata, so package scanning is not required.
 
 ## What is sanitized
 
