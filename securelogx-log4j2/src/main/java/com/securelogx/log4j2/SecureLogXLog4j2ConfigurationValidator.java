@@ -1,0 +1,127 @@
+package com.securelogx.log4j2;
+
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.appender.rewrite.RewriteAppender;
+import org.apache.logging.log4j.core.async.AsyncLoggerConfig;
+import org.apache.logging.log4j.core.async.AsyncLoggerContextSelector;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Detects Log4j2 configurations that can bypass SecureLogX protection.
+ */
+final class SecureLogXLog4j2ConfigurationValidator {
+
+    private SecureLogXLog4j2ConfigurationValidator() {
+    }
+
+    static List<String> findViolations(
+            Configuration configuration,
+            String expectedRewriteAppenderName,
+            boolean requirePreQueueSanitization
+    ) {
+        List<String> violations = new ArrayList<>();
+
+        if (configuration == null) {
+            violations.add("Log4j2 Configuration is unavailable");
+            return violations;
+        }
+
+        Appender expected =
+                configuration.getAppender(expectedRewriteAppenderName);
+        if (!(expected instanceof RewriteAppender)) {
+            violations.add(
+                    "Expected RewriteAppender '"
+                            + expectedRewriteAppenderName
+                            + "' is missing"
+            );
+        }
+
+        validateLoggerConfig(
+                "root",
+                configuration.getRootLogger(),
+                expectedRewriteAppenderName,
+                violations
+        );
+
+        for (Map.Entry<String, LoggerConfig> entry
+                : configuration.getLoggers().entrySet()) {
+            validateLoggerConfig(
+                    entry.getKey(),
+                    entry.getValue(),
+                    expectedRewriteAppenderName,
+                    violations
+            );
+        }
+
+        if (requirePreQueueSanitization) {
+            if (AsyncLoggerContextSelector.isSelected()) {
+                violations.add(
+                        "AsyncLogger context selector is enabled; raw events "
+                                + "can enter the Disruptor before rewrite"
+                );
+            }
+
+            if (configuration.getRootLogger()
+                    instanceof AsyncLoggerConfig) {
+                violations.add(
+                        "AsyncRoot is configured upstream of SecureLogX rewrite"
+                );
+            }
+
+            for (Map.Entry<String, LoggerConfig> entry
+                    : configuration.getLoggers().entrySet()) {
+                if (entry.getValue() instanceof AsyncLoggerConfig) {
+                    violations.add(
+                            "AsyncLogger '"
+                                    + entry.getKey()
+                                    + "' is configured upstream of rewrite"
+                    );
+                }
+            }
+        }
+
+        return List.copyOf(violations);
+    }
+
+    private static void validateLoggerConfig(
+            String loggerName,
+            LoggerConfig loggerConfig,
+            String expectedRewriteAppenderName,
+            List<String> violations
+    ) {
+        if (loggerConfig == null) {
+            return;
+        }
+
+        Map<String, Appender> appenders =
+                loggerConfig.getAppenders();
+
+        for (Map.Entry<String, Appender> entry : appenders.entrySet()) {
+            if (!expectedRewriteAppenderName.equals(entry.getKey())) {
+                violations.add(
+                        "Logger '"
+                                + loggerName
+                                + "' directly references appender '"
+                                + entry.getKey()
+                                + "', bypassing SecureLogX rewrite"
+                );
+                continue;
+            }
+
+            if (!(entry.getValue() instanceof RewriteAppender)) {
+                violations.add(
+                        "Logger '"
+                                + loggerName
+                                + "' appender '"
+                                + entry.getKey()
+                                + "' is not a RewriteAppender"
+                );
+            }
+        }
+    }
+}
