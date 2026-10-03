@@ -10,6 +10,7 @@ public record MaskingRuntimeStats(
         long completedRequests,
         long overloadRejectedRequests,
         long deadlineExceededRequests,
+        long nativeTerminationSignals,
         long executionFailureRequests,
         int activeRequests,
         int queuedRequests,
