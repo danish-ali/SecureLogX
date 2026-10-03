@@ -1,5 +1,12 @@
 # SecureLogX Log4j2 integration
 
+> **Current maturity:** research runtime + Log4j2 pilot. This integration is
+> not yet presented as a universally adoptable 1.0 release.
+
+The remaining 1.0 gates are bounded timeout/backpressure, an explicit
+concurrency-saturation policy, validated hot-redeploy/native lifecycle,
+representative real-application log benchmarking, and a multi-hour soak.
+
 SecureLogX uses Apache Log4j2's existing `RewriteAppender`. The SecureLogX
 artifact supplies a `SecureLogXRewritePolicy`; it does not replace Log4j2's
 destination appenders.
