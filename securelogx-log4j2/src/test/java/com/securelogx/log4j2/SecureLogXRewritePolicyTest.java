@@ -236,9 +236,15 @@ class SecureLogXRewritePolicyTest {
         );
 
         assertTrue(secondSequence > firstSequence);
-        assertEquals(
-                first.getContextData().getValue("securelogx.instanceId"),
-                second.getContextData().getValue("securelogx.instanceId")
+        String firstInstanceId = String.valueOf(
+                first.getContextData()
+                        .getValue("securelogx.instanceId")
         );
+        String secondInstanceId = String.valueOf(
+                second.getContextData()
+                        .getValue("securelogx.instanceId")
+        );
+
+        assertEquals(firstInstanceId, secondInstanceId);
     }
 }
