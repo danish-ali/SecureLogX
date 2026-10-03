@@ -50,8 +50,8 @@ Startup fail-fast API            IMPLEMENTED
 Legacy payload leak              FIXED
 Unsupported Kafka ingress        REMOVED
 
-Timeout/backpressure             OPEN
-Concurrency saturation policy    OPEN
+Timeout/backpressure             IMPLEMENTED; VALIDATION OPEN
+Concurrency saturation policy    PILOT BASELINE; LOAD VALIDATION OPEN
 Hot redeploy/native lifecycle    OPEN
 Real application log benchmark   OPEN
 Multi-hour soak                  OPEN
@@ -3234,6 +3234,84 @@ Remaining OPEN 1.0 gates:
 
 Public posture remains **research runtime + Log4j2 pilot** until those gates
 are closed.
+
+---
+
+### 2026-10-03 — Bounded masking runtime implemented
+
+**Status**
+
+IMPLEMENTED; VALIDATION OPEN
+
+**Production-path design**
+
+```text
+Log4j RewritePolicy / SecureMasker
+  -> bounded admission queue
+  -> one masking worker (pilot baseline)
+  -> one absolute request deadline
+     covering queue wait + tokenization + ONNX
+  -> cooperative tokenizer interruption
+  -> ONNX OrtSession.RunOptions termination
+  -> success
+     or fail-closed synthetic result + reason/metric
+```
+
+**Key decisions**
+
+- no caller-only timeout wrapper,
+- no unbounded inner tokenizer executor,
+- queue-full/rejection returns
+  `[SECURELOGX_REDACTED_PROCESSING_FAILURE]`,
+- deadline expiry returns the same synthetic protected payload,
+- raw input is never returned for overload or deadline,
+- public reason codes distinguish `OVERLOAD_REJECTED` and
+  `DEADLINE_EXCEEDED`,
+- request-level runtime metrics expose accepted/completed/rejected/deadline/
+  execution-failure counts plus active and queued requests,
+- Log4j metadata preserves the overload/deadline reason,
+- one active masking worker is intentional until load/memory testing proves
+  higher concurrency preserves the validated native-memory envelope.
+
+**Pilot defaults**
+
+- masking queue capacity: 64 requests,
+- end-to-end deadline: 2000 ms,
+- executor shutdown wait: 5000 ms,
+- active masking workers: 1.
+
+These values are engineering defaults, not published SLAs. They must be tuned
+from representative load tests.
+
+**ONNX cancellation basis**
+
+The shipped ONNX Runtime 1.23.2 Java API supports
+`OrtSession.RunOptions.setTerminate(true)`. Each native
+`session.run(...)` now receives request-specific RunOptions so deadline
+cancellation can signal the active native run rather than merely returning from
+the caller.
+
+**Validation added**
+
+Model-free tests now cover:
+
+- queue saturation -> fail-closed `OVERLOAD_REJECTED`,
+- deadline expiry -> fail-closed `DEADLINE_EXCEEDED`,
+- raw payload absent from both failure results,
+- Log4j deadline reason propagation.
+
+**Release implication**
+
+Timeout/backpressure and saturation are **not yet closed**. Required next
+evidence:
+
+1. compile/unit/integration pass,
+2. real ONNX deadline-termination validation,
+3. concurrent saturation/load test with queue-full events,
+4. latency/throughput/memory measurements under overload,
+5. proof that no raw payload reaches downstream destinations.
+
+Public posture remains **research runtime + Log4j2 pilot**.
 
 ---
 
