@@ -50,8 +50,8 @@ Startup fail-fast API            IMPLEMENTED
 Legacy payload leak              FIXED
 Unsupported Kafka ingress        REMOVED
 
-Timeout/backpressure             IMPLEMENTED; VALIDATION OPEN
-Concurrency saturation policy    PILOT BASELINE; LOAD VALIDATION OPEN
+Timeout/backpressure             MODEL-FREE VALIDATED; REAL ONNX VALIDATION OPEN
+Concurrency saturation policy    MODEL-FREE VALIDATED; LOAD VALIDATION OPEN
 Hot redeploy/native lifecycle    OPEN
 Real application log benchmark   OPEN
 Multi-hour soak                  OPEN
@@ -3312,6 +3312,46 @@ evidence:
 5. proof that no raw payload reaches downstream destinations.
 
 Public posture remains **research runtime + Log4j2 pilot**.
+
+---
+
+### 2026-10-03 — Model-free bounded-runtime tests pass
+
+**Status**
+
+MODEL-FREE BOUNDED ADMISSION/DEADLINE VALIDATED
+
+**Observed result**
+
+`securelogx-core`:
+
+- `MaskingRequestExecutorTest`: 2 tests passed,
+- queue saturation fail-closed behavior passed,
+- deadline fail-closed behavior passed.
+
+`securelogx-log4j2`:
+
+- configuration validator: 1 passed,
+- rewrite policy: 4 passed,
+- real topology integration: 2 passed,
+- expected fail-closed diagnostics observed.
+
+Across the reactor this checkpoint therefore exercised **9 passing tests**:
+2 core + 7 Log4j2.
+
+**What this closes**
+
+- bounded queue rejection semantics,
+- no-raw fallback on queue saturation,
+- deadline fail-closed result semantics,
+- Log4j overload/deadline reason propagation.
+
+**What remains open**
+
+- actual ONNX RunOptions termination under a forced deadline,
+- real-model queue saturation under concurrent callers,
+- latency/throughput/native-memory behavior under overload,
+- no-raw downstream proof during real-model saturation.
 
 ---
 
