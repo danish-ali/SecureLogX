@@ -61,8 +61,8 @@ class SecureLogXRewriteTopologyIntegrationTest {
             Path logFile = tempDir.resolve("protected.log");
 
             PatternLayout layout = PatternLayout.newBuilder()
-                    .withConfiguration(configuration)
-                    .withPattern(
+                    .setConfiguration(configuration)
+                    .setPattern(
                             "%level|%m|patient=%X{patient}|%throwable%n"
                     )
                     .build();
@@ -210,8 +210,8 @@ class SecureLogXRewriteTopologyIntegrationTest {
                 new DefaultConfiguration();
 
         PatternLayout layout = PatternLayout.newBuilder()
-                .withConfiguration(configuration)
-                .withPattern("%m%n")
+                .setConfiguration(configuration)
+                .setPattern("%m%n")
                 .build();
 
         ConsoleAppender protectedConsole =
