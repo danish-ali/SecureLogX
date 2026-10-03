@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
@@ -53,7 +55,7 @@ final class MaskingRequestExecutor implements AutoCloseable {
 
     private final Map<
             MaskingExecutionControl,
-            FutureTask<List<MaskedResult>>> liveRequests =
+            LiveRequest> liveRequests =
             new ConcurrentHashMap<>();
 
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -125,23 +127,37 @@ final class MaskingRequestExecutor implements AutoCloseable {
         MaskingExecutionControl control =
                 new MaskingExecutionControl(deadlineNanos);
 
+        AtomicReference<Thread> workerThread =
+                new AtomicReference<>();
+        CountDownLatch finished = new CountDownLatch(1);
+
         FutureTask<List<MaskedResult>> task =
                 new FutureTask<>(() -> {
+                    workerThread.set(Thread.currentThread());
                     try {
                         control.checkpoint();
                         return operation.execute(control);
                     } finally {
+                        workerThread.set(null);
+                        finished.countDown();
                         liveRequests.remove(control);
                     }
                 });
 
-        liveRequests.put(control, task);
+        LiveRequest liveRequest = new LiveRequest(
+                task,
+                workerThread,
+                finished
+        );
+        liveRequests.put(control, liveRequest);
 
         try {
             executor.execute(task);
             acceptedRequests.increment();
         } catch (RejectedExecutionException e) {
             liveRequests.remove(control);
+            task.cancel(false);
+            finished.countDown();
             overloadRejectedRequests.increment();
             return failClosed(
                     events,
@@ -172,25 +188,45 @@ final class MaskingRequestExecutor implements AutoCloseable {
                     MaskingExecutionControl.CancelReason
                             .DEADLINE_EXCEEDED
             );
-            task.cancel(true);
-            if (executor.remove(task)) {
+
+            boolean removedBeforeStart = executor.remove(task);
+            if (removedBeforeStart) {
+                task.cancel(false);
                 liveRequests.remove(control);
+                finished.countDown();
+            } else {
+                Thread worker = workerThread.get();
+                if (worker != null) {
+                    worker.interrupt();
+                }
+                awaitFinishedUninterruptibly(finished);
             }
+
             return failClosed(
                     events,
                     MaskReasonCode.DEADLINE_EXCEEDED
             );
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
             executionFailureRequests.increment();
             control.cancel(
                     MaskingExecutionControl.CancelReason
                             .CALLER_INTERRUPTED
             );
-            task.cancel(true);
-            if (executor.remove(task)) {
+
+            boolean removedBeforeStart = executor.remove(task);
+            if (removedBeforeStart) {
+                task.cancel(false);
                 liveRequests.remove(control);
+                finished.countDown();
+            } else {
+                Thread worker = workerThread.get();
+                if (worker != null) {
+                    worker.interrupt();
+                }
+                awaitFinishedUninterruptibly(finished);
             }
+
+            Thread.currentThread().interrupt();
             return failClosed(
                     events,
                     MaskReasonCode.PROCESSING_FAILURE
@@ -253,12 +289,18 @@ final class MaskingRequestExecutor implements AutoCloseable {
 
         for (Map.Entry<
                 MaskingExecutionControl,
-                FutureTask<List<MaskedResult>>> entry
+                LiveRequest> entry
                 : liveRequests.entrySet()) {
             entry.getKey().cancel(
                     MaskingExecutionControl.CancelReason.SHUTDOWN
             );
-            entry.getValue().cancel(true);
+            Thread worker = entry.getValue()
+                    .workerThread()
+                    .get();
+            if (worker != null) {
+                worker.interrupt();
+            }
+            entry.getValue().task().cancel(true);
         }
 
         List<Runnable> queued = executor.shutdownNow();
@@ -283,6 +325,32 @@ final class MaskingRequestExecutor implements AutoCloseable {
         } finally {
             liveRequests.clear();
         }
+    }
+
+    private static void awaitFinishedUninterruptibly(
+            CountDownLatch finished
+    ) {
+        boolean interrupted = false;
+
+        while (true) {
+            try {
+                finished.await();
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private record LiveRequest(
+            FutureTask<List<MaskedResult>> task,
+            AtomicReference<Thread> workerThread,
+            CountDownLatch finished
+    ) {
     }
 
     private long calculateDeadlineNanos() {
