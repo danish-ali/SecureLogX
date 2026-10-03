@@ -107,6 +107,54 @@ public class SecureLogXConfig {
         return configured;
     }
 
+    public int getMaskingQueueCapacity() {
+        int configured = Integer.parseInt(
+                props.getProperty(
+                        "securelogx.runtime.maskingQueueCapacity",
+                        "64"
+                )
+        );
+        if (configured < 1) {
+            throw new IllegalArgumentException(
+                    "securelogx.runtime.maskingQueueCapacity "
+                            + "must be at least 1"
+            );
+        }
+        return configured;
+    }
+
+    public long getMaskingDeadlineMillis() {
+        long configured = Long.parseLong(
+                props.getProperty(
+                        "securelogx.runtime.maskingDeadlineMillis",
+                        "2000"
+                )
+        );
+        if (configured < 1) {
+            throw new IllegalArgumentException(
+                    "securelogx.runtime.maskingDeadlineMillis "
+                            + "must be at least 1"
+            );
+        }
+        return configured;
+    }
+
+    public long getMaskingShutdownWaitMillis() {
+        long configured = Long.parseLong(
+                props.getProperty(
+                        "securelogx.runtime.shutdownWaitMillis",
+                        "5000"
+                )
+        );
+        if (configured < 1) {
+            throw new IllegalArgumentException(
+                    "securelogx.runtime.shutdownWaitMillis "
+                            + "must be at least 1"
+            );
+        }
+        return configured;
+    }
+
     public MlDecoderMode getMlDecoderMode() {
         return MlDecoderMode.fromConfig(
                 props.getProperty(
