@@ -43,9 +43,9 @@ H1_C1S model/quality             VALIDATED
 Hybrid resolver                  VALIDATED
 Long-input handling              VALIDATED
 CPU memory                       VALIDATED
-Log4j Rewrite architecture       IMPLEMENTED
-Structured LogEvent masking      IMPLEMENTED
-Config bypass detection          IMPLEMENTED
+Log4j Rewrite architecture       VALIDATED (module-level)
+Structured LogEvent masking      VALIDATED (unit/integration)
+Config bypass detection          VALIDATED (module-level)
 Startup fail-fast API            IMPLEMENTED
 Legacy payload leak              FIXED
 Unsupported Kafka ingress        REMOVED
@@ -156,7 +156,7 @@ MASK / ALLOW evidence              ML-v1.3 BERT
 
 ### Appender ingress and event-envelope contract
 
-**Status: CORE + LOG4J2 REWRITE INTEGRATION IMPLEMENTED; LOCAL MODULE VALIDATION PENDING**
+**Status: CORE + LOG4J2 REWRITE MODULE VALIDATED; REAL DESTINATION/LOAD VALIDATION OPEN**
 
 Moving SecureLogX toward an appender integration changes the meaning of log
 severity and ordering metadata.
@@ -3148,6 +3148,39 @@ bounded together.
 Raw payload must never be forwarded on queue-full, rejection, timeout, or
 overload. The default design target is synthetic fail-closed output plus a
 metric.
+
+---
+
+### 2026-10-03 — Log4j2 module compile/tests pass
+
+**Status**
+
+MODULE-LEVEL LOG4J2 VALIDATION PASSED
+
+**Observed result**
+
+- `securelogx-core`: compile success,
+- `securelogx-log4j2`: compile success,
+- Java compiler target: release 21,
+- Log4j2 tests: 4 run, 0 failures, 0 errors,
+- configuration-validator test: passed,
+- rewrite-policy tests: passed, including whole-event fail-closed behavior,
+- expected fail-closed diagnostic emitted,
+- NER/model code unchanged.
+
+**Interpretation**
+
+This validates the Log4j2 module implementation and its model-free security
+semantics. It does **not** yet close:
+
+- root -> RewriteAppender -> real File + Console destination validation,
+- bounded admission / timeout / overload handling,
+- concurrency saturation policy,
+- hot-redeploy/native lifecycle,
+- representative real-application log benchmark,
+- multi-hour soak.
+
+The public posture therefore remains **research runtime + Log4j2 pilot**.
 
 ---
 
