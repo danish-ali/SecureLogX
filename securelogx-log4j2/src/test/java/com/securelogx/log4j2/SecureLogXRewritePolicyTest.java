@@ -90,8 +90,12 @@ class SecureLogXRewritePolicyTest {
         assertFalse(String.valueOf(
                 rewritten.getMessage().getParameters()[0]
         ).contains(RAW));
-        assertFalse(rewritten.getContextData()
-                .getValue("patient").contains(RAW));
+        assertFalse(
+                String.valueOf(
+                        rewritten.getContextData()
+                                .getValue("patient")
+                ).contains(RAW)
+        );
         assertFalse(rewritten.getContextStack()
                 .asList().get(0).contains(RAW));
         assertNotNull(rewritten.getThrown());
