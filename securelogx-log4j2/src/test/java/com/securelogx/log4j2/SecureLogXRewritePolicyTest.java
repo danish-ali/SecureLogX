@@ -90,12 +90,10 @@ class SecureLogXRewritePolicyTest {
         assertFalse(String.valueOf(
                 rewritten.getMessage().getParameters()[0]
         ).contains(RAW));
-        assertFalse(
-                String.valueOf(
-                        rewritten.getContextData()
-                                .getValue("patient")
-                ).contains(RAW)
-        );
+        String patientContextValue =
+                (String) rewritten.getContextData()
+                        .getValue("patient");
+        assertFalse(patientContextValue.contains(RAW));
         assertFalse(rewritten.getContextStack()
                 .asList().get(0).contains(RAW));
         assertNotNull(rewritten.getThrown());
@@ -236,14 +234,12 @@ class SecureLogXRewritePolicyTest {
         );
 
         assertTrue(secondSequence > firstSequence);
-        String firstInstanceId = String.valueOf(
-                first.getContextData()
-                        .getValue("securelogx.instanceId")
-        );
-        String secondInstanceId = String.valueOf(
-                second.getContextData()
-                        .getValue("securelogx.instanceId")
-        );
+        String firstInstanceId =
+                (String) first.getContextData()
+                        .getValue("securelogx.instanceId");
+        String secondInstanceId =
+                (String) second.getContextData()
+                        .getValue("securelogx.instanceId");
 
         assertEquals(firstInstanceId, secondInstanceId);
     }
