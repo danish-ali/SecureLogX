@@ -184,6 +184,55 @@ class SecureLogXRewritePolicyTest {
     }
 
     @Test
+    void preservesDeadlineReasonInFailClosedMetadata() {
+        SecureMaskingService service = texts ->
+                texts.stream()
+                        .map(text -> new MaskedResult(
+                                "[SECURELOGX_REDACTED_PROCESSING_FAILURE]",
+                                false,
+                                true,
+                                MaskReasonCode.DEADLINE_EXCEEDED,
+                                1L,
+                                "test-masker"
+                        ))
+                        .toList();
+
+        SecureLogXRewritePolicy policy =
+                new SecureLogXRewritePolicy(
+                        "test",
+                        "SecureLogXRewrite",
+                        false,
+                        false,
+                        null,
+                        service
+                );
+
+        LogEvent source = new Log4jLogEvent.Builder()
+                .setLoggerName("example")
+                .setLevel(Level.INFO)
+                .setMessage(new SimpleMessage("sensitive"))
+                .setContextStack(ThreadContext.EMPTY_STACK)
+                .build();
+
+        LogEvent rewritten = policy.rewrite(source);
+
+        assertEquals(
+                "true",
+                rewritten.getContextData()
+                        .getValue("securelogx.failClosed")
+        );
+        assertEquals(
+                "DEADLINE_EXCEEDED",
+                rewritten.getContextData()
+                        .getValue("securelogx.reason")
+        );
+        assertEquals(
+                "[SECURELOGX_REDACTED_PROCESSING_FAILURE]",
+                rewritten.getMessage().getFormattedMessage()
+        );
+    }
+
+    @Test
     void sequenceAndInstanceSurvivePolicyRecreation() {
         SecureMaskingService service = texts ->
                 texts.stream()
