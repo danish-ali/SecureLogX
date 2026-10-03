@@ -3,6 +3,7 @@ package com.securelogx.ner.impl;
 import ai.onnxruntime.OrtSession;
 
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -26,6 +27,8 @@ public final class MaskingExecutionControl {
             new AtomicReference<>(CancelReason.NONE);
     private final AtomicReference<OrtSession.RunOptions> activeRunOptions =
             new AtomicReference<>();
+    private final AtomicBoolean nativeTerminationSignalled =
+            new AtomicBoolean();
 
     public MaskingExecutionControl(long deadlineNanos) {
         this.deadlineNanos = deadlineNanos;
@@ -61,6 +64,7 @@ public final class MaskingExecutionControl {
         if (runOptions != null) {
             try {
                 runOptions.setTerminate(true);
+                nativeTerminationSignalled.set(true);
             } catch (Exception ignored) {
                 // The run may already have completed/closed. The worker still
                 // observes the cancellation flag at its next checkpoint.
@@ -94,6 +98,10 @@ public final class MaskingExecutionControl {
             OrtSession.RunOptions runOptions
     ) {
         activeRunOptions.compareAndSet(runOptions, null);
+    }
+
+    public boolean nativeTerminationSignalled() {
+        return nativeTerminationSignalled.get();
     }
 
     public CancelReason cancelReason() {
