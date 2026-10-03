@@ -26,6 +26,7 @@ public final class SecureMasker implements AutoCloseable {
     private final SecureLogXConfig config;
     private final ParallelTokenizer tokenizer;
     private final ONNXDynamicInferenceEngine engine;
+    private final MaskingRequestExecutor maskingRuntime;
     private final AtomicLong sequence = new AtomicLong();
 
     public SecureMasker() throws Exception {
@@ -53,6 +54,11 @@ public final class SecureMasker implements AutoCloseable {
         this.engine = new ONNXDynamicInferenceEngine(
                 config.getModelPath(),
                 config
+        );
+        this.maskingRuntime = new MaskingRequestExecutor(
+                config.getMaskingQueueCapacity(),
+                config.getMaskingDeadlineMillis(),
+                config.getMaskingShutdownWaitMillis()
         );
     }
 
@@ -109,11 +115,23 @@ public final class SecureMasker implements AutoCloseable {
             );
         }
 
-        return engine.maskBatch(tokenizer, events);
+        return maskingRuntime.execute(
+                events,
+                control -> engine.maskBatch(
+                        tokenizer,
+                        events,
+                        control
+                )
+        );
+    }
+
+    public MaskingRuntimeStats getRuntimeStats() {
+        return maskingRuntime.stats();
     }
 
     @Override
     public void close() {
+        maskingRuntime.close();
         engine.shutdown();
     }
 }
