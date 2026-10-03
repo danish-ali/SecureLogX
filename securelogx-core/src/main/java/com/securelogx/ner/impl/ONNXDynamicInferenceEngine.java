@@ -565,6 +565,7 @@ public class ONNXDynamicInferenceEngine {
                                                 constrainedResult.spans()
                                         );
                             }
+                        }
                         } finally {
                             control.detachRunOptions(runOptions);
                         }
