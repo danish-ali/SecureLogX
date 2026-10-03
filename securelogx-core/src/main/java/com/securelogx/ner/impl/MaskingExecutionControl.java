@@ -3,6 +3,8 @@ package com.securelogx.ner.impl;
 import ai.onnxruntime.OrtSession;
 
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -29,6 +31,8 @@ public final class MaskingExecutionControl {
             new AtomicReference<>();
     private final AtomicBoolean nativeTerminationSignalled =
             new AtomicBoolean();
+    private final CountDownLatch nativeRunStarted =
+            new CountDownLatch(1);
 
     public MaskingExecutionControl(long deadlineNanos) {
         this.deadlineNanos = deadlineNanos;
@@ -76,6 +80,7 @@ public final class MaskingExecutionControl {
             OrtSession.RunOptions runOptions
     ) {
         activeRunOptions.set(runOptions);
+        nativeRunStarted.countDown();
 
         try {
             if (isDeadlineExpired()) {
@@ -98,6 +103,17 @@ public final class MaskingExecutionControl {
             OrtSession.RunOptions runOptions
     ) {
         activeRunOptions.compareAndSet(runOptions, null);
+    }
+
+    /**
+     * Validation/diagnostic hook: waits until an actual ONNX RunOptions has
+     * been attached to session.run(...).
+     */
+    public boolean awaitNativeRunStarted(
+            long timeout,
+            TimeUnit unit
+    ) throws InterruptedException {
+        return nativeRunStarted.await(timeout, unit);
     }
 
     public boolean nativeTerminationSignalled() {
