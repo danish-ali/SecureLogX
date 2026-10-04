@@ -13,6 +13,7 @@ import org.apache.logging.log4j.core.config.AppenderRef;
 import org.apache.logging.log4j.core.config.ConfigurationSource;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.layout.PatternLayout;
+import org.apache.logging.log4j.message.Message;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.message.SimpleMessage;
 import org.apache.logging.log4j.message.StringMapMessage;
@@ -418,7 +419,7 @@ public final class SecureLogXApplicationLogBenchmark {
                 case 1 -> logger.log(
                         level,
                         (Marker) null,
-                        new SimpleMessage(
+                        (Message) new SimpleMessage(
                                 "Customer Jane Doe moved to "
                                         + "14 Oak Lane in Charlotte"
                         )
@@ -438,14 +439,14 @@ public final class SecureLogXApplicationLogBenchmark {
                 case 3 -> logger.log(
                         level,
                         (Marker) null,
-                        new SimpleMessage(
+                        (Message) new SimpleMessage(
                                 "customer context update completed"
                         )
                 );
                 case 4 -> logger.log(
                         level,
                         (Marker) null,
-                        new SimpleMessage(
+                        (Message) new SimpleMessage(
                                 "request processing failed"
                         ),
                         new IllegalStateException(
@@ -458,12 +459,12 @@ public final class SecureLogXApplicationLogBenchmark {
                 case 5 -> logger.log(
                         level,
                         (Marker) null,
-                        new SimpleMessage(longWindowedMessage())
+                        (Message) new SimpleMessage(longWindowedMessage())
                 );
                 case 6 -> logger.log(
                         level,
                         (Marker) null,
-                        new SimpleMessage(
+                        (Message) new SimpleMessage(
                                 "service version="
                                         + VERSION_CONTROL
                                         + " response=200"
