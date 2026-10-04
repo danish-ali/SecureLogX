@@ -3454,6 +3454,50 @@ measurements. The sealed challenge remains untouched and must not be rerun.
 
 ---
 
+### 2026-10-04 — Hybrid validation passes after SSN protection-floor fix
+
+**Status**
+
+HYBRID LOGIC / GATE AUDIT / RUNTIME REVALIDATED
+
+**Observed result**
+
+The full non-sealed hybrid validation completed successfully after the explicit
+SSN-field protection-floor change.
+
+Outputs:
+
+- hybrid detection logic check: passed,
+- hybrid labeled-dataset gate audit: passed,
+- end-to-end hybrid ONNX runtime check: passed,
+- NER repository remained read-only,
+- no NER files were created or modified,
+- sealed challenge was not rerun.
+
+Reports:
+
+- `reports/hybrid-detection-check/result.json`,
+- `reports/hybrid-gate-dataset-audit/result.json`,
+- `reports/hybrid-runtime-check/result.json`.
+
+**Interpretation**
+
+The narrow SSN rule change did not regress the validated hybrid routing/gate
+safety or runtime behavior. Explicit authoritative SSN fields now retain a
+deterministic MASK floor while ambiguous SSN-shaped values still require
+contextual resolution.
+
+The previous full H1+C1-S quality percentages remain historical until the
+architecture-quality comparison is rerun; this validation confirms safety and
+runtime behavior, not a newly measured full quality table.
+
+**Next gate**
+
+Rerun the real bounded-runtime ONNX cancellation/saturation harness. That is the
+specific reproducer that previously exposed the raw SSN leak.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
