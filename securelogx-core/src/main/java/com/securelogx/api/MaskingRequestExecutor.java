@@ -250,39 +250,53 @@ final class MaskingRequestExecutor implements AutoCloseable {
                     MaskReasonCode.PROCESSING_FAILURE
             );
         } catch (CancellationException e) {
-            MaskingExecutionControl.CancelReason reason =
-                    control.cancelReason();
-
-            if (reason
-                    == MaskingExecutionControl.CancelReason
-                            .DEADLINE_EXCEEDED) {
-                deadlineExceededRequests.increment();
-                return failClosed(
-                        events,
-                        MaskReasonCode.DEADLINE_EXCEEDED
-                );
-            }
-
-            executionFailureRequests.increment();
-            return failClosed(
+            return classifyTerminalFailure(
                     events,
-                    MaskReasonCode.PROCESSING_FAILURE
+                    control,
+                    e
             );
         } catch (ExecutionException e) {
-            executionFailureRequests.increment();
-            Throwable cause = e.getCause();
-            System.err.println(
-                    "[SecureLogX] Masking request failed closed: "
-                            + (cause == null
-                                    ? "ExecutionException"
-                                    : cause.getClass()
-                                            .getSimpleName())
-            );
-            return failClosed(
+            return classifyTerminalFailure(
                     events,
-                    MaskReasonCode.PROCESSING_FAILURE
+                    control,
+                    e.getCause()
             );
         }
+    }
+
+    private List<MaskedResult> classifyTerminalFailure(
+            List<LogEvent> events,
+            MaskingExecutionControl control,
+            Throwable cause
+    ) {
+        MaskingExecutionControl.CancelReason reason =
+                control.cancelReason();
+
+        if (reason
+                == MaskingExecutionControl.CancelReason
+                        .DEADLINE_EXCEEDED) {
+            deadlineExceededRequests.increment();
+            if (control.nativeTerminationSignalled()) {
+                nativeTerminationSignals.increment();
+            }
+            return failClosed(
+                    events,
+                    MaskReasonCode.DEADLINE_EXCEEDED
+            );
+        }
+
+        executionFailureRequests.increment();
+        System.err.println(
+                "[SecureLogX] Masking request failed closed: "
+                        + (cause == null
+                                ? "unknown"
+                                : cause.getClass()
+                                        .getSimpleName())
+        );
+        return failClosed(
+                events,
+                MaskReasonCode.PROCESSING_FAILURE
+        );
     }
 
     MaskingRuntimeStats stats() {
