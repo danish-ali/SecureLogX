@@ -3784,6 +3784,49 @@ retention or progressive private-memory growth.
 
 ---
 
+### 2026-10-04 — Real LoggerContext redeploy harness added
+
+**Status**
+
+IMPLEMENTED; LOCAL REAL-MODEL LIFECYCLE RUN PENDING
+
+**Runner**
+
+`scripts/run-log4j2-context-lifecycle-check.ps1`
+
+Default: four complete lifecycle cycles.
+
+Each cycle performs:
+
+```text
+new LoggerContext
+  -> context-owned SecureMasker registry entry
+  -> real ML-v1.3 ONNX session
+  -> real ML-routed masking request
+  -> verify no raw SSN
+  -> LoggerContext.stop()
+  -> SecureMasker.close()
+  -> bounded executor shutdown
+  -> ONNX session shutdown
+  -> registry context/masker counts must be zero
+  -> settled process/native memory snapshot
+```
+
+The harness records before-create, after-create, after-inference, and after-stop
+memory for every cycle, plus the post-stop private-memory trend from the first
+to the last cycle.
+
+The validation fails if:
+
+- real inference fails closed unexpectedly,
+- the fixture does not exercise ML,
+- raw SSN survives,
+- any LoggerContext or masker remains in the registry after stop.
+
+The sealed challenge is not used.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
