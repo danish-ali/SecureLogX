@@ -181,6 +181,11 @@ public final class DeterministicSensitiveDataDetector {
             "operation"
     );
 
+    private static final Set<String> SSN_KEYS = Set.of(
+            "ssn",
+            "socialsecuritynumber"
+    );
+
     private static final Set<String> CARD_KEYS = Set.of(
             "card",
             "cardnumber",
@@ -228,6 +233,10 @@ public final class DeterministicSensitiveDataDetector {
         addSimpleMatches(text, EMAIL, "EMAIL", "validated-email-shape", evidence);
         Matcher ssn = SSN.matcher(text);
         while (ssn.find()) {
+            String owningKey = owningKey(text, ssn.start());
+            boolean authoritativeField =
+                    SSN_KEYS.contains(owningKey);
+
             addEvidence(
                     evidence,
                     new DetectionEvidence(
@@ -235,9 +244,13 @@ public final class DeterministicSensitiveDataDetector {
                             ssn.end(),
                             "SSN",
                             DetectionSource.DETERMINISTIC,
-                            ResolutionAction.ESCALATE,
-                            0.75,
-                            "ssn-shaped-value-requires-context"
+                            authoritativeField
+                                    ? ResolutionAction.MASK
+                                    : ResolutionAction.ESCALATE,
+                            authoritativeField ? 1.0 : 0.75,
+                            authoritativeField
+                                    ? "explicit-ssn-field"
+                                    : "ssn-shaped-value-requires-context"
                     )
             );
         }
