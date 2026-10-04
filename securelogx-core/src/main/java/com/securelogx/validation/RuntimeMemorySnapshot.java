@@ -21,7 +21,7 @@ import java.util.Locale;
  * ONNX Runtime allocates native memory outside the Java heap. Therefore heap
  * usage alone is not a sufficient production memory metric.
  */
-final class RuntimeMemorySnapshot {
+public final class RuntimeMemorySnapshot {
 
     private final String label;
     private final long timestampMillis;
@@ -92,7 +92,7 @@ final class RuntimeMemorySnapshot {
         this.processProbe = processProbe;
     }
 
-    static RuntimeMemorySnapshot capture(String label) {
+    public static RuntimeMemorySnapshot capture(String label) {
         MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
         MemoryUsage heap = memory.getHeapMemoryUsage();
         MemoryUsage nonHeap = memory.getNonHeapMemoryUsage();
@@ -134,7 +134,7 @@ final class RuntimeMemorySnapshot {
         );
     }
 
-    JSONObject toJson() {
+    public JSONObject toJson() {
         JSONObject object = new JSONObject();
         object.put("label", label);
         object.put("timestamp_millis", timestampMillis);
@@ -182,31 +182,31 @@ final class RuntimeMemorySnapshot {
         return object;
     }
 
-    long heapUsedBytes() {
+    public long heapUsedBytes() {
         return heapUsedBytes;
     }
 
-    long nonHeapUsedBytes() {
+    public long nonHeapUsedBytes() {
         return nonHeapUsedBytes;
     }
 
-    long directUsedBytes() {
+    public long directUsedBytes() {
         return directUsedBytes;
     }
 
-    long processCommittedVirtualBytes() {
+    public long processCommittedVirtualBytes() {
         return processCommittedVirtualBytes;
     }
 
-    long processWorkingSetBytes() {
+    public long processWorkingSetBytes() {
         return processWorkingSetBytes;
     }
 
-    long processPrivateBytes() {
+    public long processPrivateBytes() {
         return processPrivateBytes;
     }
 
-    long gpuProcessMemoryBytes() {
+    public long gpuProcessMemoryBytes() {
         return gpuProcessMemoryBytes;
     }
 
