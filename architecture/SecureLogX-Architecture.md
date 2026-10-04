@@ -3888,6 +3888,72 @@ close.
 
 ---
 
+### 2026-10-04 — Representative real application-log benchmark added
+
+**Status**
+
+IMPLEMENTED; LOCAL REAL-MODEL RUN PENDING
+
+**Runner**
+
+`scripts/run-application-log-benchmark.ps1`
+
+Default workload: 48 measured application events plus 4 warmup events.
+
+**Actual path**
+
+```text
+application Logger API
+  -> LoggerConfig
+  -> Apache RewriteAppender
+  -> production SecureLogXRewritePolicy
+  -> context-owned real SecureMasker / ML-v1.3 ONNX
+  -> real FileAppender
+```
+
+**Representative workload categories**
+
+- parameterized messages,
+- contextual ML text,
+- MapMessage values,
+- MDC values,
+- throwable messages,
+- long/windowed records,
+- non-sensitive control records,
+- synthetic API-key/JWT fixtures,
+- credit-card data,
+- phone/customer context,
+- INFO/WARN/ERROR/DEBUG severity mix,
+- ThreadContext stack.
+
+All credential-like fixtures are synthetic test values.
+
+**Validation**
+
+The benchmark fails if:
+
+- any known raw sensitive fixture reaches the protected file,
+- any sequential measured event fail-closes,
+- measured output event count differs from submitted count,
+- no event invokes ML,
+- any required severity disappears,
+- the benign `version=1.2.3.4` control is overmasked,
+- registry ownership remains after LoggerContext shutdown.
+
+**Measurements**
+
+- caller p50/p95/p99/max latency,
+- application events/second,
+- ML-invoked event count,
+- fail-closed event count,
+- severity counts,
+- protected file size,
+- before/after workload and post-stop process/native memory.
+
+This is engineering characterization, not a published SLA.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
