@@ -3753,6 +3753,37 @@ shutdown listeners after stopping the active configuration.
 
 ---
 
+### 2026-10-04 — Log4j context lifecycle unit/integration suite passes
+
+**Status**
+
+MODEL-FREE LOGGERCONTEXT LIFECYCLE VALIDATED
+
+**Observed result**
+
+- tests: 9 run,
+- failures: 0,
+- errors: 0,
+- skipped: 0,
+- `securelogx-core`: SUCCESS,
+- `securelogx-log4j2`: SUCCESS,
+- reactor: BUILD SUCCESS.
+
+This validates:
+
+- masker reuse across configuration reloads in one LoggerContext,
+- masker closure/removal on LoggerContext shutdown,
+- isolation between two independent LoggerContexts,
+- existing Log4j rewrite/configuration/topology behavior remains green.
+
+**Next gate**
+
+Repeated real-model lifecycle cycles must prove that actual SecureMasker/ONNX
+native resources are reclaimed after LoggerContext shutdown without registry
+retention or progressive private-memory growth.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
