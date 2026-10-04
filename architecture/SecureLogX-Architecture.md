@@ -51,7 +51,7 @@ Legacy payload leak              FIXED
 Unsupported Kafka ingress        REMOVED
 
 Timeout/backpressure             VALIDATED (real ONNX cancellation)
-Concurrency saturation policy    REJECTION VALIDATED; LOAD CHARACTERIZATION OPEN
+Concurrency saturation policy    VALIDATED (single-worker pilot)
 Hot redeploy/native lifecycle    OPEN
 Real application log benchmark   OPEN
 Multi-hour soak                  OPEN
@@ -3586,6 +3586,120 @@ Every result, successful or fail-closed, is checked for the raw SSN fixture.
 Any raw occurrence fails the characterization.
 
 This is a load-characterization harness, not JMH and not a published SLA.
+
+---
+
+### 2026-10-04 — Bounded-runtime load characterization passes
+
+**Status**
+
+CONCURRENCY SATURATION / LOAD CHARACTERIZATION VALIDATED FOR THE CURRENT
+SINGLE-WORKER PILOT
+
+**Observed workload**
+
+- sequential baseline requests: 8,
+- concurrent saturation attempts: 48,
+- concurrent callers: 12,
+- attempts per caller: 4,
+- active masking workers: 1,
+- queue capacity: 4,
+- deadline: 30 seconds.
+
+**Latency**
+
+Sequential successful requests:
+
+- p50: **201.08 ms**,
+- p95/p99/max: **313.20 ms**.
+
+Saturation successful requests:
+
+- count: **19**,
+- p50: **769.64 ms**,
+- p95/p99/max: **1058.84 ms**.
+
+Overload rejection:
+
+- rejected: **29 / 48** saturation attempts,
+- reject rate: **60.42%** under this intentionally overloaded workload,
+- p50: **0.07 ms**,
+- p95: **0.49 ms**,
+- p99/max: **0.68 ms**.
+
+Throughput during the saturation run:
+
+- attempts: **15.29 req/s**,
+- successful protected requests: **6.05 req/s**.
+
+The rejection rate is a characterization of the deliberately overloaded test,
+not a production SLA.
+
+**Bounded-runtime counters**
+
+Across warmup + baseline + saturation:
+
+- accepted requests: 29,
+- completed requests: 29,
+- overload rejections: 29,
+- deadline exceeded: 0,
+- execution failures: 0,
+- native termination signals: 0,
+- peak active requests: 1,
+- peak queued requests: 4,
+- final active requests: 0,
+- final queued requests: 0.
+
+The observed queue depth reached but did not exceed its configured capacity.
+
+**Memory**
+
+After sequential baseline -> after saturation:
+
+- process private: **-0.87 MiB**,
+- process working set: **-0.38 MiB**,
+- heap used: **+0.03 MiB**,
+- direct memory: **no increase**.
+
+After SecureMasker close relative to process start:
+
+- process private: **-8.90 MiB**,
+- process working set: **+22.77 MiB**,
+- direct used: **+0.58 MiB**,
+- heap used: **+4.21 MiB**.
+
+This run shows no saturation-time native/private-memory growth signal. The
+remaining working-set residue is small relative to the active ONNX footprint
+but must continue to be observed in the multi-hour/restart lifecycle work.
+
+**Safety**
+
+- raw sensitive payload forwarded: **false**,
+- other fail-closed errors: 0,
+- deadline errors: 0,
+- sealed challenge inference: false.
+
+**Release implication**
+
+For the current one-worker bounded architecture:
+
+- timeout/backpressure correctness: VALIDATED,
+- overload rejection semantics: VALIDATED,
+- saturation/load behavior: VALIDATED,
+- queue bound: VALIDATED,
+- no-raw overload behavior: VALIDATED.
+
+This does **not** establish a published throughput/latency SLA and does not
+justify increasing ONNX worker concurrency without new native-memory tests.
+
+Remaining major 1.0 gates:
+
+1. hot-redeploy/native lifecycle,
+2. representative real-application log benchmark,
+3. multi-hour process soak.
+
+Public posture remains **research runtime + Log4j2 pilot** until those gates
+close.
 
 ---
 
