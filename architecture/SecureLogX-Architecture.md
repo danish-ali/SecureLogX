@@ -3408,6 +3408,52 @@ Model, tokenizer, decoder, hashes, and H1/C1-S behavior are unchanged.
 
 ---
 
+### 2026-10-04 — Real saturation check exposed SSN floor defect
+
+**Status**
+
+DEFECT IDENTIFIED AND FIXED; REVALIDATION PENDING
+
+**Observed failure**
+
+The real-model bounded-runtime saturation harness processed two accepted
+requests and then failed because the second queued request returned a
+non-fail-closed result containing raw `123-45-6789`.
+
+Observed runtime:
+
+- two real model batches completed,
+- average observed runtime in that run was ~12.3 s/item,
+- third-request overload logic was not the cause,
+- the accepted queued request itself leaked the SSN span.
+
+**Root cause**
+
+The deterministic detector treated every SSN-shaped value as
+`ESCALATE`, including an explicit `ssn=...` field. If contextual ML missed
+that span, the resolver had no deterministic protection floor to preserve.
+
+**Fix**
+
+- explicit authoritative SSN fields (`ssn`, `socialSecurityNumber`) now
+  produce deterministic `MASK` evidence,
+- an unowned SSN-shaped value still produces `ESCALATE` evidence,
+- mixed-context records may still route to ML, but the SSN deterministic MASK
+  survives even when ML predicts no SSN span,
+- regression coverage explicitly simulates an ML miss and verifies raw SSN
+  cannot survive resolver reconciliation.
+
+This is intentionally narrower than regex-masking every SSN-shaped value.
+
+**Validation implication**
+
+The prior H1+C1-S quality numbers remain historical evidence. Because H1
+deterministic behavior changed, the hybrid gate/quality/runtime checks must be
+rerun before those metrics are presented as the current production-candidate
+measurements. The sealed challenge remains untouched and must not be rerun.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
