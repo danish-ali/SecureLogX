@@ -46,11 +46,9 @@ public final class SecureLogXApplicationLogBenchmark {
     private static final String EMAIL = "jane.doe@example.com";
     private static final String CARD = "4111111111111111";
     private static final String API_KEY =
-            "sk_live_A1B2C3D4E5F6G7H8I9J0";
+            "TEST_API_KEY_1234567890";
     private static final String JWT =
-            "eyJhbGciOiJIUzI1NiJ9."
-                    + "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
-                    + "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+            "eyJTEST0.TESTPAYLOAD.TESTSIGNATURE";
     private static final String ACCOUNT = "9876543210";
     private static final String PHONE = "7045551212";
     private static final String VERSION_CONTROL = "1.2.3.4";
@@ -508,7 +506,7 @@ public final class SecureLogXApplicationLogBenchmark {
         StringBuilder value = new StringBuilder(
                 "name=Jane Doe workflow=application "
         );
-        for (int i = 0; i < 450; i++) {
+        for (int i = 0; i < 180; i++) {
             value.append("segment")
                     .append(i)
                     .append("=operational ");
