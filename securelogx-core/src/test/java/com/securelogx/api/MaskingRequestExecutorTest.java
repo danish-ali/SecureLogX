@@ -138,6 +138,7 @@ class MaskingRequestExecutorTest {
 
             MaskingRuntimeStats stats = executor.stats();
             assertEquals(1L, stats.deadlineExceededRequests());
+            assertEquals(0L, stats.executionFailureRequests());
         }
     }
 
