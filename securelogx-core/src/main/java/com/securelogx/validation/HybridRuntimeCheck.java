@@ -212,9 +212,11 @@ public final class HybridRuntimeCheck {
             );
         }
 
-        if (stats.mlInferenceItems() < 5) {
+        if (stats.mlInferenceItems() < 4) {
             throw new IllegalStateException(
-                    "Expected at least 5 ML-routed records, got "
+                    "Expected at least 4 ML-routed records after explicit "
+                            + "SSN fields became deterministic protection "
+                            + "floors, got "
                             + stats.mlInferenceItems()
             );
         }
