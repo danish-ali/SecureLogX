@@ -24,8 +24,8 @@ foreach ($path in @($model, $tokenizer)) {
 }
 
 Write-Host ""
-Write-Host "[1/2] Clean compiling Log4j2 lifecycle validation..."
-& mvn "-pl" "securelogx-log4j2" "-am" "-DskipTests" "clean" "compile"
+Write-Host "[1/2] Clean installing Log4j2 lifecycle validation reactor..."
+& mvn "-pl" "securelogx-log4j2" "-am" "-DskipTests" "clean" "install"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""
