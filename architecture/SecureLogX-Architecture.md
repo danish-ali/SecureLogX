@@ -53,7 +53,7 @@ Unsupported Kafka ingress        REMOVED
 Timeout/backpressure             VALIDATED (real ONNX cancellation)
 Concurrency saturation policy    VALIDATED (single-worker pilot)
 Hot redeploy/native lifecycle    VALIDATED (4 real ONNX context cycles)
-Real application log benchmark   OPEN
+Real application log benchmark   IMPLEMENTED; RUN PENDING
 Multi-hour soak                  OPEN
 ```
 
