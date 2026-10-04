@@ -3537,6 +3537,58 @@ Public posture remains **research runtime + Log4j2 pilot** until the remaining
 
 ---
 
+### 2026-10-04 — Bounded-runtime load characterization added
+
+**Status**
+
+IMPLEMENTED; LOCAL LOAD RUN PENDING
+
+**Runner**
+
+`scripts/run-bounded-runtime-load-check.ps1`
+
+Default characterization:
+
+- sequential baseline requests: 8,
+- concurrent callers: 12,
+- attempts per caller: 4,
+- active masking workers: 1,
+- bounded queue capacity: 4,
+- end-to-end deadline: 30 seconds.
+
+**Why one worker remains**
+
+The single-worker architecture is the currently validated memory/safety
+baseline. This load phase characterizes admission pressure around that design;
+it does not increase simultaneous ONNX execution before native-memory evidence
+supports doing so.
+
+**Measurements**
+
+The report records:
+
+- baseline successful p50/p95/p99/max latency,
+- saturation successful p50/p95/p99/max latency,
+- overload rejection p50/p95/p99/max latency,
+- attempt and successful throughput,
+- overload reject count/rate,
+- deadline count,
+- other fail-closed count,
+- ML invocation count,
+- peak active requests,
+- peak queued requests,
+- configured queue capacity,
+- process/JVM/direct-memory snapshots before and after load,
+- post-close memory snapshot,
+- raw-payload-forwarded invariant.
+
+Every result, successful or fail-closed, is checked for the raw SSN fixture.
+Any raw occurrence fails the characterization.
+
+This is a load-characterization harness, not JMH and not a published SLA.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
