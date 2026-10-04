@@ -45,7 +45,7 @@ public final class DeterministicSensitiveDataDetector {
     );
     private static final Pattern BANK_ACCOUNT_CONTEXT = Pattern.compile(
             "(?i)\\b(?:bank[_ .-]?account(?:[_ .-]?(?:number|no))?)"
-                    + "\\s*[:=]\\s*[\\"']?(\\d{6,20})(?!\\d)"
+                    + "\\s*[:=]\\s*[\"']?(\\d{6,20})(?!\\d)"
     );
     private static final Pattern IPV4 = Pattern.compile(
             "\\b(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\b"
