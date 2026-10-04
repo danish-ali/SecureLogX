@@ -52,7 +52,7 @@ Unsupported Kafka ingress        REMOVED
 
 Timeout/backpressure             VALIDATED (real ONNX cancellation)
 Concurrency saturation policy    VALIDATED (single-worker pilot)
-Hot redeploy/native lifecycle    IMPLEMENTED; VALIDATION OPEN
+Hot redeploy/native lifecycle    VALIDATED (4 real ONNX context cycles)
 Real application log benchmark   OPEN
 Multi-hour soak                  OPEN
 ```
@@ -3824,6 +3824,67 @@ The validation fails if:
 - any LoggerContext or masker remains in the registry after stop.
 
 The sealed challenge is not used.
+
+---
+
+### 2026-10-04 — Real LoggerContext redeploy lifecycle validation passes
+
+**Status**
+
+HOT-REDEPLOY / NATIVE LIFECYCLE VALIDATED FOR THE CURRENT LOG4J2 PILOT
+
+**Observed result**
+
+Four complete real-model lifecycle cycles passed.
+
+For every cycle:
+
+- a new `LoggerContext` owned one production `SecureMasker`,
+- the real ML-v1.3 ONNX path executed,
+- `mlInvoked=true`,
+- raw SSN was not forwarded,
+- `LoggerContext.stop()` closed the masker/executor/ONNX session,
+- owned contexts after stop: 0,
+- owned maskers after stop: 0.
+
+**Post-stop private memory**
+
+- cycle 1: ~217.46 MiB,
+- cycle 2: ~221.51 MiB,
+- cycle 3: ~217.45 MiB,
+- cycle 4: ~217.57 MiB.
+
+Cycle-1 -> cycle-4 post-stop private-memory trend:
+
+- **+122,880 bytes (~0.12 MiB)**.
+
+Final private memory relative to process start:
+
+- **-2,400,256 bytes (~-2.29 MiB)**.
+
+Final working set relative to process start:
+
+- **+28,831,744 bytes (~27.50 MiB)**.
+
+The one-time direct-buffer footprint remained present after the first model
+load but did not grow across subsequent redeploy cycles.
+
+**Interpretation**
+
+The current context-owned lifecycle design shows no progressive native/private
+memory accumulation across repeated real ONNX create/use/stop cycles. Registry
+ownership is fully released on every context stop.
+
+This validates the lifecycle mechanism for the current pilot. It does not
+replace the separate multi-hour process soak.
+
+**Remaining major 1.0 gates**
+
+1. representative real-application log benchmark,
+2. multi-hour process soak.
+
+Public posture remains **research runtime + Log4j2 pilot** until those gates
+close.
 
 ---
 
