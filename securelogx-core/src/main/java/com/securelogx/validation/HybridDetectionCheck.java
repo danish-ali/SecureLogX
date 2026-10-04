@@ -43,9 +43,20 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
+        assertMaskWithoutMl(
+                detector,
+                resolver,
+                policy,
+                "ssn=123-45-6789 status=verified",
+                "SSN"
+        );
+        cases++;
+
+        // SSN shape alone is not authoritative. Without an SSN field, keep
+        // contextual ML in the decision path to avoid regex-only overmasking.
         assertEscalatesWithEvidence(
                 detector,
-                "ssn=123-45-6789 status=verified",
+                "reference=123-45-6789 status=pending",
                 "SSN"
         );
         cases++;
