@@ -14,6 +14,8 @@ public record MaskingRuntimeStats(
         long executionFailureRequests,
         int activeRequests,
         int queuedRequests,
+        int peakActiveRequests,
+        int peakQueuedRequests,
         int queueCapacity,
         long deadlineMillis
 ) {
