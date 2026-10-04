@@ -52,7 +52,7 @@ Unsupported Kafka ingress        REMOVED
 
 Timeout/backpressure             VALIDATED (real ONNX cancellation)
 Concurrency saturation policy    VALIDATED (single-worker pilot)
-Hot redeploy/native lifecycle    OPEN
+Hot redeploy/native lifecycle    IMPLEMENTED; VALIDATION OPEN
 Real application log benchmark   OPEN
 Multi-hour soak                  OPEN
 ```
@@ -3700,6 +3700,56 @@ Remaining major 1.0 gates:
 
 Public posture remains **research runtime + Log4j2 pilot** until those gates
 close.
+
+---
+
+### 2026-10-04 — Log4j context-owned native lifecycle implemented
+
+**Status**
+
+IMPLEMENTED; MODEL-FREE VALIDATION PENDING
+
+**Design**
+
+SecureLogX no longer relies on a JVM shutdown hook and does not depend on
+`RewritePolicy.stop()` (Apache RewriteAppender does not manage RewritePolicy
+lifecycle).
+
+Instead, masker ownership is bound to:
+
+```text
+LoggerContext + SecureLogX environment
+```
+
+The first masker created for a LoggerContext registers a Log4j
+`LoggerContextShutdownAware` listener.
+
+Behavior:
+
+- Log4j configuration reload in the same LoggerContext reuses the existing
+  SecureMasker/ONNX session,
+- LoggerContext shutdown closes that context's SecureMasker,
+- closing SecureMasker closes the bounded masking executor and ONNX session,
+- registry entries are removed on context shutdown,
+- two LoggerContexts are isolated; shutting down one does not close the other,
+- no JVM shutdown hook is installed.
+
+This aligns with web/application-server lifecycle because Log4j invokes context
+shutdown listeners after stopping the active configuration.
+
+**Model-free validation added**
+
+- configuration-reload reuse creates only one masker,
+- context shutdown closes/removes that masker,
+- two contexts own independent masker lifecycles,
+- stopping one context leaves the other context's masker active.
+
+**Next evidence**
+
+1. fast Log4j2 compile/unit/integration suite,
+2. repeated real-model LoggerContext create/use/stop cycles,
+3. native/process/private memory after each context stop,
+4. no retained registry entries after every stop.
 
 ---
 
