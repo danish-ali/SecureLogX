@@ -205,6 +205,13 @@ public final class HybridDetectionCheck {
         );
         cases++;
 
+        assertDeterministicSsnFloorSurvivesMlMiss(
+                detector,
+                resolver,
+                policy
+        );
+        cases++;
+
         assertMlCanExtendDeterministicMask(detector, resolver, policy);
         cases++;
 
@@ -379,6 +386,51 @@ public final class HybridDetectionCheck {
         if (!scan.requiresMl()) {
             throw new IllegalStateException(
                     "Expected ML escalation for: " + text
+            );
+        }
+    }
+
+    private static void assertDeterministicSsnFloorSurvivesMlMiss(
+            DeterministicSensitiveDataDetector detector,
+            HybridContextResolver resolver,
+            MaskingPolicy policy
+    ) {
+        String text =
+                "name=Jane Doe action=login ssn=123-45-6789";
+
+        DeterministicScanResult scan = detector.scan(text);
+        if (!scan.requiresMl()) {
+            throw new IllegalStateException(
+                    "Expected ML routing for mixed-context SSN fixture"
+            );
+        }
+
+        boolean ssnMask = scan.evidence().stream().anyMatch(
+                evidence -> evidence.entityType().equals("SSN")
+                        && evidence.action()
+                                == ResolutionAction.MASK
+        );
+        if (!ssnMask) {
+            throw new IllegalStateException(
+                    "Explicit SSN field did not create deterministic MASK floor"
+            );
+        }
+
+        // Simulate the exact production failure mode: contextual ML runs but
+        // misses the SSN span completely. Deterministic protection must still
+        // survive resolver reconciliation.
+        String output = policy.apply(
+                text,
+                resolver.resolve(
+                        scan.evidence(),
+                        List.of()
+                ),
+                false
+        );
+
+        if (output.contains("123-45-6789")) {
+            throw new IllegalStateException(
+                    "Deterministic SSN floor was lost when ML missed the span"
             );
         }
     }
