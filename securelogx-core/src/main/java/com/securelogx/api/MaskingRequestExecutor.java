@@ -60,6 +60,8 @@ final class MaskingRequestExecutor implements AutoCloseable {
             new ConcurrentHashMap<>();
 
     private final AtomicBoolean closed = new AtomicBoolean();
+    private final AtomicInteger peakActiveRequests = new AtomicInteger();
+    private final AtomicInteger peakQueuedRequests = new AtomicInteger();
 
     MaskingRequestExecutor(
             int queueCapacity,
@@ -135,6 +137,10 @@ final class MaskingRequestExecutor implements AutoCloseable {
         FutureTask<List<MaskedResult>> task =
                 new FutureTask<>(() -> {
                     workerThread.set(Thread.currentThread());
+                    updatePeak(
+                            peakActiveRequests,
+                            executor.getActiveCount()
+                    );
                     try {
                         control.checkpoint();
                         return operation.execute(control);
@@ -155,6 +161,14 @@ final class MaskingRequestExecutor implements AutoCloseable {
         try {
             executor.execute(task);
             acceptedRequests.increment();
+            updatePeak(
+                    peakQueuedRequests,
+                    executor.getQueue().size()
+            );
+            updatePeak(
+                    peakActiveRequests,
+                    executor.getActiveCount()
+            );
         } catch (RejectedExecutionException e) {
             liveRequests.remove(control);
             task.cancel(false);
@@ -281,6 +295,8 @@ final class MaskingRequestExecutor implements AutoCloseable {
                 executionFailureRequests.sum(),
                 executor.getActiveCount(),
                 executor.getQueue().size(),
+                peakActiveRequests.get(),
+                peakQueuedRequests.get(),
                 queueCapacity,
                 deadlineMillis
         );
@@ -330,6 +346,13 @@ final class MaskingRequestExecutor implements AutoCloseable {
         } finally {
             liveRequests.clear();
         }
+    }
+
+    private static void updatePeak(
+            AtomicInteger peak,
+            int candidate
+    ) {
+        peak.accumulateAndGet(candidate, Math::max);
     }
 
     private static void awaitFinishedUninterruptibly(
