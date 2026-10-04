@@ -491,14 +491,15 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
         ) {
             if (message instanceof MapMessage<?, ?> mapMessage) {
                 Map<String, ?> data = mapMessage.getData();
-                Map<String, Integer> valueIndexes =
+                Map<String, StructuredValueIndex> valueIndexes =
                         new LinkedHashMap<>();
 
                 for (Map.Entry<String, ?> entry : data.entrySet()) {
                     valueIndexes.put(
                             entry.getKey(),
-                            addText(
+                            addStructuredText(
                                     texts,
+                                    entry.getKey(),
                                     String.valueOf(entry.getValue())
                             )
                     );
@@ -540,18 +541,21 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
     }
 
     private record MapMessagePlan(
-            Map<String, Integer> valueIndexes
+            Map<String, StructuredValueIndex> valueIndexes
     ) implements MessagePlan {
         @Override
         public Message rebuild(List<MaskedResult> results) {
             Map<String, String> sanitized =
                     new LinkedHashMap<>();
 
-            for (Map.Entry<String, Integer> entry
+            for (Map.Entry<String, StructuredValueIndex> entry
                     : valueIndexes.entrySet()) {
                 sanitized.put(
                         entry.getKey(),
-                        masked(results, entry.getValue())
+                        maskedStructuredValue(
+                                results,
+                                entry.getValue()
+                        )
                 );
             }
             return new StringMapMessage(sanitized);
@@ -582,19 +586,23 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
     }
 
     private record ContextMapPlan(
-            Map<String, Integer> valueIndexes
+            Map<String, StructuredValueIndex> valueIndexes
     ) {
         static ContextMapPlan capture(
                 Map<String, String> data,
                 List<String> texts
         ) {
-            Map<String, Integer> indexes =
+            Map<String, StructuredValueIndex> indexes =
                     new LinkedHashMap<>();
 
             for (Map.Entry<String, String> entry : data.entrySet()) {
                 indexes.put(
                         entry.getKey(),
-                        addText(texts, entry.getValue())
+                        addStructuredText(
+                                texts,
+                                entry.getKey(),
+                                entry.getValue()
+                        )
                 );
             }
             return new ContextMapPlan(indexes);
@@ -604,11 +612,14 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             StringMap sanitized =
                     new SortedArrayStringMap(valueIndexes.size() + 8);
 
-            for (Map.Entry<String, Integer> entry
+            for (Map.Entry<String, StructuredValueIndex> entry
                     : valueIndexes.entrySet()) {
                 sanitized.putValue(
                         entry.getKey(),
-                        masked(results, entry.getValue())
+                        maskedStructuredValue(
+                                results,
+                                entry.getValue()
+                        )
                 );
             }
             return sanitized;
@@ -800,6 +811,39 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
                     ? originalType
                     : originalType + ": " + message;
         }
+    }
+
+    private record StructuredValueIndex(
+            int textIndex,
+            int valueOffset
+    ) {
+    }
+
+    private static StructuredValueIndex addStructuredText(
+            List<String> texts,
+            String key,
+            String value
+    ) {
+        String prefix = (key == null ? "" : key) + "=";
+        int index = addText(
+                texts,
+                prefix + (value == null ? "" : value)
+        );
+        return new StructuredValueIndex(index, prefix.length());
+    }
+
+    private static String maskedStructuredValue(
+            List<MaskedResult> results,
+            StructuredValueIndex index
+    ) {
+        String structured = masked(results, index.textIndex());
+        if (structured.length() < index.valueOffset()) {
+            throw new IllegalStateException(
+                    "SecureLogX structured field result is shorter "
+                            + "than its field prefix"
+            );
+        }
+        return structured.substring(index.valueOffset());
     }
 
     private static int addText(
