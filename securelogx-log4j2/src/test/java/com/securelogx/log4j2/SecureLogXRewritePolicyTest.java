@@ -8,12 +8,14 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.impl.Log4jLogEvent;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.message.SimpleMessage;
+import org.apache.logging.log4j.message.StringMapMessage;
 import org.apache.logging.log4j.spi.MutableThreadContextStack;
 import org.apache.logging.log4j.util.SortedArrayStringMap;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -112,6 +114,83 @@ class SecureLogXRewritePolicyTest {
         assertNotNull(
                 rewritten.getContextData()
                         .getValue("securelogx.instanceId")
+        );
+    }
+
+    @Test
+    void preservesStructuredFieldContextForMapMessageAndMdc() {
+        String account = "9876543210";
+        List<String> captured = new ArrayList<>();
+
+        SecureMaskingService service = texts -> {
+            captured.addAll(texts);
+            return texts.stream()
+                    .map(text -> new MaskedResult(
+                            text.replace(account, "**********"),
+                            true,
+                            false,
+                            MaskReasonCode.ML_RESOLVED,
+                            1L,
+                            "test-masker"
+                    ))
+                    .toList();
+        };
+
+        SecureLogXRewritePolicy policy =
+                new SecureLogXRewritePolicy(
+                        "test",
+                        "SecureLogXRewrite",
+                        false,
+                        false,
+                        null,
+                        service
+                );
+
+        SortedArrayStringMap context = new SortedArrayStringMap();
+        context.putValue("bankAccount", account);
+        context.freeze();
+
+        LogEvent source = new Log4jLogEvent.Builder()
+                .setLoggerName("example")
+                .setLevel(Level.INFO)
+                .setMessage(
+                        new StringMapMessage(
+                                Map.of("account", account)
+                        )
+                )
+                .setContextData(context)
+                .setContextStack(ThreadContext.EMPTY_STACK)
+                .build();
+
+        LogEvent rewritten = policy.rewrite(source);
+
+        assertTrue(captured.contains("account=" + account));
+        assertTrue(captured.contains("bankAccount=" + account));
+
+        assertInstanceOf(
+                StringMapMessage.class,
+                rewritten.getMessage()
+        );
+        StringMapMessage rewrittenMessage =
+                (StringMapMessage) rewritten.getMessage();
+
+        assertEquals(
+                "**********",
+                rewrittenMessage.getData().get("account")
+        );
+        assertEquals(
+                "**********",
+                rewritten.getContextData().getValue("bankAccount")
+        );
+        assertFalse(
+                rewritten.getMessage()
+                        .getFormattedMessage()
+                        .contains(account)
+        );
+        assertEquals(
+                "true",
+                rewritten.getContextData()
+                        .getValue("securelogx.mlInvoked")
         );
     }
 
