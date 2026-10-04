@@ -138,7 +138,10 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
         try {
             masker = maskingServiceOverride != null
                     ? maskingServiceOverride
-                    : SecureMaskerRegistry.get(environment);
+                    : SecureMaskerRegistry.get(
+                            environment,
+                            configuration
+                    );
         } catch (Exception e) {
             StatusLogger.getLogger().error(
                     "SecureLogX masker initialization failed: {}",
