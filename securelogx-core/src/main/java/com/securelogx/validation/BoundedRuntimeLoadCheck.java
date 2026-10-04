@@ -6,13 +6,11 @@ import com.securelogx.api.MaskingRuntimeStats;
 import com.securelogx.api.SecureMasker;
 import com.securelogx.config.SecureLogXConfig;
 import com.securelogx.util.ArtifactIntegrityVerifier;
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
