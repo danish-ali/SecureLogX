@@ -3,6 +3,7 @@ package com.securelogx.log4j2;
 import com.securelogx.validation.RuntimeMemorySnapshot;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.appender.FileAppender;
@@ -407,7 +408,7 @@ public final class SecureLogXApplicationLogBenchmark {
             switch (ordinal % 10) {
                 case 0 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new ParameterizedMessage(
                                 "payment ssn={} email={}",
                                 SSN,
@@ -416,7 +417,7 @@ public final class SecureLogXApplicationLogBenchmark {
                 );
                 case 1 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new SimpleMessage(
                                 "Customer Jane Doe moved to "
                                         + "14 Oak Lane in Charlotte"
@@ -424,7 +425,7 @@ public final class SecureLogXApplicationLogBenchmark {
                 );
                 case 2 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new StringMapMessage(
                                 Map.of(
                                         "account",
@@ -436,14 +437,14 @@ public final class SecureLogXApplicationLogBenchmark {
                 );
                 case 3 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new SimpleMessage(
                                 "customer context update completed"
                         )
                 );
                 case 4 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new SimpleMessage(
                                 "request processing failed"
                         ),
@@ -456,12 +457,12 @@ public final class SecureLogXApplicationLogBenchmark {
                 );
                 case 5 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new SimpleMessage(longWindowedMessage())
                 );
                 case 6 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new SimpleMessage(
                                 "service version="
                                         + VERSION_CONTROL
@@ -470,7 +471,7 @@ public final class SecureLogXApplicationLogBenchmark {
                 );
                 case 7 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new ParameterizedMessage(
                                 "auth apiKey={} token={}",
                                 API_KEY,
@@ -479,7 +480,7 @@ public final class SecureLogXApplicationLogBenchmark {
                 );
                 case 8 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new ParameterizedMessage(
                                 "checkout cardNumber={}",
                                 CARD
@@ -487,7 +488,7 @@ public final class SecureLogXApplicationLogBenchmark {
                 );
                 case 9 -> logger.log(
                         level,
-                        null,
+                        (Marker) null,
                         new ParameterizedMessage(
                                 "support phone={} customer=Jane Doe",
                                 PHONE
