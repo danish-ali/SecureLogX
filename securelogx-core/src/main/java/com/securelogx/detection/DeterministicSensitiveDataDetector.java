@@ -43,6 +43,10 @@ public final class DeterministicSensitiveDataDetector {
     private static final Pattern ROUTING_CONTEXT = Pattern.compile(
             "(?i)\\b(?:routing(?:[_ -]?number)?|routingNumber|aba)\\s*[:=]\\s*[\"']?(\\d{9})"
     );
+    private static final Pattern BANK_ACCOUNT_CONTEXT = Pattern.compile(
+            "(?i)\\b(?:bank[_ .-]?account(?:[_ .-]?(?:number|no))?)"
+                    + "\\s*[:=]\\s*[\\"']?(\\d{6,20})(?!\\d)"
+    );
     private static final Pattern IPV4 = Pattern.compile(
             "\\b(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\b"
     );
@@ -76,6 +80,8 @@ public final class DeterministicSensitiveDataDetector {
             "routing",
             "routingnumber",
             "aba",
+            "bankaccount",
+            "bankaccountnumber",
             "iban",
             "remoteip",
             "clientip",
@@ -377,6 +383,22 @@ public final class DeterministicSensitiveDataDetector {
                             checksumValid
                                     ? "valid-routing-number-requires-account-context"
                                     : "routing-shaped-value-checksum-invalid"
+                    )
+            );
+        }
+
+        Matcher bankAccount = BANK_ACCOUNT_CONTEXT.matcher(text);
+        while (bankAccount.find()) {
+            addEvidence(
+                    evidence,
+                    new DetectionEvidence(
+                            bankAccount.start(1),
+                            bankAccount.end(1),
+                            "BANK_ACCOUNT_NUMBER",
+                            DetectionSource.DETERMINISTIC,
+                            ResolutionAction.MASK,
+                            1.0,
+                            "explicit-bank-account-field"
                     )
             );
         }
