@@ -50,8 +50,8 @@ Startup fail-fast API            IMPLEMENTED
 Legacy payload leak              FIXED
 Unsupported Kafka ingress        REMOVED
 
-Timeout/backpressure             MODEL-FREE VALIDATED; REAL ONNX VALIDATION OPEN
-Concurrency saturation policy    MODEL-FREE VALIDATED; LOAD VALIDATION OPEN
+Timeout/backpressure             VALIDATED (real ONNX cancellation)
+Concurrency saturation policy    REJECTION VALIDATED; LOAD CHARACTERIZATION OPEN
 Hot redeploy/native lifecycle    OPEN
 Real application log benchmark   OPEN
 Multi-hour soak                  OPEN
@@ -3495,6 +3495,45 @@ runtime behavior, not a newly measured full quality table.
 
 Rerun the real bounded-runtime ONNX cancellation/saturation harness. That is the
 specific reproducer that previously exposed the raw SSN leak.
+
+---
+
+### 2026-10-04 — Real ONNX bounded-runtime validation passes
+
+**Status**
+
+REAL ONNX CANCELLATION + REAL-MODEL OVERLOAD REJECTION VALIDATED
+
+**Observed result**
+
+- bounded runtime real ONNX check: PASS,
+- ONNX `RunOptions.setTerminate(true)` was actually signalled,
+- cancellation worker terminated before the call returned,
+- cancellation-to-worker-exit latency: **3 ms**,
+- overload rejected requests: **1**,
+- overload rejection latency: **0 ms**,
+- build: SUCCESS,
+- raw-payload leak reproducer: no longer reproduced.
+
+**Interpretation**
+
+The timeout/backpressure correctness gate is now closed for the current
+single-worker pilot architecture. The overload policy is also validated for
+correct rejection semantics.
+
+The remaining concurrency work is **load characterization**, not basic safety:
+
+- sustained concurrent callers,
+- throughput,
+- p50/p95/p99 request latency,
+- overload/reject rate,
+- queue-depth behavior,
+- deadline rate,
+- process/private/native memory under pressure,
+- proof that no accepted or rejected result forwards raw sensitive payload.
+
+Public posture remains **research runtime + Log4j2 pilot** until the remaining
+1.0 gates are closed.
 
 ---
 
