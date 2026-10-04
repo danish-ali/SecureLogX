@@ -429,7 +429,7 @@ public final class SecureLogXApplicationLogBenchmark {
                         (Marker) null,
                         new StringMapMessage(
                                 Map.of(
-                                        "account",
+                                        "bankAccount",
                                         ACCOUNT,
                                         "email",
                                         EMAIL
