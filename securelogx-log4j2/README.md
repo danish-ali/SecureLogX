@@ -193,8 +193,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark
 If this fails with `DEADLINE_EXCEEDED`, the original event payload is
 appropriately failed closed. The benchmark still fails because it requires
 all application events to be successfully masked and emitted, not replaced
-by fail-closed placeholders. The output now lists the 12 slowest synthetic
-event IDs, workload categories, and caller durations without showing payloads.
+by fail-closed placeholders. On validation failure, the diagnostic
+output now lists the 12 slowest synthetic event IDs, workload categories,
+and caller durations without showing payloads.
 
 To **characterize** the same workload with a longer bounded deadline,
 without changing the production property file, run explicitly:
