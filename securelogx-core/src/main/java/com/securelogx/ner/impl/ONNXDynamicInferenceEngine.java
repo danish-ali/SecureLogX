@@ -58,14 +58,29 @@ public class ONNXDynamicInferenceEngine {
     private long truncatedFailClosedItems = 0;
 
     public ONNXDynamicInferenceEngine(String modelPath, com.securelogx.config.SecureLogXConfig config) throws Exception {
-        // Validate the organization-scoped rules before allocating native
-        // ONNX resources. An invalid requested policy fails initialization.
-        this.hybridMaskingPipeline = new HybridMaskingPipeline(
-                OrganizationRuleRegistry.load(
-                        config.getOrganizationId(),
-                        config.getApprovedOrganizationRulesFile()
-                )
-        );
+        // Explicit opt-in for organization-specific deterministic rules.
+        // A configured filename alone must never activate a policy.
+        // If enabled, missing/invalid/mismatched policies fail initialization
+        // before native ONNX resources are allocated.
+        OrganizationRuleRegistry approvedRules;
+        if (config.isAdaptiveMaskingEnabled()) {
+            String approvedRulesFile =
+                    config.getApprovedOrganizationRulesFile();
+            if (approvedRulesFile == null || approvedRulesFile.isBlank()) {
+                throw new IllegalArgumentException(
+                        "Adaptive masking requires an approved rules file"
+                );
+            }
+            approvedRules = OrganizationRuleRegistry.load(
+                    config.getOrganizationId(),
+                    approvedRulesFile
+            );
+        } else {
+            approvedRules = OrganizationRuleRegistry.disabled();
+        }
+        this.hybridMaskingPipeline = new HybridMaskingPipeline(approvedRules);
+        // Telemetry is a separate explicit opt-in: organizations may review
+        // model-derived proposals before activating any approved rules.
         this.mlRoutingTelemetry = new MlRoutingTelemetry(
                 config.getOrganizationId(),
                 config.isMlRuleTelemetryEnabled()
