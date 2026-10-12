@@ -252,6 +252,28 @@ public final class SecureLogXApplicationLogBenchmark {
                     mlTelemetry.approvedRuleMatches()
             );
             result.put(
+                    "safe_metadata_matches_including_warmup",
+                    mlTelemetry.safeMetadataMatches()
+            );
+            result.put(
+                    "duplicate_field_evaluations_avoided_including_warmup",
+                    mlTelemetry.duplicateFieldsSaved()
+            );
+            JSONArray routingDetails = new JSONArray();
+            for (MlRoutingTelemetry.RouteDetail detail
+                    : mlTelemetry.routingDetails()) {
+                routingDetails.put(new JSONObject()
+                        .put("reason", detail.reason())
+                        .put("origin", detail.origin().name())
+                        .put("field", detail.field())
+                        .put("shape", detail.shape())
+                        .put("observations", detail.observations()));
+            }
+            result.put(
+                    "ml_routing_details_including_warmup",
+                    routingDetails
+            );
+            result.put(
                     "ml_routing_reason_counts_including_warmup",
                     new JSONObject(mlTelemetry.routingReasons())
             );
