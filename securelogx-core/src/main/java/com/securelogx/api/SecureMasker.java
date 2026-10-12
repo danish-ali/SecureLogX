@@ -4,6 +4,7 @@ import com.securelogx.config.SecureLogXConfig;
 import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.model.LogEvent;
 import com.securelogx.model.LogLevel;
+import com.securelogx.model.MaskingFieldOrigin;
 import com.securelogx.ner.impl.ONNXDynamicInferenceEngine;
 import com.securelogx.ner.impl.ParallelTokenizer;
 import com.securelogx.util.ArtifactIntegrityVerifier;
@@ -76,6 +77,28 @@ public final class SecureMasker implements AutoCloseable {
         if (texts == null) {
             throw new IllegalArgumentException("texts must not be null");
         }
+        return maskAllWithOrigins(
+                texts,
+                java.util.Collections.nCopies(
+                        texts.size(), MaskingFieldOrigin.OTHER
+                )
+        );
+    }
+
+    /**
+     * Framework adapter entry point: origins come from the trusted adapter,
+     * not an untrusted field in the log payload.
+     */
+    public List<MaskedResult> maskAllWithOrigins(
+            List<String> texts,
+            List<MaskingFieldOrigin> origins
+    ) {
+        if (texts == null || origins == null
+                || origins.size() != texts.size()) {
+            throw new IllegalArgumentException(
+                    "texts and origins must have matching sizes"
+            );
+        }
         if (texts.isEmpty()) {
             return List.of();
         }
@@ -100,23 +123,37 @@ public final class SecureMasker implements AutoCloseable {
             return List.copyOf(disabled);
         }
 
-        long timestamp = CachedClock.now();
-        List<LogEvent> events = new ArrayList<>(texts.size());
+        // Deduplication is limited to one masking request (normally one
+        // Log4j event). Keep a distinct sequence for each original field.
+        // A deadline/overload failure on a unique input is propagated to
+        // all corresponding positions and therefore still fails the event.
+        MaskingRequestDeduplicator request =
+                MaskingRequestDeduplicator.of(texts, origins);
+        long[] originalSequences = new long[texts.size()];
+        for (int i = 0; i < texts.size(); i++) {
+            originalSequences[i] = sequence.incrementAndGet();
+        }
 
-        for (String text : texts) {
+        long timestamp = CachedClock.now();
+        List<LogEvent> events =
+                new ArrayList<>(request.uniqueTexts().size());
+        for (int i = 0; i < request.uniqueTexts().size(); i++) {
             events.add(
                     new LogEvent(
-                            text == null ? "" : text,
+                            request.uniqueTexts().get(i),
                             LogLevel.INFO,
                             false,
                             MASKER_TRACE_ID,
-                            sequence.incrementAndGet(),
-                            timestamp
+                            originalSequences[
+                                    request.firstOriginalIndex(i)
+                            ],
+                            timestamp,
+                            request.firstOrigins().get(i)
                     )
             );
         }
 
-        return maskingRuntime.execute(
+        List<MaskedResult> uniqueResults = maskingRuntime.execute(
                 events,
                 control -> engine.maskBatch(
                         tokenizer,
@@ -124,6 +161,9 @@ public final class SecureMasker implements AutoCloseable {
                         control
                 )
         );
+        // This metric is observational only; it does not alter decisions.
+        engine.recordDuplicateFieldsSaved(request.savedFields());
+        return request.expand(uniqueResults, originalSequences);
     }
 
     public MaskingRuntimeStats getRuntimeStats() {
