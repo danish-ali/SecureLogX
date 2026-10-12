@@ -292,6 +292,18 @@ MlRoutingTelemetry.Snapshot snapshot =
 ~~~
 
 The core SecureMasker exposes getMlRoutingTelemetrySnapshot() as well.
+
+To collect a safe routing breakdown from the same 48-event benchmark, without
+editing any production properties, run:
+
+~~~powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 15000 -CollectMlRuleProposals
+~~~
+
+The result JSON includes ml_routing_reason_counts_including_warmup,
+ml_rule_candidates_including_warmup, and
+approved_rule_matches_including_warmup. This run still uses the longer
+diagnostic deadline and does not satisfy the 2-second performance target.
 Snapshots never contain log values, but field names can reveal application
 schema, so restrict access to operational diagnostics. Counters are per
 masker instance, and repeated fields in the same event can be counted
