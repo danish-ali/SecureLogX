@@ -37,7 +37,7 @@ class MlRoutingTelemetryTest {
                 "PREFIXED_DIGITS_P5_N6",
                 snapshot.proposedCandidates().get(0).shape()
         );
-        assertEquals(1L, snapshot.routingReasons().get("unknown-key"));
+        assertEquals(1L, snapshot.routingReasons().get("unknown-key").longValue());
         assertFalse(snapshot.toString().contains("CUST-"));
         assertFalse(snapshot.toString().contains("834729"));
     }
