@@ -33,8 +33,10 @@ The guiding principle is:
 **Public positioning:** SecureLogX is currently a **research runtime + Log4j2
 pilot**, not a universally adoptable 1.0 product.
 
-Do not change that positioning until all five OPEN production gates in the
-scorecard below are closed and validated under load.
+Do not change that positioning until the remaining security, latency,
+throughput, and multi-hour soak criteria have been demonstrated on a
+representative application workload. A 15-second characterization pass is
+**not** evidence that the 2-second pilot masking deadline is met.
 
 ### Production-readiness scorecard
 
@@ -50,14 +52,20 @@ Startup fail-fast API            IMPLEMENTED
 Legacy payload leak              FIXED
 Unsupported Kafka ingress        REMOVED
 
-Timeout/backpressure             VALIDATED (real ONNX cancellation)
+Timeout/backpressure correctness VALIDATED (real ONNX cancellation)
 Concurrency saturation policy    VALIDATED (single-worker pilot)
 Hot redeploy/native lifecycle    VALIDATED (4 real ONNX context cycles)
-Real application log benchmark   IMPLEMENTED; RUN PENDING
+Real application log benchmark   FUNCTIONAL PASS (48/48 at 15-second deadline)
+2-second application-log latency NOT MET (5/48 exceeded pilot deadline)
+Organization-aware masking       EXPERIMENTAL (opt-in; tests pending)
 Multi-hour soak                  OPEN
 ```
 
-The five OPEN items are release gates, not documentation TODOs.
+Remaining performance and soak items are release gates, not documentation
+TODOs. The October 12 application benchmark is a successful *functional*
+characterization at an explicitly longer deadline, not a production-latency
+validation. Organization-specific adaptive rules are experimental until their
+security and operating characteristics are locally validated.
 
 For timeout/backpressure specifically, do **not** wrap
 `tokenizationFuture.get()` with a caller timeout and call that bounded. The
@@ -121,42 +129,170 @@ Hybrid production logic belongs here.
 ## 3. Current Production Architecture
 
 ```text
-Application log event
-        |
-        v
-Structure-aware inspection
-        |
-        v
-Deterministic evidence collection
-        |
-        +------------------------------+
-        |                              |
-        | strong structural evidence   | ambiguous / contextual
-        v                              v
-MASK / ALLOW evidence              ML-v1.3 BERT
-                                       |
-                                       v
-                              contextual span evidence
-        |                              |
-        +--------------+---------------+
-                       |
-                       v
-              Hybrid Context Resolver
-                       |
-                       v
-                 Masking Policy
-                       |
-                       v
-                 Protected Log
-                       |
-        +--------------+------------------+
-        |              |                  |
-      Log4j2         Kafka              File/SIEM
+Application log event (all severities; no raw destination bypass)
+  -> synchronous Log4j2 LoggerConfig / RewriteAppender
+  -> SecureLogXRewritePolicy: capture message, parameters, MDC, stack, throwable
+  -> context-owned SecureMasker / bounded request executor
+  -> HybridMaskingPipeline (per field)
+       |
+       +-- adaptive.enabled == true? -- [approved organization registry]
+       |                                  |
+       |                     full structured field=value match?
+       |                           yes -> deterministic MASK
+       |                           no  -> normal hybrid path
+       |
+       +-- adaptive.enabled == false --> normal hybrid path
+                                           |
+                                deterministic detector + ML gate
+                                  |                     |
+                              resolved                unresolved
+                                  |                     |
+                           MASK / ALLOW evidence   ML-v1.3 ONNX BERT
+                                  |                     |
+                                  +----------+----------+
+                                             |
+                                   Hybrid Context Resolver
+                                             |
+                                        Masking Policy
+                                             |
+                                      sanitized field
+  -> immutable sanitized LogEvent (or synthetic fail-closed event)
+  -> approved destination appenders after rewrite (File / SIEM / Kafka)
+
+Independent optional observation (adaptive.mlRoutingTelemetryEnabled):
+  ML routing reason + validated whole-value entity span
+    -> bounded in-memory aggregate (shape, field, entity type, counts)
+    -> review candidate (NEVER automatic promotion)
+    -> offline approval of versioned organization policy
+    -> controlled masker restart to activate approved rules
 ```
+
+### Optional organization-aware adaptive masking (experimental, October 12, 2026)
+
+**Policy decision: configuration-driven opt-in, not organization-specific
+Java `switch` or `case` statements.** SecureLogX must not embed customer
+names or identifier patterns in application code. A deployment owner
+explicitly selects a single organization identity and the approved policy
+file; the shared runtime reads those settings and uses the same generic rule
+evaluation path for every organization.
+
+Two independent Boolean switches default to **false**:
+
+| Deployment property | Default | Meaning |
+|---|---|---|
+| `securelogx.adaptive.enabled` | `false` | Master switch for approved deterministic organization rules; no policy is loaded when false |
+| `securelogx.adaptive.mlRoutingTelemetryEnabled` | `false` | Optional memory-only ML routing observations and rule proposals; does **not** automatically activate any rule |
+
+Related trusted deployment properties:
+
+- `securelogx.organization.id`: default `default`; an explicit, validated
+  non-default identity is required when rule enforcement is enabled.
+- `securelogx.organization.approvedRulesFile`: required, readable policy
+  file when rule enforcement is enabled. Merely setting this property does
+  not activate adaptive masking; the master switch must be true.
+- Both switches use the same deployment configuration/system-property
+  override mechanism as other SecureLogX runtime settings.
+
+**Supported deployment states:**
+
+```text
+Rule enforcement OFF; telemetry OFF (default)
+    -> original hybrid deterministic + ML routing, unchanged
+
+Rule enforcement OFF; telemetry ON
+    -> original routing + optional in-memory ML candidate observations
+    -> review candidates; do NOT change masking enforcement
+
+Rule enforcement ON; telemetry OFF
+    -> validated, approved organization identifier rules before ML
+    -> conservative normal routing for every unresolved input
+
+Rule enforcement ON; telemetry ON
+    -> approved rule fast path + observed ML proposals for future review
+```
+
+**Rule registry:** `OrganizationRuleRegistry` loads an immutable,
+versioned JSON policy (example:
+`examples/organization-rules.example.json`). It binds the policy's
+`organizationId` to the trusted configured organization. Only entries
+with `status=APPROVED` can be enforced. The current deliberately narrow
+rule grammar is: exact field name, optional literal 2–12-letter prefix
+plus `-` or `_`, and a fixed 4–20-digit suffix, mapped to an explicitly
+supported sensitive ontology entity. Up to 128 rules / 64 KiB of JSON are
+accepted. The engine rejects arbitrary regex, conflicting field keys,
+unapproved entries, and unsupported schema. Approved rules are compiled
+using anchored, quoted literals with bounded repetition.
+
+Example:
+
+```text
+organization: ORG42; approved field: customerReference
+input:  customerReference=CUST-834729
+output: customerReference=****-******
+route:  deterministic MASK for THIS field, no ML required
+```
+
+**Conservative boundary:** Only a *complete* single `field=value`
+input matching an approved rule can bypass ML. Adding unknown text,
+another field, an unmatched prefix, or a changed value length routes
+the input through the existing hybrid scanner and contextual model.
+The surrounding Log4j2 event still processes message, format,
+parameters, MDC, context stack and throwable independently; an approved
+match on one field **never** authorizes skipping another field. The normal
+detector's negative-context and `ALLOW` protections are not changed.
+
+**No implicit customer selection:** The organization identity is not
+read from user-supplied log text, MDC, message payloads, or API tokens.
+A masker/LoggerContext is not a safe cross-tenant router. A service
+hosting multiple independent organizations must use separately trusted,
+isolated masker/context lifecycles or a future authenticated tenant-aware
+ingress design. Do **not** add a `switch(organizationId)` over untrusted
+log fields or share policy state between tenants.
+
+**Proposal path:** `MlRoutingTelemetry` is disabled unless explicitly
+enabled. It records bounded reason categories and, after successful ML
+resolution of a complete structured value, counts only field name,
+abstract numeric shape, entity type and observation frequency. Raw
+sensitive values and literal prefix text are not retained. Candidate
+proposals are **neither approved regex nor ground-truth labels**.
+`SecureMasker.getMlRoutingTelemetrySnapshot()` and the Log4j2
+`SecureLogXAdaptiveDiagnostics.snapshot(context, environment)` API
+provide read-only operational aggregates; snapshots should be access
+controlled because field names reveal schema.
+
+**Review/promotion:** a security/application owner reviews a candidate,
+validates it on independent positive/negative data, obtains approval,
+publishes a versioned trusted rule file, and restarts the masker to load
+the policy. An `APPROVED` JSON string does not itself constitute a
+cryptographic signature or an authorization workflow: filesystem
+permissions, trusted deployment pipelines, change approval, audit
+history and rollback are external deployment responsibilities.
+Invalid or wrong-organization *enabled* policies fail masker
+initialization; logging remains fail-closed rather than forwarding
+raw data. No live automatic regex writing, persisted learned secrets,
+or runtime policy hot-swapping is implemented.
+
+**Evaluation boundaries:** This feature is **IMPLEMENTED /
+EXPERIMENTAL; local test and benchmark verification pending**.
+It is not evidence of lower whole-event ML invocation or a 2-second
+production SLO. A realistic before/after study must measure the
+proportion of matched eligible fields, ONNX requests/windows,
+whole-event ML invocation, p50/p95/p99 latency, throughput,
+false negatives/positives, fail-closed events, and memory.
+Always re-run positive/negative, cross-organization and fail-closed
+regressions before a claim of validated adoption readiness.
+
+Relevant modules: `OrganizationRuleRegistry`, `MlRoutingTelemetry`,
+`HybridMaskingPipeline`, `ONNXDynamicInferenceEngine`,
+`SecureLogXConfig`, `SecureMasker`,
+`SecureLogXAdaptiveDiagnostics`; benchmark opt-in
+`-CollectMlRuleProposals`; operational documentation in
+`securelogx-log4j2/README.md`.
 
 ### Appender ingress and event-envelope contract
 
-**Status: CORE + LOG4J2 REWRITE MODULE VALIDATED; REAL DESTINATION/LOAD VALIDATION OPEN**
+**Status: CORE + LOG4J2 REWRITE MODULE VALIDATED; 48-EVENT FUNCTIONAL
+BENCHMARK PASSED AT 15 SECONDS; 2-SECOND LATENCY / SOAK GATES OPEN**
 
 Moving SecureLogX toward an appender integration changes the meaning of log
 severity and ordering metadata.
@@ -3951,6 +4087,79 @@ The benchmark fails if:
 - before/after workload and post-stop process/native memory.
 
 This is engineering characterization, not a published SLA.
+
+---
+
+### 2026-10-12 — Representative application-log functional gate passes with longer deadline
+
+**Status:** FUNCTIONAL PASS AT 15 SECONDS; 2-SECOND LATENCY TARGET NOT MET
+
+**Evidence from user-executed benchmark (not rerun in GitHub):**
+
+- 48/48 measured events recognized and emitted;
+- 48/48 whole events invoked ML;
+- 0 fail-closed events at the explicit 15,000 ms request deadline;
+- known raw sensitive fixture forwarded: false;
+- benign `version=1.2.3.4` remained intact;
+- p50 caller latency: 346.911 ms;
+- p95 caller latency: 6,130.5588 ms;
+- p99 caller latency: 7,128.2422 ms;
+- throughput: 1.013 events/second;
+- 5/48 calls exceeded the original 2,000 ms pilot deadline;
+- long/windowed p95 caller latency: 7,128.2422 ms.
+
+**Reason:** Separate functional correctness from the unresolved latency
+and throughput gates. A successful 15-second characterization must not
+be advertised as a 2-second production latency pass.
+
+**Affected modules:** representative Log4j2 benchmark and its runner.
+
+**Backward compatibility:** no change to default 2,000 ms runtime deadline;
+an explicit diagnostic deadline override applies only to its benchmark run.
+
+---
+
+### 2026-10-12 — Approved organization rule registry and ML proposal telemetry added
+
+**Status:** IMPLEMENTED / EXPERIMENTAL; LOCAL TESTS AND PERFORMANCE STUDY PENDING
+
+**Change:** Added an opt-in, deployment-scoped organization policy registry,
+narrow exact structured-ID patterns, an ML route/review candidate aggregator,
+read-only diagnostics, controlled enable/disable switches, example JSON
+policy and regression tests. No Java organization `switch/case`; a
+configurable generic policy engine is used instead.
+
+**Reason:** Repeated, independently validated organization-specific
+identifiers can be masked deterministically to reduce repeated ML
+classification of eligible fields without trusting model-generated
+regex or generalizing to unrelated values.
+
+**Configuration:** `securelogx.adaptive.enabled=false` is the explicit
+master rule-enforcement switch; telemetry remains independently disabled
+unless `securelogx.adaptive.mlRoutingTelemetryEnabled=true` is selected.
+Approved rules require the matching configured organization and a valid
+policy file; rules are loaded at masker construction and need a controlled
+restart for changes.
+
+**Evidence / benchmark:** code and regression tests committed to
+`chatgpt/hybrid-detection-pipeline`; no new measured routing improvement,
+security-corpus result, or production SLO is claimed. The earlier 48-event
+functional pass predates this experimental implementation.
+
+**Affected modules:** `securelogx-core` detection/config/inference/API,
+`securelogx-log4j2` diagnostics and benchmark, example policy and
+documentation.
+
+**Backward-compatibility impact:** OFF/OFF preserves the current
+deterministic + contextual ML pipeline and fail-closed behavior.
+Telemetry-only changes observational counters but not routing.
+Rule enforcement requires affirmative opt-in and approved trusted policy.
+Policy identity must never be inferred from log contents.
+
+**Follow-on gates:** run `mvn clean test`, real application benchmark
+in default and characterization modes, hybrid safety dataset evaluation
+(without rerunning the sealed challenge), rule isolation and malformed
+policy tests, comparative performance/recall evaluation, and multi-hour soak.
 
 ---
 
