@@ -1,6 +1,7 @@
 param(
     [int]$Events = 48,
-    [int]$MaskingDeadlineMillis = 2000
+    [int]$MaskingDeadlineMillis = 2000,
+    [switch]$CollectMlRuleProposals
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,6 +36,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host ""
 Write-Host "[2/2] Running real Log4j application benchmark..."
 Write-Host "Masking request deadline for this benchmark run: $MaskingDeadlineMillis ms."
+Write-Host "Aggregate ML routing telemetry: $([bool]$CollectMlRuleProposals)"
 if ($MaskingDeadlineMillis -ne 2000) {
     Write-Warning "Characterization override: this run does NOT validate the 2000 ms pilot production deadline."
 }
@@ -44,9 +46,14 @@ $execArgs = '"' + $resultPath + '" ' + $Events
 # exec:java's in-process masking worker, without changing product defaults.
 $previousJavaToolOptions = [Environment]::GetEnvironmentVariable("JAVA_TOOL_OPTIONS", "Process")
 $deadlineOption = "-Dsecurelogx.runtime.maskingDeadlineMillis=$MaskingDeadlineMillis"
+$telemetryOption = if ($CollectMlRuleProposals) {
+    "-Dsecurelogx.adaptive.mlRoutingTelemetryEnabled=true"
+} else {
+    "-Dsecurelogx.adaptive.mlRoutingTelemetryEnabled=false"
+}
 $benchmarkExitCode = 0
 try {
-    $env:JAVA_TOOL_OPTIONS = ((@($previousJavaToolOptions, $deadlineOption) |
+    $env:JAVA_TOOL_OPTIONS = ((@($previousJavaToolOptions, $deadlineOption, $telemetryOption) |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " ")
     & mvn "-pl" "securelogx-log4j2" "-Dexec.mainClass=com.securelogx.log4j2.SecureLogXApplicationLogBenchmark" "-Dexec.args=$execArgs" "org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
     $benchmarkExitCode = $LASTEXITCODE
