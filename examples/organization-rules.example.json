@@ -18,5 +18,14 @@
       "digits": 8,
       "entityType": "BUSINESS_ID"
     }
+  ],
+  "safeMetadata": [
+    {
+      "id": "application-event-id",
+      "status": "APPROVED",
+      "field": "eventId",
+      "prefix": "bench-",
+      "digits": 2
+    }
   ]
 }
