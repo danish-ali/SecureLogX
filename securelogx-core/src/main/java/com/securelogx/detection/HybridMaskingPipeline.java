@@ -13,15 +13,33 @@ public final class HybridMaskingPipeline {
     private final DeterministicSensitiveDataDetector detector;
     private final HybridContextResolver resolver;
     private final MaskingPolicy maskingPolicy;
+    private final OrganizationRuleRegistry organizationRules;
 
     public HybridMaskingPipeline() {
+        this(OrganizationRuleRegistry.disabled());
+    }
+
+    public HybridMaskingPipeline(
+            OrganizationRuleRegistry organizationRules
+    ) {
+        if (organizationRules == null) {
+            throw new IllegalArgumentException(
+                    "organizationRules must not be null"
+            );
+        }
         this.detector = new DeterministicSensitiveDataDetector();
         this.resolver = new HybridContextResolver();
         this.maskingPolicy = new MaskingPolicy();
+        this.organizationRules = organizationRules;
     }
 
     public DeterministicScanResult scan(String text) {
-        return detector.scan(text);
+        // Approved rules can bypass ML only for a completely resolved
+        // single structured value. Everything else follows the existing
+        // conservative deterministic + ML gate.
+        DeterministicScanResult approved =
+                organizationRules.scanExact(text);
+        return approved == null ? detector.scan(text) : approved;
     }
 
     public String maskWithoutMl(
