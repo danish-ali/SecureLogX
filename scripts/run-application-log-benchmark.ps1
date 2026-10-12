@@ -44,11 +44,12 @@ $execArgs = '"' + $resultPath + '" ' + $Events
 # exec:java's in-process masking worker, without changing product defaults.
 $previousJavaToolOptions = [Environment]::GetEnvironmentVariable("JAVA_TOOL_OPTIONS", "Process")
 $deadlineOption = "-Dsecurelogx.runtime.maskingDeadlineMillis=$MaskingDeadlineMillis"
+$benchmarkExitCode = 0
 try {
     $env:JAVA_TOOL_OPTIONS = ((@($previousJavaToolOptions, $deadlineOption) |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " ")
     & mvn "-pl" "securelogx-log4j2" "-Dexec.mainClass=com.securelogx.log4j2.SecureLogXApplicationLogBenchmark" "-Dexec.args=$execArgs" "org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $benchmarkExitCode = $LASTEXITCODE
 } finally {
     if ($null -eq $previousJavaToolOptions) {
         Remove-Item Env:\JAVA_TOOL_OPTIONS -ErrorAction SilentlyContinue
@@ -56,6 +57,7 @@ try {
         $env:JAVA_TOOL_OPTIONS = $previousJavaToolOptions
     }
 }
+if ($benchmarkExitCode -ne 0) { exit $benchmarkExitCode }
 
 Write-Host ""
 Write-Host "Representative application-log benchmark complete."
