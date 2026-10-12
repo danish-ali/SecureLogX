@@ -148,4 +148,68 @@ class OrganizationRuleRegistryTest {
                 pipeline.scan("customerReference=CUST-834729").requiresMl()
         );
     }
+    @Test
+    void approvedOperationalEventIdCanBypassMlWithoutMasking()
+            throws Exception {
+        Path policyFile = file("ORG42", "customerReference");
+        org.json.JSONObject policy = new org.json.JSONObject(
+                Files.readString(policyFile)
+        );
+        policy.put("safeMetadata", new org.json.JSONArray().put(
+                new org.json.JSONObject()
+                        .put("id", "event-id")
+                        .put("status", "APPROVED")
+                        .put("field", "eventId")
+                        .put("prefix", "bench-")
+                        .put("digits", 2)
+        ));
+        Files.writeString(policyFile, policy.toString(2));
+
+        HybridMaskingPipeline pipeline = new HybridMaskingPipeline(
+                OrganizationRuleRegistry.load(
+                        "ORG42", policyFile.toString()
+                )
+        );
+        String safe = "eventId=bench-12";
+        DeterministicScanResult scan = pipeline.scan(safe);
+        assertFalse(scan.requiresMl());
+        assertTrue(scan.evidence().isEmpty());
+        assertEquals(
+                "approved-organization-safe-metadata",
+                scan.gateReason()
+        );
+        assertEquals(safe, pipeline.maskWithoutMl(safe, scan, false));
+
+        assertTrue(pipeline.scan("eventId=bench-123").requiresMl());
+        assertTrue(pipeline.scan("eventId=bench-12 ssn=123-45-6789")
+                .requiresMl());
+        assertTrue(pipeline.scan("customer=CUST-834729").requiresMl());
+        assertTrue(pipeline.scan("eventId=bench-12\nssn=123-45-6789")
+                .requiresMl());
+    }
+
+    @Test
+    void sensitiveFieldsCannotBeWhitelistedAsSafeMetadata()
+            throws Exception {
+        Path policyFile = file("ORG42", "customerReference");
+        org.json.JSONObject policy = new org.json.JSONObject(
+                Files.readString(policyFile)
+        );
+        policy.put("safeMetadata", new org.json.JSONArray().put(
+                new org.json.JSONObject()
+                        .put("id", "customer-allow")
+                        .put("status", "APPROVED")
+                        .put("field", "customer")
+                        .put("prefix", "CUST-")
+                        .put("digits", 6)
+        ));
+        Files.writeString(policyFile, policy.toString(2));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> OrganizationRuleRegistry.load(
+                        "ORG42", policyFile.toString()
+                )
+        );
+    }
+
 }
