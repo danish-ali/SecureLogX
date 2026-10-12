@@ -216,6 +216,92 @@ the masking request. Production sizing, deadline tuning, and long-windowed
 ONNX optimization still require profiling and load tests. Do not simply
 increase the production deadline to make the pilot test green.
 
+
+## Opt-in adaptive organization masking (experimental)
+
+This version implements **reviewed rules and ML-based proposals**, not live
+self-modifying regex. An approved rule can bypass ML only when it matches
+the *entire* structured field=value input. Mixed records and unknown text
+still go through the existing conservative hybrid gate.
+
+Deployment properties (off by default; configure these explicitly):
+
+~~~properties
+securelogx.organization.id=ORG42
+securelogx.organization.approvedRulesFile=examples/organization-rules.example.json
+securelogx.adaptive.mlRoutingTelemetryEnabled=true
+~~~
+
+The organization ID is trusted per-deployment configuration, **never read
+from a log message**. Multi-organization deployments require isolated
+masker/context instances. Untrusted per-request organization switching is
+not supported by this version.
+
+An approved, versioned JSON policy can contain:
+
+~~~json
+{
+  "organizationId": "ORG42",
+  "version": 1,
+  "rules": [{
+    "id": "customer-reference",
+    "status": "APPROVED",
+    "field": "customerReference",
+    "prefix": "CUST-",
+    "digits": 6,
+    "entityType": "BUSINESS_ID"
+  }]
+}
+~~~
+
+Only exact field names, a fixed ASCII numeric length (4–20 digits), and
+optional literal prefix (2–12 letters plus - or _) are permitted. Arbitrary
+administrator regex is **not** supported. The implementation uses anchored,
+bounded compiled patterns. For example, customerReference=CUST-834729
+becomes customerReference=****-****** without invoking ML for that field.
+A nonmatching value or additional text uses the original hybrid gate.
+
+A configured policy is restricted to 128 rules and 64 KiB. An invalid,
+unapproved, missing, or wrong-organization configured policy causes startup
+failure. Rules never self-promote or silently alter the detection policy.
+
+### Review and approval workflow
+
+1. Optionally enable ML routing telemetry. On successful ML recognition of
+   a complete structured value, SecureLogX aggregates the field name,
+   **abstract shape**, ML entity type, and observation count. Raw identifier
+   values and their literal prefixes are not retained.
+2. A reviewer examines aggregated proposals, independently validates the
+   actual field schema and tests positive and negative cases. Telemetry
+   observations are **not** ground-truth labels or automatic approvals.
+3. An authorized reviewer creates/updates a versioned, APPROVED rule file,
+   protects file access, and restarts the masker to load the revision.
+   The APPROVED field is a workflow convention, not a cryptographic signature.
+4. Validate detection quality and performance on representative workloads
+   before using the rules in production. Other unresolved fields still use ML.
+
+For a running Log4j2 LoggerContext, inspect in-memory aggregates without
+creating an additional ONNX session:
+
+~~~java
+LoggerContext context =
+        (LoggerContext) LogManager.getContext(false);
+MlRoutingTelemetry.Snapshot snapshot =
+        SecureLogXAdaptiveDiagnostics.snapshot(context, "prod");
+// snapshot.routingReasons(), snapshot.proposedCandidates()
+~~~
+
+The core SecureMasker exposes getMlRoutingTelemetrySnapshot() as well.
+Snapshots never contain log values, but field names can reveal application
+schema, so restrict access to operational diagnostics. Counters are per
+masker instance, and repeated fields in the same event can be counted
+separately. Nothing is persisted automatically.
+
+**Limitations:** This is a narrow first release for structured identifiers.
+It does not yet optimize unrelated MDC, stack fields, or long-windowed
+records; it does not establish a better ML-invocation rate for the current
+48-event benchmark or meet the 2-second pilot latency target.
+
 ## Current assurance boundary
 
 SecureLogX does **not** claim that sensitive/NPI data can never appear in an
