@@ -177,6 +177,44 @@ Current pilot defaults are a 64-request queue, 2000 ms end-to-end deadline, and
 one active masking worker. These are not release SLAs and must be load-tested
 before 1.0.
 
+## Representative application-log benchmark and deadlines
+
+The representative application-log benchmark uses real application `Logger`
+calls through `RewriteAppender`, the production masking policy, ML-v1.3
+ONNX, and a file appender. It contains 48 measured events by default,
+including five long/windowed message cases (ordinals 5, 15, 25, 35, 45).
+
+Run under the **2,000 ms pilot masking deadline** (the default):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1
+```
+
+If this fails with `DEADLINE_EXCEEDED`, the original event payload is
+appropriately failed closed. The benchmark still fails because it requires
+all application events to be successfully masked and emitted, not replaced
+by fail-closed placeholders. The output now lists the 12 slowest synthetic
+event IDs, workload categories, and caller durations without showing payloads.
+
+To **characterize** the same workload with a longer bounded deadline,
+without changing the production property file, run explicitly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 15000
+```
+
+The override applies only to the benchmark Maven execution and is restored
+afterward. The output JSON reports `masking_deadline_millis`,
+`caller_events_over_2000ms`, and
+`long_windowed_caller_latency_millis`, in addition to existing safety and
+throughput metrics.
+
+**A characterization pass at 15,000 ms is not a pass of the 2,000 ms pilot
+operational target.** Caller duration includes Log4j overhead in addition to
+the masking request. Production sizing, deadline tuning, and long-windowed
+ONNX optimization still require profiling and load tests. Do not simply
+increase the production deadline to make the pilot test green.
+
 ## Current assurance boundary
 
 SecureLogX does **not** claim that sensitive/NPI data can never appear in an
