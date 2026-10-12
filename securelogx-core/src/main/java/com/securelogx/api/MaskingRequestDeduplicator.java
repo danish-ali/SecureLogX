@@ -18,15 +18,18 @@ final class MaskingRequestDeduplicator {
     private final List<String> uniqueTexts;
     private final List<MaskingFieldOrigin> firstOrigins;
     private final int[] originalToUnique;
+    private final List<Integer> firstOriginalIndices;
 
     private MaskingRequestDeduplicator(
             List<String> uniqueTexts,
             List<MaskingFieldOrigin> firstOrigins,
-            int[] originalToUnique
+            int[] originalToUnique,
+            List<Integer> firstOriginalIndices
     ) {
         this.uniqueTexts = List.copyOf(uniqueTexts);
         this.firstOrigins = List.copyOf(firstOrigins);
         this.originalToUnique = originalToUnique.clone();
+        this.firstOriginalIndices = List.copyOf(firstOriginalIndices);
     }
 
     static MaskingRequestDeduplicator of(
@@ -42,6 +45,7 @@ final class MaskingRequestDeduplicator {
         Map<String, Integer> seen = new LinkedHashMap<>();
         List<String> uniqueTexts = new ArrayList<>();
         List<MaskingFieldOrigin> firstOrigins = new ArrayList<>();
+        List<Integer> firstOriginalIndices = new ArrayList<>();
         int[] mapping = new int[texts.size()];
 
         for (int i = 0; i < texts.size(); i++) {
@@ -51,13 +55,14 @@ final class MaskingRequestDeduplicator {
                 index = uniqueTexts.size();
                 seen.put(text, index);
                 uniqueTexts.add(text);
+                firstOriginalIndices.add(i);
                 firstOrigins.add(origins.get(i) == null
                         ? MaskingFieldOrigin.OTHER : origins.get(i));
             }
             mapping[i] = index;
         }
         return new MaskingRequestDeduplicator(
-                uniqueTexts, firstOrigins, mapping
+                uniqueTexts, firstOrigins, mapping, firstOriginalIndices
         );
     }
 
@@ -67,6 +72,10 @@ final class MaskingRequestDeduplicator {
 
     List<MaskingFieldOrigin> firstOrigins() {
         return firstOrigins;
+    }
+
+    int firstOriginalIndex(int uniqueIndex) {
+        return firstOriginalIndices.get(uniqueIndex);
     }
 
     int originalCount() {
