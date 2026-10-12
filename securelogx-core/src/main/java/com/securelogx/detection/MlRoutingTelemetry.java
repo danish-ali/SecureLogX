@@ -34,10 +34,17 @@ public final class MlRoutingTelemetry {
     private final boolean enabled;
     private final Map<Bucket, Long> candidates = new LinkedHashMap<>();
     private final Map<String, Long> mlReasons = new LinkedHashMap<>();
+    private long approvedRuleMatches;
 
     public MlRoutingTelemetry(String organizationId, boolean enabled) {
         this.organizationId = organizationId == null ? "" : organizationId;
         this.enabled = enabled;
+    }
+
+    public synchronized void recordApprovedRuleMatch() {
+        if (enabled) {
+            approvedRuleMatches++;
+        }
     }
 
     public synchronized void recordMlRoute(String reason) {
@@ -130,7 +137,8 @@ public final class MlRoutingTelemetry {
                 organizationId,
                 enabled,
                 List.copyOf(proposed),
-                Map.copyOf(mlReasons)
+                Map.copyOf(mlReasons),
+                approvedRuleMatches
         );
     }
 
@@ -149,7 +157,8 @@ public final class MlRoutingTelemetry {
             String organizationId,
             boolean enabled,
             List<Candidate> proposedCandidates,
-            Map<String, Long> routingReasons
+            Map<String, Long> routingReasons,
+            long approvedRuleMatches
     ) {
     }
 }
