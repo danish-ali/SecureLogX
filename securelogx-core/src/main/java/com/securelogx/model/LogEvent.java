@@ -1,6 +1,7 @@
 package com.securelogx.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.securelogx.util.CachedClock;
 
 import java.time.Instant;
@@ -29,6 +30,7 @@ public class LogEvent {
     );
 
     private final String message;
+    private final MaskingFieldOrigin maskingFieldOrigin;
     private final LogLevel level;
     private final boolean showLastFour;
     private final String traceId;
@@ -81,6 +83,25 @@ public class LogEvent {
         );
     }
 
+    /**
+     * Adapter-only field origin. This does not influence detection policy.
+     */
+    public LogEvent(
+            String message,
+            LogLevel level,
+            boolean showLastFour,
+            String traceId,
+            long sequenceNumber,
+            long eventTimestamp,
+            MaskingFieldOrigin maskingFieldOrigin
+    ) {
+        this(
+                message, level, showLastFour, traceId,
+                sequenceNumber, eventTimestamp, PROCESS_INSTANCE_ID,
+                maskingFieldOrigin
+        );
+    }
+
     private LogEvent(
             String message,
             LogLevel level,
@@ -90,7 +111,26 @@ public class LogEvent {
             long eventTimestamp,
             String instanceId
     ) {
+        this(
+                message, level, showLastFour, traceId,
+                sequenceNumber, eventTimestamp, instanceId,
+                MaskingFieldOrigin.OTHER
+        );
+    }
+
+    private LogEvent(
+            String message,
+            LogLevel level,
+            boolean showLastFour,
+            String traceId,
+            long sequenceNumber,
+            long eventTimestamp,
+            String instanceId,
+            MaskingFieldOrigin maskingFieldOrigin
+    ) {
         this.message = message;
+        this.maskingFieldOrigin = maskingFieldOrigin == null
+                ? MaskingFieldOrigin.OTHER : maskingFieldOrigin;
         this.level = level;
         this.showLastFour = showLastFour;
         this.traceId = traceId;
@@ -103,6 +143,11 @@ public class LogEvent {
 
     public String getMessage() {
         return message;
+    }
+
+    @JsonIgnore
+    public MaskingFieldOrigin getMaskingFieldOrigin() {
+        return maskingFieldOrigin;
     }
 
     public LogLevel getLevel() {
