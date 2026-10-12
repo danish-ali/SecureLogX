@@ -1,5 +1,6 @@
 package com.securelogx.log4j2;
 
+import com.securelogx.config.SecureLogXConfig;
 import com.securelogx.validation.RuntimeMemorySnapshot;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.Logger;
@@ -169,10 +170,16 @@ public final class SecureLogXApplicationLogBenchmark {
                     StandardCharsets.UTF_8
             );
 
-            Validation validation = validateOutput(
-                    output,
-                    eventCount
-            );
+            Validation validation;
+            try {
+                validation = validateOutput(
+                        output,
+                        eventCount
+                );
+            } catch (IllegalStateException failure) {
+                printSlowestCallerEvents(latencies);
+                throw failure;
+            }
 
             JSONObject result = new JSONObject();
             result.put(
@@ -182,6 +189,28 @@ public final class SecureLogXApplicationLogBenchmark {
             result.put("passed", true);
             result.put("events", eventCount);
             result.put("warmup_events", WARMUP_EVENTS);
+            result.put(
+                    "masking_deadline_millis",
+                    new SecureLogXConfig("dev")
+                            .getMaskingDeadlineMillis()
+            );
+            result.put(
+                    "caller_events_over_2000ms",
+                    latencies.stream()
+                            .filter(nanos -> nanos
+                                    > TimeUnit.MILLISECONDS.toNanos(2000L))
+                            .count()
+            );
+            List<Long> longWindowedLatencies = new ArrayList<>();
+            for (int i = 0; i < latencies.size(); i++) {
+                if (i % 10 == 5) {
+                    longWindowedLatencies.add(latencies.get(i));
+                }
+            }
+            result.put(
+                    "long_windowed_caller_latency_millis",
+                    latencyJson(longWindowedLatencies)
+            );
             result.put(
                     "elapsed_millis",
                     TimeUnit.NANOSECONDS.toMillis(
@@ -660,6 +689,53 @@ public final class SecureLogXApplicationLogBenchmark {
         );
     }
 
+    private static void printSlowestCallerEvents(
+            List<Long> latencies
+    ) {
+        // Synthetic benchmark IDs and workload categories only: no message,
+        // MDC, throwable or credential content is included in diagnostics.
+        List<Integer> slowest = new ArrayList<>();
+        for (int i = 0; i < latencies.size(); i++) {
+            slowest.add(i);
+        }
+        slowest.sort(
+                (left, right) -> Long.compare(
+                        latencies.get(right),
+                        latencies.get(left)
+                )
+        );
+        System.err.println(
+                "Application benchmark: slowest caller invocations "
+                        + "(synthetic IDs, no payload):"
+        );
+        for (int i = 0; i < Math.min(12, slowest.size()); i++) {
+            int ordinal = slowest.get(i);
+            System.err.println(
+                    "  bench-" + ordinal
+                            + " category="
+                            + workloadCategory(ordinal)
+                            + " caller_millis="
+                            + millis(latencies.get(ordinal))
+            );
+        }
+    }
+
+    private static String workloadCategory(int ordinal) {
+        return switch (ordinal % 10) {
+            case 0 -> "parameterized-ssn-email";
+            case 1 -> "contextual-text";
+            case 2 -> "map-message";
+            case 3 -> "mdc-context";
+            case 4 -> "throwable";
+            case 5 -> "long-windowed-record";
+            case 6 -> "benign-version";
+            case 7 -> "synthetic-credentials";
+            case 8 -> "credit-card";
+            case 9 -> "phone";
+            default -> throw new IllegalStateException("Invalid ordinal");
+        };
+    }
+
     private static JSONObject latencyJson(
             List<Long> nanos
     ) {
@@ -808,6 +884,22 @@ public final class SecureLogXApplicationLogBenchmark {
                         + result.getLong(
                                 "fail_closed_events"
                         )
+        );
+        System.out.println(
+                "Masking deadline: "
+                        + result.getLong("masking_deadline_millis")
+                        + " ms"
+        );
+        System.out.println(
+                "Caller events exceeding 2,000 ms pilot baseline: "
+                        + result.getLong("caller_events_over_2000ms")
+        );
+        System.out.println(
+                "Long/windowed caller p95: "
+                        + result.getJSONObject(
+                                "long_windowed_caller_latency_millis"
+                        ).get("p95")
+                        + " ms"
         );
         System.out.println("Raw payload forwarded: false");
         System.out.println(
