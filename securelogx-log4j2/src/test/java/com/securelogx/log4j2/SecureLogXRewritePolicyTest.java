@@ -2,6 +2,7 @@ package com.securelogx.log4j2;
 
 import com.securelogx.api.MaskedResult;
 import com.securelogx.api.MaskReasonCode;
+import com.securelogx.model.MaskingFieldOrigin;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.core.LogEvent;
@@ -371,4 +372,64 @@ class SecureLogXRewritePolicyTest {
 
         assertEquals(firstInstanceId, secondInstanceId);
     }
+    @Test
+    void forwardsTrustedFieldOriginsWithoutChangingMaskingServiceContract() {
+        List<MaskingFieldOrigin> recordedOrigins = new ArrayList<>();
+        List<String> recordedTexts = new ArrayList<>();
+        SecureMaskingService service = new SecureMaskingService() {
+            @Override
+            public List<MaskedResult> maskAll(List<String> texts) {
+                return texts.stream()
+                        .map(text -> new MaskedResult(
+                                text.replace(RAW, "***-**-****"),
+                                false, false,
+                                MaskReasonCode.DETERMINISTIC_RESOLVED,
+                                1L, "test-masker"
+                        ))
+                        .toList();
+            }
+
+            @Override
+            public List<MaskedResult> maskAllWithOrigins(
+                    List<String> texts,
+                    List<MaskingFieldOrigin> origins
+            ) {
+                recordedTexts.addAll(texts);
+                recordedOrigins.addAll(origins);
+                return maskAll(texts);
+            }
+        };
+
+        SecureLogXRewritePolicy policy = new SecureLogXRewritePolicy(
+                "test", "SecureLogXRewrite", false, false, null, service
+        );
+
+        SortedArrayStringMap mdc = new SortedArrayStringMap();
+        mdc.putValue("eventId", "bench-12");
+        mdc.freeze();
+        MutableThreadContextStack stack =
+                new MutableThreadContextStack(List.of("request-12"));
+        stack.freeze();
+
+        LogEvent input = new Log4jLogEvent.Builder()
+                .setLevel(Level.ERROR)
+                .setMessage(new ParameterizedMessage("ssn={}", RAW))
+                .setContextData(mdc)
+                .setContextStack(stack)
+                .setThrown(new IllegalStateException("request failed"))
+                .build();
+
+        LogEvent rewritten = policy.rewrite(input);
+        assertEquals(recordedTexts.size(), recordedOrigins.size());
+        assertTrue(recordedOrigins.contains(MaskingFieldOrigin.MESSAGE));
+        assertTrue(recordedOrigins.contains(MaskingFieldOrigin.FORMAT));
+        assertTrue(recordedOrigins.contains(MaskingFieldOrigin.PARAMETER));
+        assertTrue(recordedOrigins.contains(MaskingFieldOrigin.MDC));
+        assertTrue(recordedOrigins.contains(MaskingFieldOrigin.STACK));
+        assertTrue(recordedOrigins.contains(MaskingFieldOrigin.THROWABLE));
+        assertFalse(rewritten.getMessage().getFormattedMessage().contains(RAW));
+        assertEquals("false", rewritten.getContextData()
+                .getValue("securelogx.failClosed"));
+    }
+
 }
