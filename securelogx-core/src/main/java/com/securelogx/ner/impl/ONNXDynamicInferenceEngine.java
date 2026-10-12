@@ -6,6 +6,8 @@ import com.securelogx.api.MaskedResult;
 import com.securelogx.api.MaskReasonCode;
 import com.securelogx.detection.DeterministicScanResult;
 import com.securelogx.detection.HybridMaskingPipeline;
+import com.securelogx.detection.MlRoutingTelemetry;
+import com.securelogx.detection.OrganizationRuleRegistry;
 import com.securelogx.detection.HybridRuntimeStats;
 import com.securelogx.model.LogEvent;
 import com.securelogx.ner.TokenizerEngine;
@@ -26,8 +28,8 @@ public class ONNXDynamicInferenceEngine {
             new LabelAwareMaskingEngine();
     private final BioConstrainedSpanDecoder constrainedDecoder =
             new BioConstrainedSpanDecoder();
-    private final HybridMaskingPipeline hybridMaskingPipeline =
-            new HybridMaskingPipeline();
+    private final HybridMaskingPipeline hybridMaskingPipeline;
+    private final MlRoutingTelemetry mlRoutingTelemetry;
     private final MlDecoderMode decoderMode;
     private volatile boolean running = true;
     private  boolean isGpuMode;
@@ -56,6 +58,19 @@ public class ONNXDynamicInferenceEngine {
     private long truncatedFailClosedItems = 0;
 
     public ONNXDynamicInferenceEngine(String modelPath, com.securelogx.config.SecureLogXConfig config) throws Exception {
+        // Validate the organization-scoped rules before allocating native
+        // ONNX resources. An invalid requested policy fails initialization.
+        this.hybridMaskingPipeline = new HybridMaskingPipeline(
+                OrganizationRuleRegistry.load(
+                        config.getOrganizationId(),
+                        config.getApprovedOrganizationRulesFile()
+                )
+        );
+        this.mlRoutingTelemetry = new MlRoutingTelemetry(
+                config.getOrganizationId(),
+                config.isMlRuleTelemetryEnabled()
+        );
+
         // Check CUDA environment first
         checkCudaEnvironment();
         addCudaToLibraryPath();
@@ -151,6 +166,10 @@ public class ONNXDynamicInferenceEngine {
         System.out.println(
                 "[SecureLogX INIT] ML decoder mode: " + decoderMode
         );
+    }
+
+    public MlRoutingTelemetry.Snapshot getMlRoutingTelemetrySnapshot() {
+        return mlRoutingTelemetry.snapshot();
     }
 
     private void setupCpuMode(com.securelogx.config.SecureLogXConfig config, OrtSession.SessionOptions opts) {
@@ -299,6 +318,7 @@ public class ONNXDynamicInferenceEngine {
                 scans.add(scan);
 
                 if (scan.requiresMl()) {
+                    mlRoutingTelemetry.recordMlRoute(scan.gateReason());
                     mlOriginalIndices.add(i);
                     mlBatch.add(event);
                 } else {
@@ -643,6 +663,10 @@ public class ONNXDynamicInferenceEngine {
                                 false,
                                 MaskReasonCode.ML_RESOLVED
                         );
+                mlRoutingTelemetry.observeMlResolved(
+                        event.getMessage(),
+                        selectedSpans
+                );
                 mlInferenceItems++;
                 if (windowedOriginalIndices.contains(originalIndex)) {
                     windowedMlItems++;
