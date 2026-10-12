@@ -339,6 +339,10 @@ public class ONNXDynamicInferenceEngine {
                         scan.gateReason()
                 )) {
                     mlRoutingTelemetry.recordApprovedRuleMatch();
+                } else if ("approved-organization-safe-metadata".equals(
+                        scan.gateReason()
+                )) {
+                    mlRoutingTelemetry.recordSafeMetadataMatch();
                 }
 
                 if (scan.requiresMl()) {
