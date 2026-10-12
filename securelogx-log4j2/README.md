@@ -412,6 +412,77 @@ contextual fields and long/windowed records; a lower whole-event ML count
 is not guaranteed. The safe-metadata field allowlist is intentionally narrow
 rather than treating arbitrary organization IDs or correlation fields as safe.
 
+## Measured ONNX execution and long-record CPU tuning
+
+The representative Log4j2 benchmark now reports **actual ONNX
+\`session.run\` calls and token windows**, not just field-level ML
+routing reasons or whole-event \`mlInvoked\` flags.
+
+Read \`result.json\` -> \`inference_metrics_measured_only\`:
+
+- \`onnx_inference_calls\`, \`ml_inference_windows\`:
+  native calls and processed windows, **excluding four warmup events**.
+- \`windowed_onnx_inference_calls\`, \`windowed_ml_items\`:
+  long/window-expanded ML work, excluding warmup.
+- \`stage_total_millis\`: distinct totals for deterministic processing,
+  tokenization, window assembly, tensor preparation, native ONNX calls,
+  span decoding and final reconciliation/masking.
+- \`stage_total_millis.onnx_windowed_native_run_subset\` is
+  **included** within \`onnx_native_run\`; do not add it again.
+- \`max_configured_cpu_threads\` and
+  \`max_inference_windows_per_batch\` document the tuning controls.
+
+The stage durations are accumulated masked-worker execution times, not
+full caller latencies: queue wait, Log4j ingress/rewrite, file output,
+report generation and runtime scheduling contribute separately.
+No raw messages, tokens, logits or decoded values are stored in the
+stage metrics.
+
+Previously, the CPU session chose
+\`Runtime.availableProcessors()\` whenever ONNX multithreading was on,
+ignoring the existing \`securelogx.maxCpuThreads\` setting. It now honors
+the configured bound (dev default 4), with CPU intra-op threads =
+\`min(availableProcessors, maxCpuThreads)\`; disabled CPU multithreading
+still uses one thread. This is an *experimental performance change*,
+not proof of improved throughput.
+
+### Repeatable pilot comparison (PowerShell)
+
+Run these only from the repository root. **Always run the full test
+suite first**, then compare the same 48 synthetic events and
+15-second *characterization* deadline. Example organization rules are
+explicitly enabled solely for these measurements.
+
+~~~powershell
+mvn clean test
+
+# Configured CPU cap=4, existing native window cap=4.
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 15000 -CollectMlRuleProposals -UseExampleOrganizationRules -CpuThreads 4 -WindowBatchLimit 4
+Copy-Item .\reports\application-log-benchmark\result.json .\reports\application-log-benchmark\cpu4-window4.json
+
+# Alternative thread cap; same model, same windows and protections.
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 15000 -CollectMlRuleProposals -UseExampleOrganizationRules -CpuThreads 2 -WindowBatchLimit 4
+Copy-Item .\reports\application-log-benchmark\result.json .\reports\application-log-benchmark\cpu2-window4.json
+
+# Repeat runs with reversed order to reduce warmup/CPU scheduling bias.
+~~~
+
+If native execution dominates, test several CPU thread caps before
+considering other changes. If Java tokenization or decoding dominates,
+target those stages instead. Only consider a different
+\`-WindowBatchLimit\` after checking process/native-memory headroom;
+raising it above the validated default of 4 requires renewed
+native-memory and security regression checks. The runner warns
+about larger micro-batches and preserves/restores JAVA_TOOL_OPTIONS
+on exit.
+
+**Acceptance:** zero fail-closed events, no raw sensitive test fixtures,
+benign control preserved, correct event count, unchanged model/decoder/
+tokenizer/window overlap, no native-memory regression. A single faster
+p95 is not sufficient: compare repeated runs and report ONNX call/window
+counts and stage costs alongside p50/p95/p99/throughput. The
+**2-second pilot latency gate is still OPEN** until validated.
+
 ## Current assurance boundary
 
 SecureLogX does **not** claim that sensitive/NPI data can never appear in an
