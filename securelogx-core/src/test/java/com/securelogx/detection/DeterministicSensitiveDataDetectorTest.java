@@ -35,6 +35,14 @@ class DeterministicSensitiveDataDetectorTest {
     }
 
     @Test
+    void freeTextBankAccountMentionStillRequiresMl() {
+        DeterministicScanResult result =
+                detector.scan("bankAccount lookup failed");
+
+        assertTrue(result.requiresMl());
+    }
+
+    @Test
     void doesNotAssumeGenericAccountFieldIsBankAccount() {
         DeterministicScanResult result =
                 detector.scan("account=9876543210");
