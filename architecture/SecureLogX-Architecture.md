@@ -57,7 +57,9 @@ Concurrency saturation policy    VALIDATED (single-worker pilot)
 Hot redeploy/native lifecycle    VALIDATED (4 real ONNX context cycles)
 Real application log benchmark   FUNCTIONAL PASS (48/48 at 15-second deadline)
 2-second application-log latency NOT MET (5/48 exceeded pilot deadline)
-Organization-aware masking       EXPERIMENTAL (opt-in; tests pending)
+Organization-aware masking       EXPERIMENTAL (opt-in; local tests pending)
+Event-local duplicate reuse      IMPLEMENTED; LOCAL REGRESSION PENDING
+Origin-aware ML route telemetry  IMPLEMENTED; LOCAL BENCHMARK PENDING
 Multi-hour soak                  OPEN
 ```
 
@@ -288,6 +290,146 @@ Relevant modules: `OrganizationRuleRegistry`, `MlRoutingTelemetry`,
 `SecureLogXAdaptiveDiagnostics`; benchmark opt-in
 `-CollectMlRuleProposals`; operational documentation in
 `securelogx-log4j2/README.md`.
+
+### October 12 routing hardening — field origins, strict metadata and reuse
+
+**Status: IMPLEMENTED / EXPERIMENTAL; user-local test and benchmark evidence
+pending for this revision.** Previous application-log functional validation
+(48/48, zero fail-closed at 15 seconds) predates these changes.
+
+This extension addresses the observation that 48 Log4j application events
+caused **268 individual field-level ML routing decisions including warmup**:
+
+| Gate category | Observed decision count |
+|---|---:|
+| no-deterministic-evidence | 196 |
+| capitalized-name-outside-evidence | 30 |
+| evidence-escalate | 16 |
+| free-text-no-keyvalue | 11 |
+| unknown-key | 10 |
+| semantic-risk-keyword | 5 |
+
+These are **field-level attempts**, not a second count of application
+events or actual ONNX calls. The data motivated more precise diagnostics and
+work elimination; it does *not* justify treating unknown values as safe.
+
+**Trusted origin data flow:**
+
+\`\`\`text
+Log4j2 SanitizationPlan.capture(event)
+  |
+  +--> formatted message      MESSAGE
+  +--> message format         FORMAT
+  +--> parameters             PARAMETER
+  +--> MapMessage values      MAP
+  +--> MDC key=value          MDC
+  +--> ThreadContext stack    STACK
+  +--> throwable/causes       THROWABLE
+  |
+  v
+SecureMaskingService.maskAllWithOrigins(texts, origins)
+  |
+  v
+SecureMasker.maskAllWithOrigins
+  -> exact text deduplication within THIS one request
+  -> bounded MaskingRequestExecutor (per-unique value)
+  -> LogEvent.getMaskingFieldOrigin()
+  -> hybrid deterministic / ML gate
+  -> ML route reason + origin + field + abstract shape (OPTIONAL)
+  -> expand masked results into original field order
+  -> SecureLogXRewritePolicy rebuilds *fully sanitized* Log4j event
+\`\`\`
+
+\`MaskingFieldOrigin\` is assigned by the trusted adapter, **never extracted
+from a log message or untrusted MDC**. A source category exists only for
+diagnostics and does not authorize bypass. The engine's old masking APIs
+and the Log4j2 \`SecureMaskingService\` functional interface remain
+available; implementations without origin support fall back to OTHER.
+The original \`LogEvent\` serialized representation is unchanged.
+
+**Privacy-safe telemetry:** With
+\`securelogx.adaptive.mlRoutingTelemetryEnabled=true\` the engine maintains
+bounded, in-memory counts keyed by routing reason category, origin,
+safe bounded field name when the entire input is a structured field=value,
+and abstract numeric/prefixed shape. Unknown/free text is classified
+\`UNSTRUCTURED\`/\`OTHER\`. No actual field value, name of a detected person,
+literal prefix, sampled log line, or credential is retained. **Field names
+can themselves reveal application schema** and must be restricted to
+operational access. The code also reports approved sensitive rule hits,
+approved safe-metadata hits, and duplicated field evaluations avoided.
+The existing ML rule candidate mechanism remains review-only.
+
+**Request-local deduplication:** The Java masking API now compacts
+*exactly equal* strings in one \`maskAll\` request, normally corresponding
+to one Log4j2 event. It records a unique source sequence for every original
+field; after inference it expands each result into the original positions,
+preserving order, masked content, reason code, ML invocation and fail-closed
+state. Any failed unique input fails every duplicate position and causes
+the normal **whole-event** Log4j fail-closed policy to apply. There is
+no cross-event, cross-tenant or persistent cache, no retained raw-data
+index, no new asynchronous queue, and no change to overload/deadline
+semantics. Field origin in duplicate telemetry reflects the first
+occurrence of a repeated input. The counter is duplicate **field
+evaluations**, not necessarily a corresponding number of ONNX calls.
+
+**Optional safe operational metadata:** The approved versioned
+organization policy may now contain a \`safeMetadata\` array alongside
+sensitive \`rules\`. The master switch
+\`securelogx.adaptive.enabled=false\` remains OFF by default. To enable
+safe metadata, the organization must explicitly activate approved rules,
+configure its trusted identity and supply an appropriately reviewed policy
+file. An approved metadata rule has fields
+\`id\`, \`status=APPROVED\`, \`field\`, \`prefix\` and \`digits\`.
+The *only* allowed field names are currently \`eventId\` and \`traceId\`;
+a nonempty literal 2–12-letter prefix ending with \`-\` or \`_\`
+and 1–12 ASCII digits must fully match. Examples:
+
+\`\`\`text
+approved: eventId + bench- + exactly 2 digits
+eventId=bench-12               -> deterministic pass-through for THAT field
+eventId=bench-123              -> hybrid scanner / ML (wrong length)
+customer=customer-12           -> hybrid scanner / ML (not allowlisted)
+eventId=bench-12 ssn=123...    -> hybrid scanner / ML (mixed input)
+\`\`\`
+
+Operational metadata is not globally harmless: fields such as customer IDs,
+application IDs, account numbers and claims are **not permitted** in this
+allowlist. A deployment owner must verify the authority and source of the
+specific application-generated correlation field before approval.
+A rule match on one field never skips unrelated MDC, message, parameter,
+stack or throwable inspection. A safe metadata rule is not treated as a
+blanket event-level \`ALLOW\`. Explicit, invalid, wrong-organization, or
+unapproved configured policies continue to fail masker initialization.
+
+**Benchmark comparison:**
+
+\`\`\`powershell
+# Build and run with opt-in telemetry; rules OFF
+mvn clean test
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 15000 -CollectMlRuleProposals
+Copy-Item .\reports\application-log-benchmark\result.json .\reports\application-log-benchmark\baseline-with-dedup.json
+
+# Same workload, synthetic example ORG42 approved policy ON
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 15000 -CollectMlRuleProposals -UseExampleOrganizationRules
+\`\`\`
+
+The benchmark report includes \`ml_routing_details_including_warmup\`,
+\`duplicate_field_evaluations_avoided_including_warmup\`,
+\`safe_metadata_matches_including_warmup\`,
+\`approved_rule_matches_including_warmup\`, and existing raw-leak,
+fail-closed, whole-event ML, latency/throughput and memory measures.
+
+**Acceptance:** Compare both runs with the same workload and 15-second
+characterization ceiling; verify no raw fixture, no new fail-closed events,
+and no regression in negative technical controls. Then validate against
+the locked non-sealed security corpus, including adversarial inputs,
+before claiming recall parity. The 15-second results must **not** be
+interpreted as meeting the unresolved 2-second production deadline.
+Long/windowed ONNX inference remains a separate optimization problem.
+The current sample policy intentionally matches only a subset of two-digit
+benchmark event IDs; it will not remove the other fields' ML usage.
+
+---
 
 ### Appender ingress and event-envelope contract
 
@@ -4160,6 +4302,51 @@ Policy identity must never be inferred from log contents.
 in default and characterization modes, hybrid safety dataset evaluation
 (without rerunning the sealed challenge), rule isolation and malformed
 policy tests, comparative performance/recall evaluation, and multi-hour soak.
+
+---
+
+### 2026-10-12 — Diagnostic ML routing, reviewed safe metadata and event-local reuse
+
+**Status:** IMPLEMENTED / EXPERIMENTAL — local regression and representative
+benchmark revalidation pending
+
+**Change:** Trusted Log4j2 field-origin categories propagated into the
+hybrid engine; bounded in-memory route-detail aggregates (reason, origin,
+structured field name, abstract value shape, count); event-local exact
+input deduplication with independent original sequences and fail-closed
+propagation; strict organization-approved \`eventId\`/\`traceId\`
+safe-metadata rules; example policy and benchmark opt-in; unit and
+adapter regression tests.
+
+**Reason:** A 48-event successful functional application benchmark recorded
+268 field-level ML routing decisions, including 196 with no deterministic
+evidence. The design distinguishes genuine contextual ML from repetitive
+operational fields and duplicate inputs without auto-promoting model
+predictions into unsafe regex bypasses.
+
+**Evidence / benchmark:** Prior 48-event benchmark passed with 15-second
+diagnostic deadline; that run was *before* this optimization. New regression
+tests and comparative benchmark are committed but **not yet executed** in
+the local ONNX/Windows environment. No observed improvement in p95 or ML
+route counts is claimed for this revision.
+
+**Affected modules:** SecureLogX core \`LogEvent\`, \`SecureMasker\`,
+\`MaskingRequestDeduplicator\`, \`ONNXDynamicInferenceEngine\`,
+\`OrganizationRuleRegistry\`, \`MlRoutingTelemetry\`; Log4j2
+\`SecureMaskingService\`, \`SecureMaskerRegistry\`,
+\`SecureLogXRewritePolicy\`, application benchmark/script, tests and docs.
+
+**Backward-compatibility impact:** Approved organization safe-metadata
+bypass remains disabled by default and is explicitly opt-in.
+Duplicate reuse applies only within a single masking request and preserves
+mask/fail-closed results and per-input sequence. Existing interfaces remain
+available. New telemetry is separately opt-in and contains no raw values.
+Any mismatch, unknown field, ambiguity or whole-event processing failure
+follows existing conservative hybrid/fail-closed behavior.
+
+**Remaining gates:** local Java/Maven regression suite, Log4j2 functional
+benchmark, comparative route/memory/latency metrics, non-sealed security
+corpus regression, 2-second latency target and multi-hour soak.
 
 ---
 
