@@ -1,6 +1,7 @@
 package com.securelogx.log4j2;
 
 import com.securelogx.api.SecureMasker;
+import com.securelogx.model.MaskingFieldOrigin;
 import com.securelogx.detection.MlRoutingTelemetry;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
@@ -41,8 +42,27 @@ final class SecureMaskerRegistry {
                 normalizedEnvironment -> {
                     SecureMasker masker =
                             new SecureMasker(normalizedEnvironment);
+                    SecureMaskingService service =
+                            new SecureMaskingService() {
+                                @Override
+                                public java.util.List<com.securelogx.api.MaskedResult> maskAll(
+                                        java.util.List<String> texts
+                                ) {
+                                    return masker.maskAll(texts);
+                                }
+
+                                @Override
+                                public java.util.List<com.securelogx.api.MaskedResult> maskAllWithOrigins(
+                                        java.util.List<String> texts,
+                                        java.util.List<MaskingFieldOrigin> origins
+                                ) {
+                                    return masker.maskAllWithOrigins(
+                                            texts, origins
+                                    );
+                                }
+                            };
                     return new MaskerHandle(
-                            masker::maskAll,
+                            service,
                             masker
                     );
                 }
