@@ -1,6 +1,7 @@
 package com.securelogx.log4j2;
 
 import com.securelogx.config.SecureLogXConfig;
+import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.validation.RuntimeMemorySnapshot;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.Logger;
@@ -153,6 +154,14 @@ public final class SecureLogXApplicationLogBenchmark {
             RuntimeMemorySnapshot afterWorkload =
                     settledSnapshot("after-application-workload");
 
+            // Snapshot before context.stop() closes the per-context masker.
+            // The counters include warmup events and never contain payloads.
+            MlRoutingTelemetry.Snapshot mlTelemetry =
+                    SecureLogXAdaptiveDiagnostics.snapshot(
+                            context,
+                            "dev"
+                    );
+
             context.stop();
 
             RuntimeMemorySnapshot afterStop =
@@ -234,6 +243,24 @@ public final class SecureLogXApplicationLogBenchmark {
                     "fail_closed_events",
                     validation.failClosedEvents()
             );
+            result.put(
+                    "ml_routing_telemetry_enabled",
+                    mlTelemetry.enabled()
+            );
+            result.put(
+                    "ml_routing_reason_counts_including_warmup",
+                    new JSONObject(mlTelemetry.routingReasons())
+            );
+            JSONArray candidates = new JSONArray();
+            for (MlRoutingTelemetry.Candidate candidate
+                    : mlTelemetry.proposedCandidates()) {
+                candidates.put(new JSONObject()
+                        .put("field", candidate.field())
+                        .put("shape", candidate.shape())
+                        .put("entityType", candidate.entityType())
+                        .put("observations", candidate.observations()));
+            }
+            result.put("ml_rule_candidates_including_warmup", candidates);
             result.put(
                     "measured_output_events",
                     validation.measuredOutputEvents()
@@ -858,6 +885,12 @@ public final class SecureLogXApplicationLogBenchmark {
                 "ML-invoked events: "
                         + result.getLong(
                                 "ml_invoked_events"
+                        )
+        );
+        System.out.println(
+                "ML routing telemetry enabled: "
+                        + result.getBoolean(
+                                "ml_routing_telemetry_enabled"
                         )
         );
         System.out.println(
