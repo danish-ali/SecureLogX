@@ -69,7 +69,8 @@ if ($UseExampleOrganizationRules) {
 }
 $benchmarkExitCode = 0
 try {
-    $env:JAVA_TOOL_OPTIONS = ((@($previousJavaToolOptions, $deadlineOption, $telemetryOption) + $organizationOptions |
+    $javaOptions = @($previousJavaToolOptions, $deadlineOption, $telemetryOption) + $organizationOptions
+    $env:JAVA_TOOL_OPTIONS = (($javaOptions |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " ")
     & mvn "-pl" "securelogx-log4j2" "-Dexec.mainClass=com.securelogx.log4j2.SecureLogXApplicationLogBenchmark" "-Dexec.args=$execArgs" "org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
     $benchmarkExitCode = $LASTEXITCODE
