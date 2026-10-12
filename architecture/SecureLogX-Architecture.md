@@ -456,11 +456,11 @@ baseline, 65 potential field evaluations were avoided (27 duplicate and
 38 approved metadata). This is not a measured 65-call ONNX reduction, nor a
 validated production latency speedup. All five long/windowed application
 events still exceeded the 2-second pilot deadline. Do not add blanket
-\`ALLOW\` rules to reduce the 48/48 whole-event ML indicator.
+`ALLOW` rules to reduce the 48/48 whole-event ML indicator.
 
 **New read-only inference diagnostics:**
 
-\`\`\`text
+```text
 LoggerContext-owned SecureMasker
   |
   +-> ONNXDynamicInferenceEngine.getHybridRuntimeStats()
@@ -484,11 +484,11 @@ LoggerContext-owned SecureMasker
         -> application benchmark before warmup-excluded workload
         -> application benchmark after measured workload
         -> measured-only differences
-\`\`\`
+```
 
 Stage counters use monotonic nanoseconds and retain **no payloads,
 model logits, offsets or sensitive spans**. Native ONNX wall time is
-\`session.run\` only; the windowed duration is a *subset* of the native
+`session.run` only; the windowed duration is a *subset* of the native
 stage, not an additive stage. Sums are not end-to-end caller latency:
 they exclude parts of queueing, Log4j overhead, file I/O, and general
 unmeasured call overhead. Measurements are captured only after successful
@@ -497,36 +497,36 @@ checks. An active Log4j context owns exactly one masker and ONNX session;
 diagnostic reads must never allocate sessions.
 
 **Controlled CPU optimization:** The pilot previously enabled ONNX
-intra-op threads equal to \`Runtime.availableProcessors()\` whenever CPU
+intra-op threads equal to `Runtime.availableProcessors()` whenever CPU
 multithreading was turned on. This ignored the already-documented
-\`securelogx.maxCpuThreads\` setting and could oversubscribe high-core
+`securelogx.maxCpuThreads` setting and could oversubscribe high-core
 application hosts. CPU sessions now use:
 
-\`\`\`text
+```text
 intraOpThreads = multithreadingEnabled
     ? min(availableProcessors, configuredMaxCpuThreads)
     : 1
-\`\`\`
+```
 
 Configured maximum is validated as 1–64. The dev configuration continues
-to declare \`maxCpuThreads=4\`, and single-worker admission, ONNX
+to declare `maxCpuThreads=4`, and single-worker admission, ONNX
 cancellation, pre-queue Log4j rewrite, complete overlap windows, and
 fail-closed semantics are unchanged. This is an **unvalidated performance
 hypothesis** until the affected host is benchmarked. No hard-coded
 claim of 2-second masking is made.
 
 **Controlled ONNX micro-batch size:** The validated pilot default remains
-four expanded windows per \`session.run\`. The
-\`securelogx.model.maxInferenceWindowsPerBatch\` setting can now be
+four expanded windows per `session.run`. The
+`securelogx.model.maxInferenceWindowsPerBatch` setting can now be
 overridden explicitly for A/B characterization; its configured range is
 1–32. **Do not increase beyond four for production** without a
 native-memory revalidation and repeatable recall/latency evidence.
 No windows or overlapping contexts are dropped.
 
-**Repeatable profiling:** \`run-application-log-benchmark.ps1\` accepts
-\`-CpuThreads\` and \`-WindowBatchLimit\` per-run controls. It exports
-\`inference_metrics_measured_only\` containing exact ONNX
-calls/windows, windowed calls, and \`stage_total_millis\`, together with
+**Repeatable profiling:** `run-application-log-benchmark.ps1` accepts
+`-CpuThreads` and `-WindowBatchLimit` per-run controls. It exports
+`inference_metrics_measured_only` containing exact ONNX
+calls/windows, windowed calls, and `stage_total_millis`, together with
 caller p50/p95/p99, throughput, raw-fixture protection, and fail-closed
 checks. Both caps and the existing 15-second deadline are separately
 recorded. Compare repeated runs (different order or ABBA to reduce warmup,
@@ -4470,7 +4470,7 @@ corpus regression, 2-second latency target and multi-hour soak.
 read-only Log4j2 context API, measured distinct inference stage durations
 with no payload retention, and separated benchmark warmup from measured
 ONNX metrics. Changed CPU session intra-op thread selection to honor the
-existing configured \`maxCpuThreads\` bound. Added explicit per-run CPU
+existing configured `maxCpuThreads` bound. Added explicit per-run CPU
 thread/window micro-batch overrides, safety warnings and model-free tests.
 
 **Reason:** The completed organization-rule benchmarks reduced field-level
@@ -4497,7 +4497,7 @@ fail-closed semantics, native cancellation and bounded single-worker queue
 are unchanged. On hosts with more logical CPUs than configured thread cap,
 ONNX intra-op thread count now follows the configured maximum.
 
-**Next gates:** locally execute \`mvn clean test\`, run repeated native
+**Next gates:** locally execute `mvn clean test`, run repeated native
 ONNX 15-second comparative benchmarks for CPU thread counts and
 window batch limits, inspect measured-only ONNX calls/windows/stages,
 verify raw-fixture/benign/zero fail-closed gates and memory, and do not
