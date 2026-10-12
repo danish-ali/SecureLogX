@@ -93,6 +93,13 @@ public final class OrganizationRuleRegistry {
             );
         }
 
+        if (!document.keySet().equals(Set.of(
+                "organizationId", "version", "rules"
+        ))) {
+            throw new IllegalArgumentException(
+                    "Unexpected organization policy fields"
+            );
+        }
         String declaredOrg = document.getString("organizationId");
         if (!organizationId.equals(declaredOrg)) {
             throw new IllegalArgumentException(
@@ -115,6 +122,14 @@ public final class OrganizationRuleRegistry {
         Set<String> fields = new HashSet<>();
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.getJSONObject(i);
+            if (!item.keySet().equals(Set.of(
+                    "id", "status", "field", "prefix",
+                    "digits", "entityType"
+            ))) {
+                throw new IllegalArgumentException(
+                        "Unexpected rule fields at index " + i
+                );
+            }
             if (!"APPROVED".equals(item.getString("status"))) {
                 throw new IllegalArgumentException(
                         "Only explicitly APPROVED rules may be loaded"
