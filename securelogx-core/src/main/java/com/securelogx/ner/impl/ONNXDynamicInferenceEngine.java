@@ -316,6 +316,11 @@ public class ONNXDynamicInferenceEngine {
                 DeterministicScanResult scan =
                         hybridMaskingPipeline.scan(event.getMessage());
                 scans.add(scan);
+                if ("approved-organization-rule".equals(
+                        scan.gateReason()
+                )) {
+                    mlRoutingTelemetry.recordApprovedRuleMatch();
+                }
 
                 if (scan.requiresMl()) {
                     mlRoutingTelemetry.recordMlRoute(scan.gateReason());
