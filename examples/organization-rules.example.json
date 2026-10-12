@@ -1,0 +1,22 @@
+{
+  "organizationId": "ORG42",
+  "version": 1,
+  "rules": [
+    {
+      "id": "customer-reference",
+      "status": "APPROVED",
+      "field": "customerReference",
+      "prefix": "CUST-",
+      "digits": 6,
+      "entityType": "BUSINESS_ID"
+    },
+    {
+      "id": "claim-reference",
+      "status": "APPROVED",
+      "field": "claimReference",
+      "prefix": "CLM-",
+      "digits": 8,
+      "entityType": "BUSINESS_ID"
+    }
+  ]
+}
