@@ -224,13 +224,38 @@ self-modifying regex. An approved rule can bypass ML only when it matches
 the *entire* structured field=value input. Mixed records and unknown text
 still go through the existing conservative hybrid gate.
 
-Deployment properties (off by default; configure these explicitly):
+No Java switch/case on an organization name is used. **Both capabilities are
+disabled by default** and configured per deployment:
+
+| Setting | Default | Effect |
+|---|---|---|
+| `securelogx.adaptive.enabled` | `false` | Master switch for **approved deterministic organization rules** |
+| `securelogx.organization.id` | `default` | Trusted deployment identity; explicit non-default identity required for enabled rule enforcement |
+| `securelogx.organization.approvedRulesFile` | empty | Mandatory reviewed-policy file when adaptive rules are enabled |
+| `securelogx.adaptive.mlRoutingTelemetryEnabled` | `false` | Separate opt-in for in-memory ML routing observations and rule *proposals*; can run with rule enforcement disabled |
+
+**Option A — collect candidate patterns without enabling any rule:**
 
 ~~~properties
+securelogx.adaptive.enabled=false
+securelogx.organization.id=ORG42
+securelogx.adaptive.mlRoutingTelemetryEnabled=true
+~~~
+
+**Option B — enable reviewed rules for the specified organization:**
+
+~~~properties
+securelogx.adaptive.enabled=true
 securelogx.organization.id=ORG42
 securelogx.organization.approvedRulesFile=examples/organization-rules.example.json
 securelogx.adaptive.mlRoutingTelemetryEnabled=true
 ~~~
+
+Configuration is read when the masker is constructed, so changes to these
+settings require a controlled restart/recreation of the masking service.
+A filename by itself never activates the optional rule engine. If the
+master switch is `true` but the policy file is missing, invalid, or for
+another organization, masker initialization fails closed.
 
 The organization ID is trusted per-deployment configuration, **never read
 from a log message**. Multi-organization deployments require isolated
@@ -261,9 +286,11 @@ bounded compiled patterns. For example, customerReference=CUST-834729
 becomes customerReference=****-****** without invoking ML for that field.
 A nonmatching value or additional text uses the original hybrid gate.
 
-A configured policy is restricted to 128 rules and 64 KiB. An invalid,
-unapproved, missing, or wrong-organization configured policy causes startup
-failure. Rules never self-promote or silently alter the detection policy.
+An **enabled** policy is restricted to 128 rules and 64 KiB. An invalid,
+unapproved, missing, or wrong-organization enabled policy causes masker
+initialization failure (fail-closed logging). Rules never self-promote or
+silently alter the detection policy. With rule enforcement disabled, the
+existing hybrid pipeline is unchanged even if a policy filename is present.
 
 ### Review and approval workflow
 
