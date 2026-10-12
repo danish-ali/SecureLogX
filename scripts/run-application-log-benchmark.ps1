@@ -1,7 +1,8 @@
 param(
     [int]$Events = 48,
     [int]$MaskingDeadlineMillis = 2000,
-    [switch]$CollectMlRuleProposals
+    [switch]$CollectMlRuleProposals,
+    [switch]$UseExampleOrganizationRules
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,6 +38,7 @@ Write-Host ""
 Write-Host "[2/2] Running real Log4j application benchmark..."
 Write-Host "Masking request deadline for this benchmark run: $MaskingDeadlineMillis ms."
 Write-Host "Aggregate ML routing telemetry: $([bool]$CollectMlRuleProposals)"
+Write-Host "Example organization rules enabled: $([bool]$UseExampleOrganizationRules)"
 if ($MaskingDeadlineMillis -ne 2000) {
     Write-Warning "Characterization override: this run does NOT validate the 2000 ms pilot production deadline."
 }
@@ -51,9 +53,23 @@ $telemetryOption = if ($CollectMlRuleProposals) {
 } else {
     "-Dsecurelogx.adaptive.mlRoutingTelemetryEnabled=false"
 }
+$organizationOptions = @()
+if ($UseExampleOrganizationRules) {
+    $examplePolicy = Join-Path $root "examples\organization-rules.example.json"
+    if (-not (Test-Path $examplePolicy)) {
+        throw "Example organization policy missing: $examplePolicy"
+    }
+    # The sample is repository-controlled synthetic test data. It is never
+    # automatically enabled for production deployments.
+    $organizationOptions = @(
+        "-Dsecurelogx.adaptive.enabled=true",
+        "-Dsecurelogx.organization.id=ORG42",
+        "-Dsecurelogx.organization.approvedRulesFile=examples/organization-rules.example.json"
+    )
+}
 $benchmarkExitCode = 0
 try {
-    $env:JAVA_TOOL_OPTIONS = ((@($previousJavaToolOptions, $deadlineOption, $telemetryOption) |
+    $env:JAVA_TOOL_OPTIONS = ((@($previousJavaToolOptions, $deadlineOption, $telemetryOption) + $organizationOptions |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " ")
     & mvn "-pl" "securelogx-log4j2" "-Dexec.mainClass=com.securelogx.log4j2.SecureLogXApplicationLogBenchmark" "-Dexec.args=$execArgs" "org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
     $benchmarkExitCode = $LASTEXITCODE
