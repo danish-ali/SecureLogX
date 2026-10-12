@@ -15,6 +15,7 @@ class MlRoutingTelemetryTest {
         String text = "customerReference=CUST-834729";
         int start = text.indexOf('=') + 1;
 
+        telemetry.recordApprovedRuleMatch();
         telemetry.recordMlRoute("unknown-key:customerReference");
         telemetry.observeMlResolved(
                 text,
@@ -31,6 +32,7 @@ class MlRoutingTelemetryTest {
 
         MlRoutingTelemetry.Snapshot snapshot = telemetry.snapshot();
         assertTrue(snapshot.enabled());
+        assertEquals(1L, snapshot.approvedRuleMatches());
         assertEquals("ORG42", snapshot.organizationId());
         assertEquals(2L, snapshot.proposedCandidates().get(0).observations());
         assertEquals(
@@ -57,6 +59,7 @@ class MlRoutingTelemetryTest {
         );
         assertTrue(telemetry.snapshot().proposedCandidates().isEmpty());
         assertTrue(telemetry.snapshot().routingReasons().isEmpty());
+        assertEquals(0L, telemetry.snapshot().approvedRuleMatches());
     }
 
     @Test
