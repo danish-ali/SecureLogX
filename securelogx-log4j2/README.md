@@ -336,10 +336,81 @@ schema, so restrict access to operational diagnostics. Counters are per
 masker instance, and repeated fields in the same event can be counted
 separately. Nothing is persisted automatically.
 
-**Limitations:** This is a narrow first release for structured identifiers.
-It does not yet optimize unrelated MDC, stack fields, or long-windowed
-records; it does not establish a better ML-invocation rate for the current
-48-event benchmark or meet the 2-second pilot latency target.
+### Targeted routing/performance improvements (October 12, 2026)
+
+**Trusted field origin instrumentation.** The Log4j2 adapter labels captured
+fields as MESSAGE, FORMAT, PARAMETER, MAP, MDC, STACK or THROWABLE.
+The masking core records only a bounded, in-memory aggregate of ML routing
+reason, source category, field name where the input is one structured
+field=value, abstract value shape, and count. The adapter never selects a
+masking rule based on the source category; this is *diagnostic metadata*.
+No raw value, message, credential, literal prefix, or free text is stored in
+the aggregate. Field names reveal schema and require controlled access.
+
+**Event-local exact duplicate reuse.** SecureMasker detects identical
+string inputs within one maskAll call (normally one Log4j event), calls the
+masking executor for unique strings only, and reconstructs the original
+result order and individual sequence numbers. The same sanitized result and
+fail-closed state are propagated to repeated values; the entire rewritten
+event still fails closed if any field fails. There is **no** cross-event
+cache, no long-lived raw-value map, and no cross-organization reuse.
+Diagnostics count duplicate field evaluations avoided. A saved field
+evaluation is not necessarily a saved ONNX call.
+
+**Strict safe-metadata fast path.** When rule enforcement is explicitly
+enabled, the same organization JSON policy may include a \`safeMetadata\`
+array in addition to sensitive \`rules\`. Only the exact *field names*
+\`eventId\` and \`traceId\` are supported initially. Each requires an
+APPROVED rule with an ID, fixed literal alphabetic prefix ending in "-" or
+"_", and 1-12 digits. The whole field=value string must match; free text,
+unknown fields, the sensitive \`customer\` field, multiple fields and longer
+or mismatching values return to normal hybrid routing.
+
+Example optional policy addition:
+
+~~~json
+"safeMetadata": [{
+  "id": "application-event-id",
+  "status": "APPROVED",
+  "field": "eventId",
+  "prefix": "bench-",
+  "digits": 2
+}]
+~~~
+
+A matching \`eventId=bench-12\` is passed through intact without ML **for
+that field only**. This is a *reviewed narrow ALLOW*, not an automatic
+decision that identifiers are harmless. Application owners must prove the
+field is trusted, schema-constrained and not sourced from arbitrary user
+input. Safe-metadata rules are disabled unless adaptive enforcement is on.
+
+**Comparative benchmark commands** (with the same 15-second diagnostic
+deadline; each invocation overwrites result.json, so copy it between
+runs to compare):
+
+~~~powershell
+# Phase 1: new code, no organization rules; ML telemetry enabled
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 15000 -CollectMlRuleProposals
+Copy-Item .\reports\application-log-benchmark\result.json .\reports\application-log-benchmark\baseline-with-dedup.json
+
+# Phase 2: explicitly load synthetic ORG42 sample approved rules
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 15000 -CollectMlRuleProposals -UseExampleOrganizationRules
+~~~
+
+Compare \`ml_invoked_events\`, \`caller_latency_millis\`,
+\`ml_routing_reason_counts_including_warmup\`,
+\`ml_routing_details_including_warmup\`,
+\`duplicate_field_evaluations_avoided_including_warmup\`,
+\`safe_metadata_matches_including_warmup\`,
+\`approved_rule_matches_including_warmup\`, \`fail_closed_events\`,
+and \`raw_payload_forwarded\`.
+
+**Limitations:** No runtime Maven/ONNX validation has yet been supplied for
+these latest changes. A successful 15-second run is still not a pass for
+the 2-second pilot target. The pilot workload continues to have ML-routed
+contextual fields and long/windowed records; a lower whole-event ML count
+is not guaranteed. The safe-metadata field allowlist is intentionally narrow
+rather than treating arbitrary organization IDs or correlation fields as safe.
 
 ## Current assurance boundary
 
