@@ -57,9 +57,11 @@ Concurrency saturation policy    VALIDATED (single-worker pilot)
 Hot redeploy/native lifecycle    VALIDATED (4 real ONNX context cycles)
 Real application log benchmark   FUNCTIONAL PASS (48/48 at 15-second deadline)
 2-second application-log latency NOT MET (5/48 exceeded pilot deadline)
-Organization-aware masking       EXPERIMENTAL (opt-in; local tests pending)
-Event-local duplicate reuse      IMPLEMENTED; LOCAL REGRESSION PENDING
-Origin-aware ML route telemetry  IMPLEMENTED; LOCAL BENCHMARK PENDING
+Organization-aware masking       EXPERIMENTAL (38 metadata matches measured)
+Event-local duplicate reuse      BENCHMARK OBSERVED (27 evaluations saved)
+Origin-aware ML route telemetry  IMPLEMENTED (aggregate counts observed)
+ONNX per-stage profiling         IMPLEMENTED; LOCAL RUN PENDING
+CPU thread cap                   IMPLEMENTED; LOCAL A/B PENDING
 Multi-hour soak                  OPEN
 ```
 
@@ -428,6 +430,116 @@ interpreted as meeting the unresolved 2-second production deadline.
 Long/windowed ONNX inference remains a separate optimization problem.
 The current sample policy intentionally matches only a subset of two-digit
 benchmark event IDs; it will not remove the other fields' ML usage.
+
+---
+
+### October 12 — Native ONNX call/window accounting and long-record performance tuning
+
+**Status: IMPLEMENTED; LOCAL JAVA TESTS AND REAL-MODEL A/B RESULTS PENDING.**
+The first-stage optimization and privacy-safe routing instrumentation were
+functionally characterized by the user with two 48-event workloads using the
+same 15,000 ms diagnostic masking deadline:
+
+| Previous comparison | Rules disabled | Synthetic rules enabled |
+|---|---:|---:|
+| Field-level ML routing decisions (incl. warmup) | 241 | 203 |
+| Approved safe metadata matches (incl. warmup) | 0 | 38 |
+| Duplicate field evaluations avoided (incl. warmup) | 27 | 27 |
+| Whole-event ML invocation | 48/48 | 48/48 |
+| Fail-closed events | 0 | 0 |
+| Caller p95 | 4,089.474 ms | 4,025.8016 ms |
+
+**Interpretation:** 38 fewer field-level ML routing decisions exactly match
+the 38 approved metadata fast-path hits: a **15.8% field-routing reduction**
+on this synthetic comparison. Combined with the original 268-decision
+baseline, 65 potential field evaluations were avoided (27 duplicate and
+38 approved metadata). This is not a measured 65-call ONNX reduction, nor a
+validated production latency speedup. All five long/windowed application
+events still exceeded the 2-second pilot deadline. Do not add blanket
+\`ALLOW\` rules to reduce the 48/48 whole-event ML indicator.
+
+**New read-only inference diagnostics:**
+
+\`\`\`text
+LoggerContext-owned SecureMasker
+  |
+  +-> ONNXDynamicInferenceEngine.getHybridRuntimeStats()
+  |     -> deterministic-only items
+  |     -> actual ML inference items/windows
+  |     -> actual ONNX session.run calls
+  |     -> windowed-only ONNX calls
+  |     -> observed maxima for batch windows
+  |
+  +-> ONNXDynamicInferenceEngine.getInferenceStageStats()
+        -> deterministic scan/masking time
+        -> Java tokenization time
+        -> window assembly/validation time
+        -> tensor preparation time (incl. construction)
+        -> native ONNX session.run time
+             -> subset attributable to window-expanded micro-batches
+        -> span decoding time (argmax + BIO safety supplement)
+        -> span reconciliation / final masking time
+  |
+  +-> SecureLogXInferenceDiagnostics.snapshot(context, env)
+        -> application benchmark before warmup-excluded workload
+        -> application benchmark after measured workload
+        -> measured-only differences
+\`\`\`
+
+Stage counters use monotonic nanoseconds and retain **no payloads,
+model logits, offsets or sensitive spans**. Native ONNX wall time is
+\`session.run\` only; the windowed duration is a *subset* of the native
+stage, not an additive stage. Sums are not end-to-end caller latency:
+they exclude parts of queueing, Log4j overhead, file I/O, and general
+unmeasured call overhead. Measurements are captured only after successful
+stage completion; fail-closed events still have independent security
+checks. An active Log4j context owns exactly one masker and ONNX session;
+diagnostic reads must never allocate sessions.
+
+**Controlled CPU optimization:** The pilot previously enabled ONNX
+intra-op threads equal to \`Runtime.availableProcessors()\` whenever CPU
+multithreading was turned on. This ignored the already-documented
+\`securelogx.maxCpuThreads\` setting and could oversubscribe high-core
+application hosts. CPU sessions now use:
+
+\`\`\`text
+intraOpThreads = multithreadingEnabled
+    ? min(availableProcessors, configuredMaxCpuThreads)
+    : 1
+\`\`\`
+
+Configured maximum is validated as 1–64. The dev configuration continues
+to declare \`maxCpuThreads=4\`, and single-worker admission, ONNX
+cancellation, pre-queue Log4j rewrite, complete overlap windows, and
+fail-closed semantics are unchanged. This is an **unvalidated performance
+hypothesis** until the affected host is benchmarked. No hard-coded
+claim of 2-second masking is made.
+
+**Controlled ONNX micro-batch size:** The validated pilot default remains
+four expanded windows per \`session.run\`. The
+\`securelogx.model.maxInferenceWindowsPerBatch\` setting can now be
+overridden explicitly for A/B characterization; its configured range is
+1–32. **Do not increase beyond four for production** without a
+native-memory revalidation and repeatable recall/latency evidence.
+No windows or overlapping contexts are dropped.
+
+**Repeatable profiling:** \`run-application-log-benchmark.ps1\` accepts
+\`-CpuThreads\` and \`-WindowBatchLimit\` per-run controls. It exports
+\`inference_metrics_measured_only\` containing exact ONNX
+calls/windows, windowed calls, and \`stage_total_millis\`, together with
+caller p50/p95/p99, throughput, raw-fixture protection, and fail-closed
+checks. Both caps and the existing 15-second deadline are separately
+recorded. Compare repeated runs (different order or ABBA to reduce warmup,
+OS scheduling, cache and CPU turbo confounding), preserving JSON after
+each run before it is overwritten.
+
+**Acceptance:** compare CPU thread caps using a fixed window cap=4 first;
+choose any change only if repeated performance gains are material,
+raw-fixture protection remains intact, zero unexpected fail-closed events
+remain, and ONNX native/process memory stays within limits. Only then
+consider alternative window micro-batch sizes. Revalidate locked
+*non-sealed* security corpora and native-memory soak before production
+claims; do not rerun the sealed challenge for tuning.
 
 ---
 
@@ -4347,6 +4459,49 @@ follows existing conservative hybrid/fail-closed behavior.
 **Remaining gates:** local Java/Maven regression suite, Log4j2 functional
 benchmark, comparative route/memory/latency metrics, non-sealed security
 corpus regression, 2-second latency target and multi-hour soak.
+
+---
+
+### 2026-10-12 — Native ONNX profiling and configured CPU thread cap
+
+**Status:** IMPLEMENTED / REAL-MODEL A/B RUN PENDING
+
+**Change:** Exposed actual ONNX calls and inference-window counts through a
+read-only Log4j2 context API, measured distinct inference stage durations
+with no payload retention, and separated benchmark warmup from measured
+ONNX metrics. Changed CPU session intra-op thread selection to honor the
+existing configured \`maxCpuThreads\` bound. Added explicit per-run CPU
+thread/window micro-batch overrides, safety warnings and model-free tests.
+
+**Reason:** The completed organization-rule benchmarks reduced field-level
+routing from 241 to 203 while preserving 48/48 event-level ML involvement.
+Native ONNX utilization and long-windowed execution costs were not
+previously measurable in the application-log report, and thread
+oversubscription was a plausible host-dependent bottleneck.
+
+**Evidence / benchmark:** 48/48 functional application benchmark,
+38 approved metadata matches and 27 duplicate evaluations avoided were
+reported by the user *before these profiling/thread-cap changes*.
+No new CPU performance gain, native-call reduction, fixed p95 target or
+2-second SLO pass is claimed for the current revision.
+
+**Affected modules:** SecureLogXConfig, ONNXDynamicInferenceEngine,
+InferenceStageStats, SecureMasker, SecureMaskerRegistry,
+SecureLogXInferenceDiagnostics, application benchmark, PowerShell runner,
+unit tests, Log4j2 README and this canonical architecture.
+
+**Backward compatibility:** Default window microbatch remains four.
+Masking deadline remains 2,000 ms outside explicitly characterized runs.
+Model weights, overlap/tokenizer, decoder, resolver, approved rules,
+fail-closed semantics, native cancellation and bounded single-worker queue
+are unchanged. On hosts with more logical CPUs than configured thread cap,
+ONNX intra-op thread count now follows the configured maximum.
+
+**Next gates:** locally execute \`mvn clean test\`, run repeated native
+ONNX 15-second comparative benchmarks for CPU thread counts and
+window batch limits, inspect measured-only ONNX calls/windows/stages,
+verify raw-fixture/benign/zero fail-closed gates and memory, and do not
+announce production latency readiness until the 2-second target is met.
 
 ---
 
