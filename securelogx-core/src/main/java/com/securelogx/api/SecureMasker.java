@@ -1,6 +1,7 @@
 package com.securelogx.api;
 
 import com.securelogx.config.SecureLogXConfig;
+import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.model.LogEvent;
 import com.securelogx.model.LogLevel;
 import com.securelogx.ner.impl.ONNXDynamicInferenceEngine;
@@ -127,6 +128,14 @@ public final class SecureMasker implements AutoCloseable {
 
     public MaskingRuntimeStats getRuntimeStats() {
         return maskingRuntime.stats();
+    }
+
+    /**
+     * Returns only aggregate rule-proposal metadata; never raw log values.
+     * Opt-in telemetry is in-memory and scoped to this masker instance.
+     */
+    public MlRoutingTelemetry.Snapshot getMlRoutingTelemetrySnapshot() {
+        return engine.getMlRoutingTelemetrySnapshot();
     }
 
     @Override
