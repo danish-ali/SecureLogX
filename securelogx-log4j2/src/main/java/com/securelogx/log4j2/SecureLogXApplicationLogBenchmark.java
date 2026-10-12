@@ -1,6 +1,8 @@
 package com.securelogx.log4j2;
 
 import com.securelogx.config.SecureLogXConfig;
+import com.securelogx.detection.HybridRuntimeStats;
+import com.securelogx.detection.InferenceStageStats;
 import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.validation.RuntimeMemorySnapshot;
 import org.apache.logging.log4j.Level;
@@ -132,6 +134,13 @@ public final class SecureLogXApplicationLogBenchmark {
                 );
             }
 
+            SecureLogXInferenceDiagnostics.Snapshot beforeMeasured =
+                    SecureLogXInferenceDiagnostics.snapshot(
+                            context, "dev"
+                    ).orElseThrow(() -> new IllegalStateException(
+                            "Missing active inference metrics after warmup"
+                    ));
+
             List<Long> latencies =
                     new ArrayList<>(eventCount);
             long start = System.nanoTime();
@@ -153,6 +162,12 @@ public final class SecureLogXApplicationLogBenchmark {
 
             RuntimeMemorySnapshot afterWorkload =
                     settledSnapshot("after-application-workload");
+            SecureLogXInferenceDiagnostics.Snapshot afterMeasured =
+                    SecureLogXInferenceDiagnostics.snapshot(
+                            context, "dev"
+                    ).orElseThrow(() -> new IllegalStateException(
+                            "Missing active inference metrics after workload"
+                    ));
 
             // Snapshot before context.stop() closes the per-context masker.
             // The counters include warmup events and never contain payloads.
@@ -238,6 +253,10 @@ public final class SecureLogXApplicationLogBenchmark {
             result.put(
                     "ml_invoked_events",
                     validation.mlInvokedEvents()
+            );
+            result.put(
+                    "inference_metrics_measured_only",
+                    inferenceMetricsJson(beforeMeasured, afterMeasured)
             );
             result.put(
                     "fail_closed_events",
@@ -789,6 +808,52 @@ public final class SecureLogXApplicationLogBenchmark {
         };
     }
 
+    /**
+     * Aggregates real ONNX calls, windows and stage timings over the measured
+     * events only; excludes all warmup. No model outputs or payloads stored.
+     */
+    private static JSONObject inferenceMetricsJson(
+            SecureLogXInferenceDiagnostics.Snapshot before,
+            SecureLogXInferenceDiagnostics.Snapshot after
+    ) {
+        HybridRuntimeStats b = before.routing();
+        HybridRuntimeStats a = after.routing();
+        InferenceStageStats delta =
+                after.stages().minus(before.stages());
+
+        JSONObject stages = new JSONObject()
+                .put("deterministic", millis(delta.deterministicNanos()))
+                .put("tokenization", millis(delta.tokenizationNanos()))
+                .put("window_assembly", millis(delta.windowAssemblyNanos()))
+                .put("tensor_preparation", millis(delta.tensorPreparationNanos()))
+                .put("onnx_native_run", millis(delta.nativeOnnxRunNanos()))
+                .put("onnx_windowed_native_run_subset",
+                        millis(delta.windowedNativeOnnxRunNanos()))
+                .put("decoding", millis(delta.decodingNanos()))
+                .put("resolution_and_masking",
+                        millis(delta.resolutionAndMaskingNanos()));
+
+        return new JSONObject()
+                .put("deterministic_only_items",
+                        a.deterministicOnlyItems() - b.deterministicOnlyItems())
+                .put("ml_inference_items",
+                        a.mlInferenceItems() - b.mlInferenceItems())
+                .put("windowed_ml_items",
+                        a.windowedMlItems() - b.windowedMlItems())
+                .put("ml_inference_windows",
+                        a.mlInferenceWindows() - b.mlInferenceWindows())
+                .put("onnx_inference_calls",
+                        a.onnxInferenceCalls() - b.onnxInferenceCalls())
+                .put("windowed_onnx_inference_calls",
+                        a.windowedOnnxInferenceCalls()
+                                - b.windowedOnnxInferenceCalls())
+                .put("max_windows_per_call_including_warmup",
+                        a.maxInferenceWindowsPerCallObserved())
+                .put("max_windowed_windows_per_call_including_warmup",
+                        a.maxWindowedInferenceWindowsPerCallObserved())
+                .put("stage_total_millis", stages);
+    }
+
     private static JSONObject latencyJson(
             List<Long> nanos
     ) {
@@ -918,6 +983,27 @@ public final class SecureLogXApplicationLogBenchmark {
                         + result.getBoolean(
                                 "ml_routing_telemetry_enabled"
                         )
+        );
+        JSONObject actualOnnx = result.getJSONObject(
+                "inference_metrics_measured_only"
+        );
+        System.out.println(
+                "Actual ONNX calls / windows (excluding warmup): "
+                        + actualOnnx.getLong("onnx_inference_calls")
+                        + " / "
+                        + actualOnnx.getLong("ml_inference_windows")
+        );
+        JSONObject stages = actualOnnx.getJSONObject("stage_total_millis");
+        System.out.println(
+                "Native ONNX / windowed subset / tokenizer total: "
+                        + stages.getDouble("onnx_native_run")
+                        + " / "
+                        + stages.getDouble(
+                                "onnx_windowed_native_run_subset"
+                        )
+                        + " / "
+                        + stages.getDouble("tokenization")
+                        + " ms"
         );
         System.out.println(
                 "Caller p50/p95/p99: "
