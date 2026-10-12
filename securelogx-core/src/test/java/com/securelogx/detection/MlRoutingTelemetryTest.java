@@ -93,4 +93,45 @@ class MlRoutingTelemetryTest {
         );
         assertTrue(telemetry.snapshot().proposedCandidates().isEmpty());
     }
+    @Test
+    void recordsOriginAndAbstractFieldShapeWithoutValue() {
+        MlRoutingTelemetry telemetry = new MlRoutingTelemetry("ORG42", true);
+        telemetry.recordMlRoute(
+                "no-deterministic-evidence",
+                "customer=customer-12",
+                com.securelogx.model.MaskingFieldOrigin.MDC
+        );
+        telemetry.recordMlRoute(
+                "no-deterministic-evidence",
+                "eventId=bench-12",
+                com.securelogx.model.MaskingFieldOrigin.MDC
+        );
+        telemetry.recordMlRoute(
+                "free-text-no-keyvalue",
+                "request-12",
+                com.securelogx.model.MaskingFieldOrigin.STACK
+        );
+        telemetry.recordDuplicateFieldsSaved(2);
+        telemetry.recordSafeMetadataMatch();
+
+        MlRoutingTelemetry.Snapshot snapshot = telemetry.snapshot();
+        assertEquals(2L, snapshot.duplicateFieldsSaved());
+        assertEquals(1L, snapshot.safeMetadataMatches());
+        assertEquals(3, snapshot.routingDetails().size());
+        assertTrue(snapshot.routingDetails().stream().anyMatch(detail ->
+                detail.origin()
+                        == com.securelogx.model.MaskingFieldOrigin.MDC
+                        && detail.field().equals("eventId")
+                        && detail.shape().equals("PREFIXED_DIGITS_P6_N2")
+        ));
+        assertTrue(snapshot.routingDetails().stream().anyMatch(detail ->
+                detail.origin()
+                        == com.securelogx.model.MaskingFieldOrigin.STACK
+                        && detail.field().equals("UNSTRUCTURED")
+        ));
+        assertFalse(snapshot.toString().contains("customer-12"));
+        assertFalse(snapshot.toString().contains("bench-12"));
+        assertFalse(snapshot.toString().contains("request-12"));
+    }
+
 }
