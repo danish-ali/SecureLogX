@@ -196,7 +196,12 @@ public class ONNXDynamicInferenceEngine {
         this.optimalBatchSize = 32; // Standard batch size for CPU
         this.maxSeqLen = config.getMaxSequenceLength();
 
-        int threads = config.isCpuMultithreadingEnabled() ? Runtime.getRuntime().availableProcessors() : 1;
+        int available = Runtime.getRuntime().availableProcessors();
+        int threads = resolvedCpuThreads(
+                config.isCpuMultithreadingEnabled(),
+                available,
+                config.getMaxCpuThreads()
+        );
         System.out.println("[SecureLogX INIT] CPU Inference Mode Enabled");
         System.out.println("[SecureLogX INIT] CPU Threads Used: " + threads);
         try {
@@ -206,6 +211,26 @@ public class ONNXDynamicInferenceEngine {
             // Continue with default threading - this is not a fatal error
         }
 
+    }
+
+    /**
+     * Bounds ONNX CPU intra-op concurrency to avoid oversubscribing the
+     * application with inference threads. Independent from the one-worker
+     * masking admission/queue policy.
+     */
+    static int resolvedCpuThreads(
+            boolean multithreadingEnabled,
+            int availableProcessors,
+            int configuredMaximum
+    ) {
+        if (availableProcessors < 1 || configuredMaximum < 1) {
+            throw new IllegalArgumentException(
+                    "CPU thread counts must be positive"
+            );
+        }
+        return multithreadingEnabled
+                ? Math.min(availableProcessors, configuredMaximum)
+                : 1;
     }
 
     private long estimateGpuMemory() {
