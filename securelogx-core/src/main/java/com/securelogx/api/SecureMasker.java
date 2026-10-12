@@ -2,6 +2,8 @@ package com.securelogx.api;
 
 import com.securelogx.config.SecureLogXConfig;
 import com.securelogx.detection.MlRoutingTelemetry;
+import com.securelogx.detection.HybridRuntimeStats;
+import com.securelogx.detection.InferenceStageStats;
 import com.securelogx.model.LogEvent;
 import com.securelogx.model.LogLevel;
 import com.securelogx.model.MaskingFieldOrigin;
@@ -176,6 +178,21 @@ public final class SecureMasker implements AutoCloseable {
      */
     public MlRoutingTelemetry.Snapshot getMlRoutingTelemetrySnapshot() {
         return engine.getMlRoutingTelemetrySnapshot();
+    }
+
+    /**
+     * Counts actual ONNX calls and inference windows (distinct from
+     * field-level ML routing). Read after a completed benchmark workload.
+     */
+    public HybridRuntimeStats getHybridRuntimeStats() {
+        return engine.getHybridRuntimeStats();
+    }
+
+    /**
+     * Aggregate stage durations contain no application payload or spans.
+     */
+    public InferenceStageStats getInferenceStageStats() {
+        return engine.getInferenceStageStats();
     }
 
     @Override
