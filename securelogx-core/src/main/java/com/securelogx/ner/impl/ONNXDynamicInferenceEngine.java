@@ -673,9 +673,9 @@ public class ONNXDynamicInferenceEngine {
                                                 constrainedResult.spans()
                                         );
                             }
+                            }
                             decodingNanos += System.nanoTime()
                                     - decodingStart;
-                        }
                         } finally {
                             control.detachRunOptions(runOptions);
                         }
