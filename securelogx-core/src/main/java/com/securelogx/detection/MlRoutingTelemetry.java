@@ -27,6 +27,8 @@ public final class MlRoutingTelemetry {
     private static final Pattern DIGITS = Pattern.compile("[0-9]{4,20}");
     private static final Pattern PREFIXED_DIGITS =
             Pattern.compile("([A-Za-z]{2,12}[-_])([0-9]{4,20})");
+    private static final Pattern SHORT_PREFIXED_ID =
+            Pattern.compile("([A-Za-z]{2,12}[-_])([0-9]{1,3})");
     private static final Pattern SAFE_ENTITY =
             Pattern.compile("[A-Z][A-Z0-9_]{1,40}");
     private static final Pattern SAFE_REASON =
@@ -165,6 +167,11 @@ public final class MlRoutingTelemetry {
             // Deliberately never store the prefix, which can be a secret.
             return "PREFIXED_DIGITS_P" + prefix.group(1).length()
                     + "_N" + prefix.group(2).length();
+        }
+        Matcher shortId = SHORT_PREFIXED_ID.matcher(value);
+        if (shortId.matches()) {
+            return "PREFIXED_DIGITS_P" + shortId.group(1).length()
+                    + "_N" + shortId.group(2).length();
         }
         return null;
     }
