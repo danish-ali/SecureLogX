@@ -248,6 +248,10 @@ public final class SecureLogXApplicationLogBenchmark {
                     mlTelemetry.enabled()
             );
             result.put(
+                    "approved_rule_matches_including_warmup",
+                    mlTelemetry.approvedRuleMatches()
+            );
+            result.put(
                     "ml_routing_reason_counts_including_warmup",
                     new JSONObject(mlTelemetry.routingReasons())
             );
