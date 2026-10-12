@@ -2,6 +2,7 @@ package com.securelogx.log4j2;
 
 import com.securelogx.api.MaskedResult;
 import com.securelogx.api.MaskReasonCode;
+import com.securelogx.model.MaskingFieldOrigin;
 import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.core.Core;
 import org.apache.logging.log4j.core.LogEvent;
@@ -159,7 +160,10 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             SanitizationPlan plan =
                     SanitizationPlan.capture(original);
             List<MaskedResult> results =
-                    masker.maskAll(plan.texts());
+                    masker.maskAllWithOrigins(
+                            plan.texts(),
+                            plan.origins()
+                    );
 
             MaskedResult failedField = results.stream()
                     .filter(MaskedResult::failClosed)
@@ -360,6 +364,7 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
 
     private static final class SanitizationPlan {
         private final List<String> texts;
+        private final List<MaskingFieldOrigin> origins;
         private final MessagePlan messagePlan;
         private final ContextMapPlan contextMapPlan;
         private final ContextStackPlan contextStackPlan;
@@ -367,12 +372,14 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
 
         private SanitizationPlan(
                 List<String> texts,
+                List<MaskingFieldOrigin> origins,
                 MessagePlan messagePlan,
                 ContextMapPlan contextMapPlan,
                 ContextStackPlan contextStackPlan,
                 ThrowablePlan throwablePlan
         ) {
             this.texts = texts;
+            this.origins = List.copyOf(origins);
             this.messagePlan = messagePlan;
             this.contextMapPlan = contextMapPlan;
             this.contextStackPlan = contextStackPlan;
@@ -381,19 +388,51 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
 
         static SanitizationPlan capture(LogEvent event) {
             List<String> texts = new ArrayList<>();
+            List<MaskingFieldOrigin> origins = new ArrayList<>();
 
+            Message originalMessage = event.getMessage();
+            int previous = texts.size();
             MessagePlan messagePlan =
-                    MessagePlan.capture(event.getMessage(), texts);
+                    MessagePlan.capture(originalMessage, texts);
+            int count = texts.size() - previous;
+            if (originalMessage instanceof MapMessage<?, ?>) {
+                appendOrigins(origins, MaskingFieldOrigin.MAP, count);
+            } else {
+                // MessagePlan.capture adds formatted message and format
+                // before zero or more parameters.
+                if (count < 2) {
+                    throw new IllegalStateException(
+                            "Incomplete message capture"
+                    );
+                }
+                origins.add(MaskingFieldOrigin.MESSAGE);
+                origins.add(MaskingFieldOrigin.FORMAT);
+                appendOrigins(
+                        origins, MaskingFieldOrigin.PARAMETER, count - 2
+                );
+            }
+
+            previous = texts.size();
             ContextMapPlan contextMapPlan =
                     ContextMapPlan.capture(
-                            event.getContextData().toMap(),
-                            texts
+                            event.getContextData().toMap(), texts
                     );
+            appendOrigins(
+                    origins, MaskingFieldOrigin.MDC,
+                    texts.size() - previous
+            );
+
+            previous = texts.size();
             ContextStackPlan contextStackPlan =
                     ContextStackPlan.capture(
-                            event.getContextStack().asList(),
-                            texts
+                            event.getContextStack().asList(), texts
                     );
+            appendOrigins(
+                    origins, MaskingFieldOrigin.STACK,
+                    texts.size() - previous
+            );
+
+            previous = texts.size();
             ThrowablePlan throwablePlan =
                     ThrowablePlan.capture(
                             event.getThrown(),
@@ -401,9 +440,19 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
                             new IdentityHashMap<>(),
                             0
                     );
+            appendOrigins(
+                    origins, MaskingFieldOrigin.THROWABLE,
+                    texts.size() - previous
+            );
 
+            if (origins.size() != texts.size()) {
+                throw new IllegalStateException(
+                        "Field-origin capture length mismatch"
+                );
+            }
             return new SanitizationPlan(
                     texts,
+                    origins,
                     messagePlan,
                     contextMapPlan,
                     contextStackPlan,
@@ -411,8 +460,22 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
             );
         }
 
+        private static void appendOrigins(
+                List<MaskingFieldOrigin> origins,
+                MaskingFieldOrigin origin,
+                int count
+        ) {
+            for (int i = 0; i < count; i++) {
+                origins.add(origin);
+            }
+        }
+
         List<String> texts() {
             return texts;
+        }
+
+        List<MaskingFieldOrigin> origins() {
+            return origins;
         }
 
         LogEvent rebuild(
