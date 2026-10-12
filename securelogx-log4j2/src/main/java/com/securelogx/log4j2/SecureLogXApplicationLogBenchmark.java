@@ -820,7 +820,7 @@ public final class SecureLogXApplicationLogBenchmark {
      * Aggregates real ONNX calls, windows and stage timings over the measured
      * events only; excludes all warmup. No model outputs or payloads stored.
      */
-    private static JSONObject inferenceMetricsJson(
+    static JSONObject inferenceMetricsJson(
             SecureLogXInferenceDiagnostics.Snapshot before,
             SecureLogXInferenceDiagnostics.Snapshot after
     ) {
