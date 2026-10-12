@@ -1,6 +1,7 @@
 package com.securelogx.log4j2;
 
 import com.securelogx.api.SecureMasker;
+import com.securelogx.detection.MlRoutingTelemetry;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
 
@@ -112,6 +113,26 @@ final class SecureMaskerRegistry {
                 : snapshot.values()) {
             closeEntries(entries);
         }
+    }
+
+    static MlRoutingTelemetry.Snapshot mlTelemetrySnapshot(
+            LoggerContext context,
+            String environment
+    ) {
+        synchronized (LOCK) {
+            Map<String, MaskerHandle> byEnvironment =
+                    MASKERS_BY_CONTEXT.get(context);
+            if (byEnvironment != null) {
+                MaskerHandle handle =
+                        byEnvironment.get(normalize(environment));
+                if (handle != null
+                        && handle.closeable() instanceof SecureMasker masker) {
+                    return masker.getMlRoutingTelemetrySnapshot();
+                }
+            }
+        }
+        // Do not create a masker or native ONNX session just to query.
+        return new MlRoutingTelemetry("", false).snapshot();
     }
 
     static int ownedContextCount() {
