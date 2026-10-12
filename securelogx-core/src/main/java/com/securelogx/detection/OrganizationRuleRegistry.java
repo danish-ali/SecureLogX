@@ -31,6 +31,10 @@ public final class OrganizationRuleRegistry {
             Pattern.compile("[A-Za-z][A-Za-z0-9_.-]{1,40}");
     private static final Pattern PREFIX =
             Pattern.compile("(?:[A-Za-z]{2,12}[-_])?");
+    // These are operational correlation fields, NOT customer/request IDs.
+    // Additional metadata field names require an explicit design review.
+    private static final Set<String> SAFE_METADATA_FIELDS =
+            Set.of("eventId", "traceId");
     private static final Set<String> ENTITY_TYPES = Set.of(
             "BUSINESS_ID", "DEVICE_ID", "BANK_ACCOUNT_NUMBER",
             "AUTH_TOKEN", "API_KEY"
@@ -39,19 +43,22 @@ public final class OrganizationRuleRegistry {
     private final String organizationId;
     private final int version;
     private final List<ApprovedRule> rules;
+    private final List<SafeMetadataRule> safeMetadataRules;
 
     private OrganizationRuleRegistry(
             String organizationId,
             int version,
-            List<ApprovedRule> rules
+            List<ApprovedRule> rules,
+            List<SafeMetadataRule> safeMetadataRules
     ) {
         this.organizationId = organizationId;
         this.version = version;
         this.rules = List.copyOf(rules);
+        this.safeMetadataRules = List.copyOf(safeMetadataRules);
     }
 
     public static OrganizationRuleRegistry disabled() {
-        return new OrganizationRuleRegistry("", 0, List.of());
+        return new OrganizationRuleRegistry("", 0, List.of(), List.of());
     }
 
     /**
@@ -93,9 +100,12 @@ public final class OrganizationRuleRegistry {
             );
         }
 
-        if (!document.keySet().equals(Set.of(
-                "organizationId", "version", "rules"
-        ))) {
+        if (!Set.of(
+                "organizationId", "version", "rules", "safeMetadata"
+        ).containsAll(document.keySet())
+                || !document.keySet().containsAll(
+                        Set.of("organizationId", "version", "rules")
+                )) {
             throw new IllegalArgumentException(
                     "Unexpected organization policy fields"
             );
@@ -167,7 +177,55 @@ public final class OrganizationRuleRegistry {
                     id, field, entityType, exactFieldValue
             ));
         }
-        return new OrganizationRuleRegistry(organizationId, version, loaded);
+        List<SafeMetadataRule> safeMetadata = new ArrayList<>();
+        if (document.has("safeMetadata")) {
+            JSONArray approvedMetadata =
+                    document.getJSONArray("safeMetadata");
+            if (approvedMetadata.length() > MAX_RULES
+                    || approvedMetadata.length() + loaded.size() > MAX_RULES) {
+                throw new IllegalArgumentException(
+                        "Too many combined organization rules"
+                );
+            }
+            for (int i = 0; i < approvedMetadata.length(); i++) {
+                JSONObject item = approvedMetadata.getJSONObject(i);
+                if (!item.keySet().equals(Set.of(
+                        "id", "status", "field", "prefix", "digits"
+                )) || !"APPROVED".equals(item.getString("status"))) {
+                    throw new IllegalArgumentException(
+                            "Invalid safe-metadata rule at index " + i
+                    );
+                }
+
+                String id = item.getString("id");
+                String field = item.getString("field");
+                String prefix = item.getString("prefix");
+                int digits = item.getInt("digits");
+                if (!RULE_ID.matcher(id).matches()
+                        || !SAFE_METADATA_FIELDS.contains(field)
+                        || !PREFIX.matcher(prefix).matches()
+                        || prefix.isEmpty()
+                        || digits < 1 || digits > 12
+                        || !identities.add(id)
+                        || !fields.add(field.toLowerCase(
+                                java.util.Locale.ROOT))) {
+                    throw new IllegalArgumentException(
+                            "Unsafe or conflicting approved metadata rule"
+                    );
+                }
+                Pattern exactMetadataValue = Pattern.compile(
+                        "\\A" + Pattern.quote(field) + "="
+                                + Pattern.quote(prefix)
+                                + "[0-9]{" + digits + "}\\z"
+                );
+                safeMetadata.add(new SafeMetadataRule(
+                        id, field, exactMetadataValue
+                ));
+            }
+        }
+        return new OrganizationRuleRegistry(
+                organizationId, version, loaded, safeMetadata
+        );
     }
 
     public String organizationId() {
@@ -179,7 +237,7 @@ public final class OrganizationRuleRegistry {
     }
 
     public int ruleCount() {
-        return rules.size();
+        return rules.size() + safeMetadataRules.size();
     }
 
     /**
@@ -187,7 +245,8 @@ public final class OrganizationRuleRegistry {
      * Mixed messages and unknown values remain on the normal hybrid path.
      */
     public DeterministicScanResult scanExact(String text) {
-        if (text == null || text.isEmpty() || rules.isEmpty()) {
+        if (text == null || text.isEmpty()
+                || (rules.isEmpty() && safeMetadataRules.isEmpty())) {
             return null;
         }
         for (ApprovedRule rule : rules) {
@@ -208,7 +267,26 @@ public final class OrganizationRuleRegistry {
                 );
             }
         }
+        // An explicit, narrowly reviewed metadata grammar may ALLOW a
+        // complete operational correlation ID without ML. Other values,
+        // fields or mixed inputs always return to the existing hybrid path.
+        for (SafeMetadataRule rule : safeMetadataRules) {
+            if (rule.exactFieldValue().matcher(text).matches()) {
+                return new DeterministicScanResult(
+                        List.of(),
+                        false,
+                        "approved-organization-safe-metadata"
+                );
+            }
+        }
         return null;
+    }
+
+    private record SafeMetadataRule(
+            String id,
+            String field,
+            Pattern exactFieldValue
+    ) {
     }
 
     private record ApprovedRule(
