@@ -72,6 +72,16 @@ public class SecureLogXConfig {
         return runtimeProperty("securelogx.organization.approvedRulesFile", "");
     }
 
+    /**
+     * Explicit deployment opt-in for approved organization rules.
+     * A configured policy file alone must never activate dynamic behavior.
+     */
+    public boolean isAdaptiveMaskingEnabled() {
+        return Boolean.parseBoolean(
+                runtimeProperty("securelogx.adaptive.enabled", "false")
+        );
+    }
+
     public boolean isMlRuleTelemetryEnabled() {
         return Boolean.parseBoolean(
                 runtimeProperty(
