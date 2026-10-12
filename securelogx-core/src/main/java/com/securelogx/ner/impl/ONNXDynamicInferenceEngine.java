@@ -187,6 +187,10 @@ public class ONNXDynamicInferenceEngine {
         return mlRoutingTelemetry.snapshot();
     }
 
+    public void recordDuplicateFieldsSaved(int count) {
+        mlRoutingTelemetry.recordDuplicateFieldsSaved(count);
+    }
+
     private void setupCpuMode(com.securelogx.config.SecureLogXConfig config, OrtSession.SessionOptions opts) {
         this.isGpuMode = false;
         this.optimalBatchSize = 32; // Standard batch size for CPU
@@ -338,7 +342,11 @@ public class ONNXDynamicInferenceEngine {
                 }
 
                 if (scan.requiresMl()) {
-                    mlRoutingTelemetry.recordMlRoute(scan.gateReason());
+                    mlRoutingTelemetry.recordMlRoute(
+                            scan.gateReason(),
+                            event.getMessage(),
+                            event.getMaskingFieldOrigin()
+                    );
                     mlOriginalIndices.add(i);
                     mlBatch.add(event);
                 } else {
