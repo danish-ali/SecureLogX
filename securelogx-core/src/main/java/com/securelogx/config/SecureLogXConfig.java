@@ -60,6 +60,27 @@ public class SecureLogXConfig {
         return props.getProperty("securelogx.mode", "CPU_SINGLE");
     }
 
+    /**
+     * Deployment-scoped identity: never derive this from a log payload.
+     * A multi-tenant service needs a separate trusted isolation boundary.
+     */
+    public String getOrganizationId() {
+        return runtimeProperty("securelogx.organization.id", "default");
+    }
+
+    public String getApprovedOrganizationRulesFile() {
+        return runtimeProperty("securelogx.organization.approvedRulesFile", "");
+    }
+
+    public boolean isMlRuleTelemetryEnabled() {
+        return Boolean.parseBoolean(
+                runtimeProperty(
+                        "securelogx.adaptive.mlRoutingTelemetryEnabled",
+                        "false"
+                )
+        );
+    }
+
     public int getMaxCpuThreads() {
         return Integer.parseInt(props.getProperty("securelogx.maxCpuThreads", "8"));
     }
