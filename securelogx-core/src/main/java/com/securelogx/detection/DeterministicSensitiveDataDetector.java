@@ -580,8 +580,6 @@ public final class DeterministicSensitiveDataDetector {
                         "business_id",
                         "accountid",
                         "account_id",
-                        "bankaccount",
-                        "bank_account",
                         "taxid",
                         "tax_id",
                         "itin",
