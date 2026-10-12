@@ -91,8 +91,20 @@ public class SecureLogXConfig {
         );
     }
 
+    /**
+     * Upper bound for native ONNX intra-op CPU threads. Runtime property
+     * overrides support explicit benchmark tuning without changing defaults.
+     */
     public int getMaxCpuThreads() {
-        return Integer.parseInt(props.getProperty("securelogx.maxCpuThreads", "8"));
+        int configured = Integer.parseInt(
+                runtimeProperty("securelogx.maxCpuThreads", "8")
+        );
+        if (configured < 1 || configured > 64) {
+            throw new IllegalArgumentException(
+                    "securelogx.maxCpuThreads must be between 1 and 64"
+            );
+        }
+        return configured;
     }
 
     public boolean isMaskingEnabled() {
@@ -135,15 +147,15 @@ public class SecureLogXConfig {
 
     public int getMaxInferenceWindowsPerBatch() {
         int configured = Integer.parseInt(
-                props.getProperty(
+                runtimeProperty(
                         "securelogx.model.maxInferenceWindowsPerBatch",
                         "4"
                 )
         );
-        if (configured < 1) {
+        if (configured < 1 || configured > 32) {
             throw new IllegalArgumentException(
                     "securelogx.model.maxInferenceWindowsPerBatch "
-                            + "must be at least 1"
+                            + "must be between 1 and 32"
             );
         }
         return configured;
