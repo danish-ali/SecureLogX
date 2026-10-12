@@ -9,6 +9,7 @@ import com.securelogx.detection.HybridMaskingPipeline;
 import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.detection.OrganizationRuleRegistry;
 import com.securelogx.detection.HybridRuntimeStats;
+import com.securelogx.detection.InferenceStageStats;
 import com.securelogx.model.LogEvent;
 import com.securelogx.ner.TokenizerEngine;
 import com.securelogx.ner.TokenizedInput;
@@ -56,6 +57,18 @@ public class ONNXDynamicInferenceEngine {
     private long windowedOnnxInferenceCalls = 0;
     private long maxWindowedInferenceWindowsPerCallObserved = 0;
     private long truncatedFailClosedItems = 0;
+
+    // Accumulated successful-stage wall times (monotonic clock). The masking
+    // worker is single-threaded, so no additional executor/caching is added.
+    // These counters contain no log text, tokens or decoded entity values.
+    private long deterministicNanos;
+    private long tokenizationNanos;
+    private long windowAssemblyNanos;
+    private long tensorPreparationNanos;
+    private long nativeOnnxRunNanos;
+    private long windowedNativeOnnxRunNanos;
+    private long decodingNanos;
+    private long resolutionAndMaskingNanos;
 
     public ONNXDynamicInferenceEngine(String modelPath, com.securelogx.config.SecureLogXConfig config) throws Exception {
         // Explicit opt-in for organization-specific deterministic rules.
@@ -354,6 +367,7 @@ public class ONNXDynamicInferenceEngine {
             List<Integer> mlOriginalIndices = new ArrayList<>();
 
             // 1) Cheap deterministic scan and conservative ML gate.
+            long deterministicStart = System.nanoTime();
             for (int i = 0; i < batch.size(); i++) {
                 control.checkpoint();
                 LogEvent event = batch.get(i);
@@ -394,6 +408,7 @@ public class ONNXDynamicInferenceEngine {
                     deterministicOnlyItems++;
                 }
             }
+            deterministicNanos += System.nanoTime() - deterministicStart;
 
             // Every record was resolved without model inference.
             if (mlBatch.isEmpty()) {
@@ -406,6 +421,7 @@ public class ONNXDynamicInferenceEngine {
             List<List<TokenizedInput>> windowSets =
                     new ArrayList<>(mlBatch.size());
 
+            long tokenizationStart = System.nanoTime();
             for (LogEvent event : mlBatch) {
                 control.checkpoint();
                 windowSets.add(
@@ -416,7 +432,9 @@ public class ONNXDynamicInferenceEngine {
                 );
                 control.checkpoint();
             }
+            tokenizationNanos += System.nanoTime() - tokenizationStart;
 
+            long windowAssemblyStart = System.nanoTime();
             List<TokenizedInput> inferenceEncoded = new ArrayList<>();
             List<Integer> inferenceOriginalIndices = new ArrayList<>();
             Set<Integer> windowedOriginalIndices = new HashSet<>();
@@ -470,6 +488,8 @@ public class ONNXDynamicInferenceEngine {
                     inferenceOriginalIndices.add(originalIndex);
                 }
             }
+
+            windowAssemblyNanos += System.nanoTime() - windowAssemblyStart;
 
             if (inferenceEncoded.isEmpty()) {
                 totalItems += batch.size();
@@ -539,6 +559,7 @@ public class ONNXDynamicInferenceEngine {
                 List<TokenizedInput> windowBatch =
                         inferenceEncoded.subList(windowStart, windowEnd);
 
+                long tensorPreparationStart = System.nanoTime();
                 int rawMax = windowBatch.stream()
                         .mapToInt(item -> item.getInputIds().length)
                         .max()
@@ -584,10 +605,20 @@ public class ONNXDynamicInferenceEngine {
                     try (OrtSession.RunOptions runOptions =
                                  new OrtSession.RunOptions()) {
                         control.attachRunOptions(runOptions);
+                        tensorPreparationNanos += System.nanoTime()
+                                - tensorPreparationStart;
+                        long nativeRunStart = System.nanoTime();
                         try (OrtSession.Result result =
                                      session.run(inputs, runOptions)) {
+                            long runNanos = System.nanoTime()
+                                    - nativeRunStart;
+                            nativeOnnxRunNanos += runNanos;
+                            if (windowExpandedSegment) {
+                                windowedNativeOnnxRunNanos += runNanos;
+                            }
                             float[][][] logits =
                                     (float[][][]) result.get(0).getValue();
+                            long decodingStart = System.nanoTime();
 
                             for (int localIndex = 0;
                                  localIndex < inferenceBatchSize;
@@ -642,6 +673,8 @@ public class ONNXDynamicInferenceEngine {
                                                 constrainedResult.spans()
                                         );
                             }
+                            decodingNanos += System.nanoTime()
+                                    - decodingStart;
                         }
                         } finally {
                             control.detachRunOptions(runOptions);
@@ -672,6 +705,7 @@ public class ONNXDynamicInferenceEngine {
 
             // 4) Merge duplicate/overlapping same-entity spans across all
             // micro-batches, resolve deterministic evidence once, and mask.
+            long resolutionStart = System.nanoTime();
             for (Map.Entry<
                     Integer,
                     List<LabelAwareMaskingEngine.EntitySpan>>
@@ -729,6 +763,8 @@ public class ONNXDynamicInferenceEngine {
                     windowedMlItems++;
                 }
             }
+            resolutionAndMaskingNanos += System.nanoTime()
+                    - resolutionStart;
 
             long inferenceTime = System.currentTimeMillis() - inferenceStart;
             updatePerformanceMetrics(inferenceTime, batch.size());
@@ -1040,6 +1076,19 @@ public class ONNXDynamicInferenceEngine {
                             + e.getMessage()
             );
         }
+    }
+
+    public InferenceStageStats getInferenceStageStats() {
+        return new InferenceStageStats(
+                deterministicNanos,
+                tokenizationNanos,
+                windowAssemblyNanos,
+                tensorPreparationNanos,
+                nativeOnnxRunNanos,
+                windowedNativeOnnxRunNanos,
+                decodingNanos,
+                resolutionAndMaskingNanos
+        );
     }
 
     public HybridRuntimeStats getHybridRuntimeStats() {
