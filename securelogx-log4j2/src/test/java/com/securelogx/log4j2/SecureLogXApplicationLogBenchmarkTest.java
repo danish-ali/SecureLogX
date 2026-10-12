@@ -82,6 +82,41 @@ class SecureLogXApplicationLogBenchmarkTest {
         assertTrue(exception.getMessage().contains("duplicateBenchIds=[10]"));
     }
 
+    @Test
+    void measuredOnnxCountsAndStagesExcludeWarmup() {
+        var before = new SecureLogXInferenceDiagnostics.Snapshot(
+                new com.securelogx.detection.HybridRuntimeStats(
+                        2, 3, 1, 6, 4, 3, 2, 3, 0
+                ),
+                new com.securelogx.detection.InferenceStageStats(
+                        1000000L, 2000000L, 3000000L, 4000000L,
+                        5000000L, 3000000L, 6000000L, 7000000L
+                )
+        );
+        var after = new SecureLogXInferenceDiagnostics.Snapshot(
+                new com.securelogx.detection.HybridRuntimeStats(
+                        5, 8, 3, 26, 12, 4, 5, 4, 0
+                ),
+                new com.securelogx.detection.InferenceStageStats(
+                        3000000L, 5000000L, 3000000L, 7000000L,
+                        15000000L, 9000000L, 8000000L, 9000000L
+                )
+        );
+
+        org.json.JSONObject measured =
+                SecureLogXApplicationLogBenchmark.inferenceMetricsJson(
+                        before, after
+                );
+        assertEquals(8, measured.getInt("onnx_inference_calls"));
+        assertEquals(20, measured.getInt("ml_inference_windows"));
+        assertEquals(3, measured.getInt("windowed_onnx_inference_calls"));
+        assertEquals(5, measured.getInt("ml_inference_items"));
+        assertEquals(10.0, measured.getJSONObject("stage_total_millis")
+                .getDouble("onnx_native_run"), 0.00001);
+        assertEquals(6.0, measured.getJSONObject("stage_total_millis")
+                .getDouble("onnx_windowed_native_run_subset"), 0.00001);
+    }
+
     private static String eventLine(int number) {
         String level = switch (number % 4) {
             case 0 -> "INFO";
