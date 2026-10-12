@@ -517,7 +517,7 @@ public final class SecureLogXApplicationLogBenchmark {
         return value.toString();
     }
 
-    private static Validation validateOutput(
+    static Validation validateOutput(
             String output,
             int eventCount
     ) {
@@ -530,28 +530,79 @@ public final class SecureLogXApplicationLogBenchmark {
             }
         }
 
-        List<String> measured = output.lines()
-                .filter(line -> line.contains("eventId=bench-"))
+        // Fail-closed rewrite deliberately drops original MDC, including
+        // eventId. Detect it before interpreting missing IDs as dropped
+        // events; never loosen the requirement that fail-closed count is 0.
+        List<String> eventLines = output.lines()
+                .filter(line -> line.startsWith("eventId="))
                 .toList();
-
-        if (measured.size() != eventCount) {
-            throw new IllegalStateException(
-                    "Application output count mismatch. expected="
-                            + eventCount
-                            + " actual="
-                            + measured.size()
-            );
+        Map<String, Long> failureReasons = new java.util.TreeMap<>();
+        for (String line : eventLines) {
+            if (!line.contains("|failClosed=true|")) {
+                continue;
+            }
+            int start = line.indexOf("|reason=");
+            String reason = "MISSING_REASON";
+            if (start >= 0) {
+                start += "|reason=".length();
+                int end = line.indexOf('|', start);
+                reason = end < 0
+                        ? line.substring(start)
+                        : line.substring(start, end);
+            }
+            failureReasons.merge(reason, 1L, Long::sum);
         }
-
-        long failClosed = output.lines()
-                .filter(line -> line.contains("failClosed=true"))
-                .count();
-
+        long failClosed = failureReasons.values().stream()
+                .mapToLong(Long::longValue)
+                .sum();
         if (failClosed != 0) {
             throw new IllegalStateException(
                     "Sequential representative workload fail-closed "
                             + failClosed
-                            + " events"
+                            + " events; reasons="
+                            + failureReasons
+                            + "; recognizedMeasuredIds="
+                            + eventLines.stream()
+                                    .filter(line -> line.startsWith(
+                                            "eventId=bench-"))
+                                    .count()
+                            + "/"
+                            + eventCount
+            );
+        }
+
+        List<String> measured = eventLines.stream()
+                .filter(line -> line.startsWith("eventId=bench-"))
+                .toList();
+
+        List<Integer> missingIds = new ArrayList<>();
+        List<Integer> duplicateIds = new ArrayList<>();
+        for (int i = 0; i < eventCount; i++) {
+            String prefix = "eventId=bench-" + i + "|";
+            long occurrences = measured.stream()
+                    .filter(line -> line.startsWith(prefix))
+                    .count();
+            if (occurrences == 0) {
+                missingIds.add(i);
+            } else if (occurrences > 1) {
+                duplicateIds.add(i);
+            }
+        }
+
+        if (measured.size() != eventCount
+                || !missingIds.isEmpty()
+                || !duplicateIds.isEmpty()) {
+            throw new IllegalStateException(
+                    "Application output count/identity mismatch. expected="
+                            + eventCount
+                            + " recognized="
+                            + measured.size()
+                            + " totalEventLines="
+                            + eventLines.size()
+                            + " missingBenchIds="
+                            + missingIds
+                            + " duplicateBenchIds="
+                            + duplicateIds
             );
         }
 
@@ -769,7 +820,7 @@ public final class SecureLogXApplicationLogBenchmark {
         System.out.println("Result: " + resultPath);
     }
 
-    private record Validation(
+    record Validation(
             int measuredOutputEvents,
             long mlInvokedEvents,
             long failClosedEvents,
