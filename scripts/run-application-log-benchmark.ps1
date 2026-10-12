@@ -2,7 +2,9 @@ param(
     [int]$Events = 48,
     [int]$MaskingDeadlineMillis = 2000,
     [switch]$CollectMlRuleProposals,
-    [switch]$UseExampleOrganizationRules
+    [switch]$UseExampleOrganizationRules,
+    [ValidateRange(0, 64)][int]$CpuThreads = 0,
+    [ValidateRange(0, 32)][int]$WindowBatchLimit = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,6 +41,15 @@ Write-Host "[2/2] Running real Log4j application benchmark..."
 Write-Host "Masking request deadline for this benchmark run: $MaskingDeadlineMillis ms."
 Write-Host "Aggregate ML routing telemetry: $([bool]$CollectMlRuleProposals)"
 Write-Host "Example organization rules enabled: $([bool]$UseExampleOrganizationRules)"
+if ($CpuThreads -gt 0) {
+    Write-Host "Benchmark CPU intra-op maximum: $CpuThreads threads"
+}
+if ($WindowBatchLimit -gt 0) {
+    Write-Host "Benchmark ONNX micro-batch maximum: $WindowBatchLimit windows"
+    if ($WindowBatchLimit -gt 4) {
+        Write-Warning "Larger ONNX micro-batches require renewed native-memory and safety validation."
+    }
+}
 if ($MaskingDeadlineMillis -ne 2000) {
     Write-Warning "Characterization override: this run does NOT validate the 2000 ms pilot production deadline."
 }
@@ -67,9 +78,16 @@ if ($UseExampleOrganizationRules) {
         "-Dsecurelogx.organization.approvedRulesFile=examples/organization-rules.example.json"
     )
 }
+$performanceOptions = @()
+if ($CpuThreads -gt 0) {
+    $performanceOptions += "-Dsecurelogx.maxCpuThreads=$CpuThreads"
+}
+if ($WindowBatchLimit -gt 0) {
+    $performanceOptions += "-Dsecurelogx.model.maxInferenceWindowsPerBatch=$WindowBatchLimit"
+}
 $benchmarkExitCode = 0
 try {
-    $javaOptions = @($previousJavaToolOptions, $deadlineOption, $telemetryOption) + $organizationOptions
+    $javaOptions = @($previousJavaToolOptions, $deadlineOption, $telemetryOption) + $organizationOptions + $performanceOptions
     $env:JAVA_TOOL_OPTIONS = (($javaOptions |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " ")
     & mvn "-pl" "securelogx-log4j2" "-Dexec.mainClass=com.securelogx.log4j2.SecureLogXApplicationLogBenchmark" "-Dexec.args=$execArgs" "org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
