@@ -213,10 +213,18 @@ public final class SecureLogXApplicationLogBenchmark {
             result.put("passed", true);
             result.put("events", eventCount);
             result.put("warmup_events", WARMUP_EVENTS);
+            SecureLogXConfig benchmarkConfig = new SecureLogXConfig("dev");
             result.put(
                     "masking_deadline_millis",
-                    new SecureLogXConfig("dev")
-                            .getMaskingDeadlineMillis()
+                    benchmarkConfig.getMaskingDeadlineMillis()
+            );
+            result.put(
+                    "max_configured_cpu_threads",
+                    benchmarkConfig.getMaxCpuThreads()
+            );
+            result.put(
+                    "max_inference_windows_per_batch",
+                    benchmarkConfig.getMaxInferenceWindowsPerBatch()
             );
             result.put(
                     "caller_events_over_2000ms",
