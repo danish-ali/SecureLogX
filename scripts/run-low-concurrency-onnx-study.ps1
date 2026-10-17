@@ -374,6 +374,31 @@ try {
     $summary | ConvertTo-Json -Depth 12 |
         Set-Content -LiteralPath $summaryPath -Encoding UTF8
 
+    $studyFiles = @(
+        foreach ($file in @(Get-ChildItem -LiteralPath $studyDir -File -Recurse)) {
+            $subPath = $file.FullName.Substring(
+                $studyDir.Length + 1
+            ).Replace([System.IO.Path]::DirectorySeparatorChar, '/')
+            [ordered]@{
+                path = $subPath
+                bytes = $file.Length
+                sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+            }
+        }
+    )
+    $studyManifest = [ordered]@{
+        schema_version = 1
+        study_id = $studyId
+        source_commit_sha = $sourceCommit
+        created_at_utc = [DateTime]::UtcNow.ToString("o")
+        verified_trial_count = $trials.Count
+        trial_archives = @($evidencePaths.ToArray())
+        study_files = $studyFiles
+        note = "SHA-256 hashes of local original study plan, receipts and summary before commit; each trial directory has its own independent integrity manifest."
+    }
+    $studyManifest | ConvertTo-Json -Depth 8 |
+        Set-Content -LiteralPath (Join-Path $studyDir "manifest-$studyId.json") -Encoding UTF8
+
     Write-Host ""
     Write-Host "LOW-CONCURRENCY REAL ONNX STUDY COMPLETE"
     Write-Host "Security-validated trials: $($trials.Count)/$($plan.Count)"
