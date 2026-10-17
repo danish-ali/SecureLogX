@@ -1,0 +1,35 @@
+﻿{
+    "schema_version":  1,
+    "run_id":  "20261017T231510Z-oct17-parallel-pass-9b75902cb9bc",
+    "archived_utc":  "2026-10-17T23:15:10.4927937Z",
+    "evidence_type":  "sanitized_junit_surefire_summary",
+    "provenance":  "Aggregates parsed from local Maven Surefire XML; raw XML intentionally excluded to avoid exposing JVM/system properties, machine paths, credentials or captured log payloads.",
+    "passed":  true,
+    "total_tests":  8,
+    "suite_count":  2,
+    "no_failed_or_skipped_tests":  true,
+    "model_free_test_scope":  "Log4j sequence uniqueness, protected destination output, forced out-of-order reconstruction and sequence-audit logic",
+    "does_not_establish":  "Real ONNX parallel request latency, queue saturation, native resource stability or production SLO",
+    "suites":  [
+                   {
+                       "suite_name":  "com.securelogx.log4j2.SecureLogXParallelSequenceIntegrationTest",
+                       "test_count":  3,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0,
+                       "duration_seconds":  0.376,
+                       "source_surefire_xml_sha256":  "9E148B03793887A379C9E0857A758CCC99E3597DA30EF84AAC2A83A1ECDD0C5E",
+                       "source_last_write_utc":  "2026-10-17T23:11:36.8983677Z"
+                   },
+                   {
+                       "suite_name":  "com.securelogx.log4j2.SecureLogXSequenceAuditTest",
+                       "test_count":  5,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0,
+                       "duration_seconds":  0.03,
+                       "source_surefire_xml_sha256":  "01D3D1D58E6FF87527D82ED701B0F64944D30647C4EF2DEDE2DCE4F0B4E331FC",
+                       "source_last_write_utc":  "2026-10-17T23:11:36.9193366Z"
+                   }
+               ]
+}
