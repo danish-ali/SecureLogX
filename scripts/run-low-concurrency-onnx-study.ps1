@@ -128,11 +128,16 @@ $trials = [System.Collections.Generic.List[object]]::new()
 $evidencePaths = [System.Collections.Generic.List[string]]::new()
 Push-Location $root
 try {
-    Write-Host "Building ONNX benchmark reactor once for $($plan.Count) trials..."
+    Write-Host "Running the Log4j2 + core Maven test reactor before the ONNX study..."
     & mvn "-version"
     if ($LASTEXITCODE -ne 0) {
         throw "Maven unavailable."
     }
+    & mvn "-pl" "securelogx-log4j2" "-am" "clean" "test"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Maven safety/sequence tests failed. No load trials executed."
+    }
+    Write-Host "Building ONNX benchmark reactor once for $($plan.Count) trials..."
     & mvn "-pl" "securelogx-log4j2" "-am" "-DskipTests" "install"
     if ($LASTEXITCODE -ne 0) {
         throw "Maven build failed. No trials executed."
