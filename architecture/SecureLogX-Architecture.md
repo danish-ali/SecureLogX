@@ -4669,6 +4669,38 @@ publishing, and continue real ONNX parallel saturation testing.
 
 ---
 
+### 2026-10-17 — Parallel sequencing model-free test pass and preserved JUnit evidence
+
+**Status:** USER-REPORTED PASS / LOCAL JUNIT EVIDENCE ARCHIVE AVAILABLE
+
+**Evidence:** The user ran `scripts/run-parallel-sequence-tests.ps1`
+and reported "Parallel sequencing Maven tests passed." The original
+Surefire XML files exist only on the user's Windows development
+machine and have not been inspected through the GitHub connector.
+The repository preserves a clearly labeled transcribed record in
+`reports/parallel-sequence-tests/history/2026-10-17-user-reported-pass.json`.
+Do not substitute that record for actual machine-generated test results.
+
+**Change:** Added `scripts/archive-parallel-sequence-tests.ps1` to
+extract only selected aggregate JUnit metadata for
+`SecureLogXParallelSequenceIntegrationTest` and
+`SecureLogXSequenceAuditTest`: source suite names, counts, duration,
+file SHA-256, timestamps and pass status. Raw Surefire XML may include
+secrets, machine-specific properties, full captured output, or unmasked
+payload and is intentionally not committed. The tool rejects failing,
+skipped, empty, and (by default) older-than-24-hour reports. Passing
+test results are archived under unique run-specific filenames and can
+be explicitly committed/pushed; the test wrapper automatically archives
+new runs locally and accepts `-CommitResults -PushResults`.
+
+**Limitation:** This pass validates model-free parallel sequence ID
+allocation/reconstruction and Log4j2 protected file topology in a
+controlled test. It does not establish real-ONNX parallel latency,
+saturated queue handling, native memory safety or production service
+levels. These remain the next acceptance gates.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
