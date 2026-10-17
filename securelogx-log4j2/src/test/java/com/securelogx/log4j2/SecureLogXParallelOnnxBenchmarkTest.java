@@ -37,9 +37,9 @@ class SecureLogXParallelOnnxBenchmarkTest {
         assertEquals(10, validation.successCount());
         assertEquals(2, validation.failClosedCount());
         assertEquals(1, validation.failClosedReasonCounts()
-                .get("OVERLOAD_REJECTED"));
+                .get("OVERLOAD_REJECTED").intValue());
         assertEquals(1, validation.failClosedReasonCounts()
-                .get("DEADLINE_EXCEEDED"));
+                .get("DEADLINE_EXCEEDED").intValue());
         assertEquals(16, validation.sequenceAudit().records());
         assertEquals(1, validation.benignControlSuccessCount());
         assertTrue(validation.benignVersionPreserved());
@@ -72,31 +72,21 @@ class SecureLogXParallelOnnxBenchmarkTest {
 
     @Test
     void rejectsFailClosedThatKeepsUpstreamEventId() {
+        String ordinary = line(
+                "bench-2", 7, false,
+                "DETERMINISTIC_RESOLVED", "masked protected result"
+        );
+        String invalid = line(
+                "bench-2", 7, true,
+                "OVERLOAD_REJECTED",
+                "[SECURELOGX_REDACTED_PROCESSING_FAILURE]"
+        );
         String output = validAllSuccessOutput().replace(
-                "eventId=bench-2|level=INFO",
-                "eventId=bench-2|level=INFO"
-        ).replace(
-                "eventId=bench-2|level=INFO|instanceId=",
-                "eventId=bench-2|level=INFO|instanceId="
-        );
-        // Construct explicit fail-closed event with a non-empty upstream ID.
-        output = output.replace(
-                "eventId=bench-2|level=INFO",
-                "eventId=bench-2|level=INFO"
-        ).replace(
-                "|seq=7|ingressId=",
-                "|seq=7|ingressId="
-        );
-        final String malformed = output.replaceFirst(
-                "eventId=bench-2\\|level=INFO",
-                "eventId=bench-2|level=INFO"
-        ).replaceFirst(
-                "eventId=bench-2(.*?)\\|failClosed=false\\|",
-                "eventId=bench-2$1|failClosed=true|"
+                ordinary, invalid
         );
         assertThrows(IllegalStateException.class,
                 () -> SecureLogXParallelOnnxBenchmark
-                        .validateProtectedOutput(malformed, 12));
+                        .validateProtectedOutput(output, 12));
     }
 
     @Test
