@@ -655,6 +655,100 @@ still required before claiming production concurrency validation.
 
 ---
 
+## Real ONNX parallel logging benchmark (October 17, 2026)
+
+The new `SecureLogXParallelOnnxBenchmark` exercises **actual validated
+ML-v1.3 BERT/ONNX inference** through the same synchronous Log4j2
+`Logger -> RewriteAppender -> SecureLogXRewritePolicy -> FileAppender`
+path as the sequential application benchmark. Only caller concurrency
+varies; the bounded masking executor retains **one native inference
+worker**, one ONNX session, and its existing deadline/cancellation rules.
+
+It runs concurrency profiles of **10, 50 and 100 simultaneous callers**
+in bounded waves (200 measured events per profile by default), after
+four model warmup events. It supports platform callers or JDK 21+/25
+virtual-thread callers while leaving the native inference worker on a
+dedicated platform thread.
+
+Before using the runner, execute the full Maven test suite:
+
+```powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+mvn clean test
+```
+
+Then run the real-ONNX parallel profiles. This will create unique
+per-run output folders and **never overwrite prior benchmark history**:
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File .\scripts\run-parallel-onnx-benchmark.ps1 `
+  -Callers 10,50,100 `
+  -Events 200 `
+  -CallerMode platform `
+  -MaskingDeadlineMillis 2000 `
+  -CpuThreads 4 `
+  -WindowBatchLimit 4 `
+  -MaskingQueueCapacity 64 `
+  -UseExampleOrganizationRules `
+  -CommitResults `
+  -PushResults
+```
+
+For an optional JDK 25 virtual-thread **caller-side** comparison, repeat
+with `-CallerMode virtual` and the same settings. This does not move
+ONNX inference onto virtual threads. Repeat runs in reverse order to
+reduce warmup, thermal and OS scheduling bias. `-CommitResults` and
+`-PushResults` are explicit publication options; omitting them still
+archives every successful security-validated run locally.
+
+Every run gets a unique UTC timestamp + concurrency + caller mode +
+CPU/window/deadline + random-suffix directory under
+`reports/parallel-onnx/history/` with:
+
+- uniquely named `result-<run-id>.json`,
+- `protected-application-<run-id>.log`,
+- `reconstructed-application-<run-id>.log`,
+- `manifest-<run-id>.json` recording source commit, settings,
+  file sizes and SHA-256 hashes.
+
+The result separates **security** from **functional** acceptance:
+
+- `security_passed=true` requires every emitted synthetic event to
+  exist in the protected output, no known raw fixture leakage, unique
+  `securelogx.ingressId`, valid per-instance numeric sequences and
+  successful reconstruction. The archive is refused on any failure.
+- `functional_passed=true` additionally requires zero protected
+  fail-closed events and zero caller invocation latencies beyond the
+  configured masking deadline; this is intentionally conservative and
+  is not yet a real-world SLO.
+- An overload-rejected or deadline-exceeded event **still counts as
+  delivered and secure**, but NOT successfully masked. Thus a run can
+  be `security_passed=true`, `functional_passed=false`; its output is
+  **valuable degradation evidence** and is archived, never mislabeled
+  as a normal functional pass.
+- Output includes measured-only ONNX calls/windows and stage timing,
+  bounded worker admission/completion/overload/deadline counters,
+  active/queued peaks, caller p50/p95/p99 and 2-second exceedances,
+  numeric ordering inversions, event completeness, native/JVM/process
+  memory snapshots and post-shutdown context/worker ownership.
+  Memory snapshots are *point-in-time*, not a proven in-flight RSS peak.
+
+At the default 2,000 ms deadline and a single bounded ONNX worker,
+50/100 concurrent callers may exhaust the queue or time out. Those
+fail-closed outcomes are **expected under stress** and must not be
+treated as permission to forward raw log payloads. Never increase
+worker count, window batch or queue size merely to claim better
+throughput without validating native memory and data safety.
+
+**Validation status:** Implementation and model-free parser tests
+committed; the real model has not yet been run through this new
+parallel harness. These tests do not claim multi-hour soak or
+production acceptance.
+
+---
+
 ## Current assurance boundary
 
 SecureLogX does **not** claim that sensitive/NPI data can never appear in an
