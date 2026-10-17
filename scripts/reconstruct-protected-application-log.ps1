@@ -52,7 +52,7 @@ foreach ($line in [System.IO.File]::ReadLines($inputFile)) {
         throw "Invalid numeric sequence at line $($lineIndex + 1)."
     }
     $ingress = $Matches['ingress']
-    $expected = "$instance-$seq"
+    $expected = "${instance}-$seq"
     if ($ingress -cne $expected) {
         throw "Mismatched ingressId at line $($lineIndex + 1)."
     }
