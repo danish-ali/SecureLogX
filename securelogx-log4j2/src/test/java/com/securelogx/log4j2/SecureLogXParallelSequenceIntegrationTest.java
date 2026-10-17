@@ -319,6 +319,19 @@ class SecureLogXParallelSequenceIntegrationTest {
                     SecureLogXSequenceAudit.inspect(protectedOutput);
             assertEquals(count, audit.records());
             assertEquals(1, audit.instances());
+            // Ensure the output contains exactly one protected log event
+            // for every synthetic caller, not merely N distinct sequence
+            // numbers associated with possibly duplicated input IDs.
+            List<String> emitted = protectedOutput.lines()
+                    .filter(line -> line.startsWith("eventId="))
+                    .toList();
+            for (int i = 0; i < count; i++) {
+                String expectedPrefix = "eventId=bench-" + i + "|";
+                long occurrences = emitted.stream()
+                        .filter(line -> line.startsWith(expectedPrefix))
+                        .count();
+                assertEquals(1L, occurrences);
+            }
             assertEquals(count,
                     audit.reconstructedByInstance()
                             .values().iterator().next().size());
