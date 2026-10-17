@@ -310,6 +310,14 @@ class SecureLogXRewritePolicyTest {
                 "[SECURELOGX_REDACTED_PROCESSING_FAILURE]",
                 rewritten.getMessage().getFormattedMessage()
         );
+        String failClosedInstance = (String) rewritten.getContextData()
+                .getValue("securelogx.instanceId");
+        String failClosedSequence = (String) rewritten.getContextData()
+                .getValue("securelogx.seq");
+        assertEquals(
+                failClosedInstance + "-" + failClosedSequence,
+                rewritten.getContextData().getValue("securelogx.ingressId")
+        );
     }
 
     @Test
@@ -371,6 +379,14 @@ class SecureLogXRewritePolicyTest {
                         .getValue("securelogx.instanceId");
 
         assertEquals(firstInstanceId, secondInstanceId);
+        assertEquals(
+                firstInstanceId + "-" + firstSequence,
+                first.getContextData().getValue("securelogx.ingressId")
+        );
+        assertEquals(
+                secondInstanceId + "-" + secondSequence,
+                second.getContextData().getValue("securelogx.ingressId")
+        );
     }
     @Test
     void forwardsTrustedFieldOriginsWithoutChangingMaskingServiceContract() {
