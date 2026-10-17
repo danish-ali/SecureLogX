@@ -63,6 +63,8 @@ Origin-aware ML route telemetry  IMPLEMENTED (aggregate counts observed)
 ONNX per-stage profiling         LOCAL RUN REPORTED (53 calls/196 windows)
 CPU thread cap                   BENCHMARK: 4 threads faster than 2
 Parallel sequence reconstruction IMPLEMENTED; LOCAL CONCURRENCY TEST PENDING
+Real ONNX parallel load         IMPLEMENTED; LOCAL 10/50/100 PENDING
+Virtual-thread caller comparison AVAILABLE; LOCAL A/B PENDING
 Multi-hour soak                  OPEN
 ```
 
@@ -4698,6 +4700,77 @@ allocation/reconstruction and Log4j2 protected file topology in a
 controlled test. It does not establish real-ONNX parallel latency,
 saturated queue handling, native memory safety or production service
 levels. These remain the next acceptance gates.
+
+---
+
+### 2026-10-17 — Real ONNX parallel Log4j2 load and bounded admission telemetry
+
+**Status:** IMPLEMENTED; LOCAL 10/50/100-CALLER MODEL RUN PENDING
+
+**Scope:** Added `SecureLogXParallelOnnxBenchmark` and the PowerShell
+`scripts/run-parallel-onnx-benchmark.ps1`. The benchmark uses the same
+synthetic representative application events, existing Log4j2 rewrite
+topology and actual BERT model loading as the successful sequential
+benchmark. It runs 10/50/100 simultaneous callers in bounded waves,
+with platform threads or JDK 21+/25 virtual **caller** threads.
+The ONNX worker, bounded admission queue and model/native session
+remain platform-thread-backed with one inference worker.
+
+**Measurements:** Per run: 200 measured events by default, four
+warmups, caller p50/p95/p99, throughput, long-windowed latencies,
+native ONNX calls/windows/stage totals, request admission,
+completion, overload rejection, deadline exceedance,
+native-termination signals, queue/activity high-water marks,
+process/native/JVM memory snapshots, final lifecycle ownership,
+unique composite ingress identities and numeric per-instance
+reconstruction including physical ordering inversions.
+
+**Strict distinction:** The benchmark requires **complete
+protected delivery** of every synthetic event, unique sequence
+identity and no raw known fixture content, even during overload.
+A fail-closed output is *securely delivered*, not a successfully
+masked normal log event. `security_passed` and
+`functional_passed` are separate result flags; the latter requires
+zero fail-closed events and zero caller latencies beyond the
+requested deadline. Model overload at 50/100 callers may legitimately
+degrade functional results; the resulting confidentiality-valid
+measurements are retained, not mislabeled as success or discarded.
+
+**Artifacts:** Each run is recorded separately under
+`reports/parallel-onnx/history/<utc>-c<callers>-<mode>-cpu<threads>...`
+with uniquely named JSON, protected fixture log, numerically
+reconstructed log and checksum/source-manifest. The runner checks
+security, output count and known raw fixtures before archiving;
+optional `-CommitResults -PushResults` explicitly publishes
+synthetic results only. Unlike a generic production logger it
+never automatically uploads user application log content.
+
+**Concurrency hardening:** Also corrected a once-only validation
+race in `SecureLogXRewritePolicy`: validation was previously marked
+complete by an `AtomicBoolean` before configuration violations
+were published. The validation method is now synchronized,
+marks itself validated only after evaluation completes, and
+fails closed if validation throws. A second concurrent rewrite
+cannot bypass strict configuration checking during initialization.
+
+**Limitations:** Maven/ONNX tests for this new code have not
+executed in this environment. Model-free validation unit tests
+were committed, but their passing status is not yet known.
+Memory snapshots capture select lifecycle points, not
+continuous in-flight native RSS peaks. Passing finite load
+profiles does not establish a production SLO or multi-hour soak.
+No writer queues were expanded; no ONNX model, masking semantics,
+fail-closed policy or existing event sequencing contract was changed.
+
+**Next gates:** Run `mvn clean test`, execute the 10/50/100
+parallel ONNX profiles with four CPU intra-op threads, four
+windows per batch, 2-second masking deadline and
+configured queue capacity; inspect normal versus fail-closed
+counts alongside p95/p99, native metrics, process memory,
+uniqueness and event completeness; repeat in reversed
+order and compare virtual callers optionally. Preserve each
+run's named Git evidence and investigate functional saturation
+before changing native concurrency.
 
 ---
 
