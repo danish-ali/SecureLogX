@@ -1,0 +1,299 @@
+{
+  "caller_events_over_2000ms": 0,
+  "after_context_stop": {
+    "mapped_capacity_bytes": 0,
+    "process_committed_virtual_bytes": 230367232,
+    "process_virtual_bytes": 23581556736,
+    "gpu_process_memory_bytes": null,
+    "timestamp_millis": 1792237791500,
+    "direct_used_bytes": 677215,
+    "direct_capacity_bytes": 677215,
+    "pid": 5372,
+    "mapped_buffer_count": 0,
+    "label": "after-context-stop",
+    "heap_committed_bytes": 58720256,
+    "process_working_set_bytes": 175042560,
+    "non_heap_used_bytes": 41814264,
+    "process_probe": "windows-powershell",
+    "heap_used_bytes": 11728224,
+    "process_private_bytes": 230379520,
+    "mapped_used_bytes": 0,
+    "heap_max_bytes": 17054040064,
+    "non_heap_committed_bytes": 45285376,
+    "direct_buffer_count": 2
+  },
+  "caller_latency_millis": {
+    "p99": 1373.6641,
+    "max": 1373.6641,
+    "count": 48,
+    "p50": 71.0086,
+    "p95": 1242.926701
+  },
+  "events_per_second": 5.138173349737612,
+  "ml_rule_candidates_including_warmup": [],
+  "fail_closed_events": 0,
+  "benign_version_preserved": true,
+  "final_owned_maskers": 0,
+  "warmup_events": 4,
+  "max_configured_cpu_threads": 2,
+  "measured_output_events": 48,
+  "output_file_bytes": 29472,
+  "duplicate_field_evaluations_avoided_including_warmup": 27,
+  "inference_metrics_measured_only": {
+    "ml_inference_items": 186,
+    "ml_inference_windows": 196,
+    "onnx_inference_calls": 53,
+    "windowed_ml_items": 5,
+    "max_windowed_windows_per_call_including_warmup": 3,
+    "windowed_onnx_inference_calls": 5,
+    "max_windows_per_call_including_warmup": 6,
+    "deterministic_only_items": 62,
+    "stage_total_millis": {
+      "onnx_native_run": 9201.886401,
+      "tensor_preparation": 9.397603,
+      "deterministic": 26.910097,
+      "onnx_windowed_native_run_subset": 5859.395803,
+      "resolution_and_masking": 6.930604,
+      "tokenization": 14.783401,
+      "window_assembly": 1.1465,
+      "decoding": 10.050499
+    }
+  },
+  "ml_invoked_events": 48,
+  "after_workload": {
+    "mapped_capacity_bytes": 0,
+    "process_committed_virtual_bytes": 806699008,
+    "process_virtual_bytes": 24153657344,
+    "gpu_process_memory_bytes": null,
+    "timestamp_millis": 1792237789826,
+    "direct_used_bytes": 677215,
+    "direct_capacity_bytes": 677215,
+    "pid": 5372,
+    "mapped_buffer_count": 0,
+    "label": "after-application-workload",
+    "heap_committed_bytes": 58720256,
+    "process_working_set_bytes": 734183424,
+    "non_heap_used_bytes": 41766328,
+    "process_probe": "windows-powershell",
+    "heap_used_bytes": 14819616,
+    "process_private_bytes": 806699008,
+    "mapped_used_bytes": 0,
+    "heap_max_bytes": 17054040064,
+    "non_heap_committed_bytes": 45219840,
+    "direct_buffer_count": 2
+  },
+  "sealed_challenge_inference": false,
+  "passed": true,
+  "approved_rule_matches_including_warmup": 0,
+  "events": 48,
+  "workload_categories": [
+    "parameterized-message",
+    "contextual-ml-text",
+    "map-message",
+    "mdc-value",
+    "throwable-message",
+    "long-windowed-record",
+    "non-sensitive-control",
+    "api-key-jwt",
+    "credit-card",
+    "phone",
+    "severity-mix",
+    "thread-context-stack"
+  ],
+  "severity_counts": {
+    "ERROR": 12,
+    "INFO": 12,
+    "DEBUG": 12,
+    "WARN": 12
+  },
+  "final_owned_contexts": 0,
+  "workload_memory_delta": {
+    "heap_used_bytes": 3789336,
+    "process_private_bytes": 594919424,
+    "gpu_process_memory_bytes": null,
+    "direct_used_bytes": 669023,
+    "process_working_set_bytes": 611872768,
+    "non_heap_used_bytes": 6706296
+  },
+  "ml_routing_telemetry_enabled": true,
+  "safe_metadata_matches_including_warmup": 38,
+  "ml_routing_reason_counts_including_warmup": {
+    "capitalized-name-outside-evidence": 19,
+    "free-text-no-keyvalue": 11,
+    "unknown-key": 5,
+    "semantic-risk-keyword": 5,
+    "no-deterministic-evidence": 147,
+    "evidence-escalate": 16
+  },
+  "elapsed_millis": 9341,
+  "process_start": {
+    "mapped_capacity_bytes": 0,
+    "process_committed_virtual_bytes": 231092224,
+    "process_virtual_bytes": 23550169088,
+    "gpu_process_memory_bytes": null,
+    "timestamp_millis": 1792237773180,
+    "direct_used_bytes": 8192,
+    "direct_capacity_bytes": 8192,
+    "pid": 5372,
+    "mapped_buffer_count": 0,
+    "label": "process-start",
+    "heap_committed_bytes": 58720256,
+    "process_working_set_bytes": 132935680,
+    "non_heap_used_bytes": 31501608,
+    "process_probe": "windows-powershell",
+    "heap_used_bytes": 10283232,
+    "process_private_bytes": 231292928,
+    "mapped_used_bytes": 0,
+    "heap_max_bytes": 17054040064,
+    "non_heap_committed_bytes": 34537472,
+    "direct_buffer_count": 1
+  },
+  "long_windowed_caller_latency_millis": {
+    "p99": 1373.6641,
+    "max": 1373.6641,
+    "count": 5,
+    "p50": 1242.926701,
+    "p95": 1373.6641
+  },
+  "ml_routing_details_including_warmup": [
+    {
+      "reason": "no-deterministic-evidence",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "STACK",
+      "observations": 52
+    },
+    {
+      "reason": "no-deterministic-evidence",
+      "field": "customer",
+      "shape": "PREFIXED_DIGITS_P9_N2",
+      "origin": "MDC",
+      "observations": 34
+    },
+    {
+      "reason": "no-deterministic-evidence",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "FORMAT",
+      "observations": 15
+    },
+    {
+      "reason": "capitalized-name-outside-evidence",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "MESSAGE",
+      "observations": 15
+    },
+    {
+      "reason": "no-deterministic-evidence",
+      "field": "customer",
+      "shape": "PREFIXED_DIGITS_P9_N1",
+      "origin": "MDC",
+      "observations": 12
+    },
+    {
+      "reason": "free-text-no-keyvalue",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "PARAMETER",
+      "observations": 11
+    },
+    {
+      "reason": "no-deterministic-evidence",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "MESSAGE",
+      "observations": 11
+    },
+    {
+      "reason": "evidence-escalate",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "PARAMETER",
+      "observations": 10
+    },
+    {
+      "reason": "no-deterministic-evidence",
+      "field": "eventId",
+      "shape": "PREFIXED_DIGITS_P6_N1",
+      "origin": "MDC",
+      "observations": 10
+    },
+    {
+      "reason": "no-deterministic-evidence",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "PARAMETER",
+      "observations": 9
+    },
+    {
+      "reason": "evidence-escalate",
+      "field": "customer",
+      "shape": "OTHER",
+      "origin": "MDC",
+      "observations": 6
+    },
+    {
+      "reason": "semantic-risk-keyword",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "THROWABLE",
+      "observations": 5
+    },
+    {
+      "reason": "unknown-key",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "MESSAGE",
+      "observations": 5
+    },
+    {
+      "reason": "capitalized-name-outside-evidence",
+      "field": "UNSTRUCTURED",
+      "shape": "OTHER",
+      "origin": "FORMAT",
+      "observations": 4
+    },
+    {
+      "reason": "no-deterministic-evidence",
+      "field": "eventId",
+      "shape": "PREFIXED_DIGITS_P7_N1",
+      "origin": "MDC",
+      "observations": 4
+    }
+  ],
+  "masking_deadline_millis": 15000,
+  "max_inference_windows_per_batch": 4,
+  "after_init": {
+    "mapped_capacity_bytes": 0,
+    "process_committed_virtual_bytes": 238026752,
+    "process_virtual_bytes": 23554396160,
+    "gpu_process_memory_bytes": null,
+    "timestamp_millis": 1792237775142,
+    "direct_used_bytes": 8192,
+    "direct_capacity_bytes": 8192,
+    "pid": 5372,
+    "mapped_buffer_count": 0,
+    "label": "after-log4j-securelogx-init",
+    "heap_committed_bytes": 58720256,
+    "process_working_set_bytes": 122310656,
+    "non_heap_used_bytes": 35060032,
+    "process_probe": "windows-powershell",
+    "heap_used_bytes": 11030280,
+    "process_private_bytes": 211779584,
+    "mapped_used_bytes": 0,
+    "heap_max_bytes": 17054040064,
+    "non_heap_committed_bytes": 38797312,
+    "direct_buffer_count": 1
+  },
+  "post_stop_memory_delta": {
+    "heap_used_bytes": 1444992,
+    "process_private_bytes": -913408,
+    "gpu_process_memory_bytes": null,
+    "direct_used_bytes": 669023,
+    "process_working_set_bytes": 42106880,
+    "non_heap_used_bytes": 10312656
+  },
+  "raw_payload_forwarded": false,
+  "status": "REPRESENTATIVE APPLICATION LOG BENCHMARK PASSED"
+}

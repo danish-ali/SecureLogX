@@ -1,0 +1,59 @@
+﻿{
+    "schema_version":  1,
+    "created_at_utc":  "2026-10-17T22:36:45.1960707Z",
+    "run_id":  "20261017T223645Z-oct17-sequencing-baseline-b2dccabd26f2",
+    "label":  "oct17-sequencing-baseline",
+    "application_benchmark_passed":  true,
+    "synthetic_raw_fixture_check_passed":  true,
+    "events":  48,
+    "warmup_events":  4,
+    "fail_closed_events":  0,
+    "masking_deadline_millis":  2000,
+    "max_configured_cpu_threads":  4,
+    "max_inference_windows_per_batch":  4,
+    "historical_reports_are_separate_runs":  true,
+    "files":  [
+                  {
+                      "role":  "measured_result",
+                      "archived_file":  "result-20261017T223645Z-oct17-sequencing-baseline-b2dccabd26f2.json",
+                      "source_file":  "result.json",
+                      "sha256":  "4FEED65523F0CAF850CC0A9639B59E36F6AA2F4F873F454F1ECB990FBC36B141",
+                      "bytes":  8717
+                  },
+                  {
+                      "role":  "protected_synthetic_log",
+                      "archived_file":  "protected-application-20261017T223645Z-oct17-sequencing-baseline-b2dccabd26f2.log",
+                      "source_file":  "protected-application.log",
+                      "sha256":  "0541E9BA058513156E714BFEE7E02D5104F59B1AF53CE212D8C653A4E1AB13A4",
+                      "bytes":  34914
+                  },
+                  {
+                      "role":  "reconstructed_synthetic_log",
+                      "archived_file":  "reconstructed-application-20261017T223645Z-oct17-sequencing-baseline-b2dccabd26f2.log",
+                      "source_file":  "reconstructed-application.log",
+                      "sha256":  "0541E9BA058513156E714BFEE7E02D5104F59B1AF53CE212D8C653A4E1AB13A4",
+                      "bytes":  34914
+                  },
+                  {
+                      "role":  "historical_comparison",
+                      "archived_file":  "historical-baseline-with-dedup-20261017T223645Z-oct17-sequencing-baseline-b2dccabd26f2.json",
+                      "source_file":  "baseline-with-dedup.json",
+                      "sha256":  "E19B73E514A0E386BCDCCA9C40852A5ECB78A40DFE85E68ED1466900524FD4D4",
+                      "bytes":  7926
+                  },
+                  {
+                      "role":  "historical_comparison",
+                      "archived_file":  "historical-cpu2-window4-20261017T223645Z-oct17-sequencing-baseline-b2dccabd26f2.json",
+                      "source_file":  "cpu2-window4.json",
+                      "sha256":  "8DF12A841885BE0C4A791F1450C89BC2BC4FDC74097B555192D1AC3F82DEE3CC",
+                      "bytes":  8512
+                  },
+                  {
+                      "role":  "historical_comparison",
+                      "archived_file":  "historical-cpu4-window4-20261017T223645Z-oct17-sequencing-baseline-b2dccabd26f2.json",
+                      "source_file":  "cpu4-window4.json",
+                      "sha256":  "183C82DDDC19030FE4FD81F94DB4EAAEF8087A0ACDB178E853FFF47348D8AC48",
+                      "bytes":  8500
+                  }
+              ]
+}
