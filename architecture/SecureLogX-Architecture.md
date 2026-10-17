@@ -4849,6 +4849,70 @@ do **not** enlarge worker count or deadline just to mask overload.
 
 ---
 
+### 2026-10-17 — Paired low-concurrency real ONNX acceptance characterization (1/2/4/8)
+
+**Status: IMPLEMENTED/COMMITTED; LOCAL RESULTS PENDING**
+
+The prior six real-ONNX saturation runs showed full synthetic
+confidentiality/sequence checks, but zero strict functional
+deadline passes at 10/50/100 caller concurrency. Increasing
+native worker capacity or the queue is premature without a
+lower-concurrency baseline.
+
+**Change:** Added `scripts/run-low-concurrency-onnx-study.ps1` to
+characterize caller concurrency 1, 2, 4 and 8 with both
+platform and virtual-thread callers and repeated matched
+200-event synthetic workloads. The seeded Fisher-Yates
+caller-count order is recorded, and paired mode order switches
+AB to BA between repeats. Default two repetitions yields 16
+independent runs. The source SHA is fixed throughout; the
+existing single bounded native ONNX worker, 2-second deadline,
+queue cap 64, four intra-op CPU threads and four-window cap
+remain unchanged. The runner now supports test-gated single
+reactor build reuse and machine-readable verified receipts.
+
+**Gates:** The orchestration first requires a passing
+Log4j2/core Maven test reactor. Every run independently verifies
+known fixture non-leakage, full protected output, unique numeric
+ingress sequence, fail-closed classification and native lifecycle
+ownership, then validates the file SHA-256 hashes from each run's
+manifest. Nothing unsafe or incomplete is automatically published.
+The study stages only the exact synthetic run directories and its
+own planning/reporting artifacts for one explicit Git commit; other
+workspace files remain untouched.
+
+**Reporting:** Preserve all independent runs with unique
+names; publish a consolidated summary grouped by caller count
+and mode. The primary useful capacity metric is normal
+`successful_masked_events / elapsed_seconds`, not raw
+protected-record throughput, which counts fast fail-closed output.
+Compare normal-mask success fraction, caller p50/p95/p99,
+deadline exceedances, overload rejections, ONNX calls/windows,
+numeric sequence inversions, and endpoint process memory.
+`strict_deadline_candidate_all_repetitions` is true only when
+every paired run for one configuration has zero failclosed
+events and zero caller deadline exceedances, but it remains
+an *exploratory* candidate requiring longer soak/production
+representativeness before declaring an SLO.
+
+**Limitations:** The orchestration and PowerShell syntax have
+been reviewed statically; Windows Maven/PowerShell and real
+ONNX runs have not yet been executed for this new change.
+A two-repetition shuffled AB/BA design reduces order bias
+but cannot prove thread-mode causality or memory leak freedom.
+Native work is still serialized on one bounded worker and
+caller timeout may exceed the nominal masking deadline while
+the runtime waits for in-flight native cancellation.
+
+**Next:** Pull branch, run the documented
+`run-low-concurrency-onnx-study.ps1` with explicit
+`-CommitResults -PushResults` after reviewing synthetic
+output, inspect the generated comparison and then design
+queue/admission and soak improvements based on measured
+normal throughput and actual fail-closed rates.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
