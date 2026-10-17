@@ -109,6 +109,10 @@ public final class SecureLogXParallelOnnxBenchmark {
                         logger, "warmup-" + i, i
                 );
             }
+            RuntimeMemorySnapshot afterWarmup =
+                    SecureLogXApplicationLogBenchmark.settledSnapshot(
+                            "parallel-after-warmup"
+                    );
             SecureLogXInferenceDiagnostics.Snapshot before =
                     SecureLogXInferenceDiagnostics.snapshot(
                             context, "dev"
@@ -306,11 +310,12 @@ public final class SecureLogXParallelOnnxBenchmark {
                                             "per-instance-numeric-sequence"))
                     .put("process_start", processStart.toJson())
                     .put("after_init", afterInit.toJson())
+                    .put("after_warmup", afterWarmup.toJson())
                     .put("after_workload", afterWorkload.toJson())
                     .put("after_context_stop", afterStop.toJson())
                     .put("workload_memory_delta",
                             SecureLogXApplicationLogBenchmark.memoryDelta(
-                                    afterInit, afterWorkload))
+                                    afterWarmup, afterWorkload))
                     .put("post_stop_memory_delta",
                             SecureLogXApplicationLogBenchmark.memoryDelta(
                                     processStart, afterStop))
