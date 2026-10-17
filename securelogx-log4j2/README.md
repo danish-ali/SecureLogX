@@ -3,9 +3,12 @@
 > **Current maturity:** research runtime + Log4j2 pilot. This integration is
 > not yet presented as a universally adoptable 1.0 release.
 
-The remaining 1.0 gates are bounded timeout/backpressure, an explicit
-concurrency-saturation policy, validated hot-redeploy/native lifecycle,
-representative real-application log benchmarking, and a multi-hour soak.
+The basic bounded timeout/backpressure, concurrency-saturation and
+hot-redeploy/native lifecycle mechanisms have been validated for the
+current pilot. A user-reported 48-event real application benchmark also
+passed once at the 2-second deadline (p95 638.3143 ms, no fail-closed
+events). Parallel end-to-end ONNX saturation/ordering, broader security
+regression, repeatability and multi-hour soak remain production gates.
 
 SecureLogX uses Apache Log4j2's existing `RewriteAppender`. The SecureLogX
 artifact supplies a `SecureLogXRewritePolicy`; it does not replace Log4j2's
@@ -48,14 +51,14 @@ LogEvent before a RewriteAppender can sanitize it.
     <RollingFile name="ProtectedFile"
                  fileName="logs/application.log"
                  filePattern="logs/application-%d{yyyy-MM-dd}-%i.log.gz">
-      <PatternLayout pattern="%d %-5level [%t] %X %msg%n%throwable"/>
+      <PatternLayout pattern="%d %-5level [%t] instanceId=%X{securelogx.instanceId} seq=%X{securelogx.seq} ingressId=%X{securelogx.ingressId} %X %msg%n%throwable"/>
       <Policies>
         <SizeBasedTriggeringPolicy size="100 MB"/>
       </Policies>
     </RollingFile>
 
     <Console name="ProtectedConsole" target="SYSTEM_OUT">
-      <PatternLayout pattern="%d %-5level [%t] %X %msg%n%throwable"/>
+      <PatternLayout pattern="%d %-5level [%t] instanceId=%X{securelogx.instanceId} seq=%X{securelogx.seq} ingressId=%X{securelogx.ingressId} %X %msg%n%throwable"/>
     </Console>
 
     <Async name="ProtectedAsync" bufferSize="8192" blocking="true">
@@ -482,6 +485,79 @@ tokenizer/window overlap, no native-memory regression. A single faster
 p95 is not sufficient: compare repeated runs and report ONNX call/window
 counts and stage costs alongside p50/p95/p99/throughput. The
 **2-second pilot latency gate is still OPEN** until validated.
+
+## Parallel log sequencing and reconstruction (October 17, 2026)
+
+**Ordering contract:** Every SecureLogX-protected Log4j2 event gets a
+process/classloader-scoped increasing `securelogx.seq` number through
+`AtomicLong.incrementAndGet()` **before** the field masking, ML queue
+and downstream destination appender run. All concurrent callers,
+including JDK 25 virtual-thread callers, share this counter within
+the same loaded SecureLogX runtime class.
+
+The protected LogEvent receives three reserved MDC values **after**
+sanitization and before forwarding to any destination; any incoming
+MDC values attempting to spoof these keys are overwritten:
+
+| Field | Use |
+|---|---|
+| `securelogx.instanceId` | Producer/classloader UUID, stable through Log4j configuration reload |
+| `securelogx.seq` | Positive 64-bit **numeric** sequence, ordered at rewrite ingress |
+| `securelogx.ingressId` | Composite `instanceId-seq`; stable deduplication identifier, including fail-closed results |
+
+**Do not assume FileAppender, Kafka, or SIEM physical arrival order equals
+ingress order.** Concurrent requests can finish masking in a different
+order. A protected event can have `seq=102` written before `seq=101`
+if event 101 takes longer. Neither virtual threads nor multiple physical
+writers should force a global lock around ONNX to prevent this.
+
+To reconstruct ordering, group by `securelogx.instanceId`, then
+sort `securelogx.seq` as a **64-bit integer**, ascending. Use
+`securelogx.ingressId` for duplicate detection; a composite string
+should never be the numeric sort key. For a SIEM, explicitly index
+sequence as a numeric field and both IDs as exact-match keywords.
+
+Distinct JVMs/redeploy classloaders have distinct UUIDs and unrelated
+sequence counters. No total order across them is possible without other
+time/correlation evidence. Do not automatically interpret non-consecutive
+sequence values within one file as lost logs: other destinations,
+logger configurations, or fail-closed paths may consume sequences.
+
+**Example protected benchmark record:**
+
+```text
+eventId=bench-17|level=WARN|instanceId=11111111-1111-4111-8111-111111111111|seq=102|ingressId=11111111-1111-4111-8111-111111111111-102|ml=true|failClosed=false|reason=ML_RESOLVED|customer=[MASKED]|stack=|msg=[MASKED]|throwable=
+```
+
+The representative application benchmark now validates all sequence
+fields in the final **protected** log, checks consistency/uniqueness,
+and reports `protected_sequence_audit` including record count,
+instance count and physical-order inversions.
+
+To reconstruct the *synthetic single-line benchmark format* on Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File .\scripts\reconstruct-protected-application-log.ps1 `
+  -InputPath .\reports\application-log-benchmark\protected-application.log `
+  -OutputPath .\reports\application-log-benchmark\reconstructed-application.log
+```
+
+The script refuses to overwrite the original file, rejects malformed,
+duplicate or mismatched identities, and writes a copy grouped by
+instance and **numerically** sequenced. For more than one instance,
+the group order is arbitrary, *not* cross-process chronology.
+The tool is intentionally **not** an arbitrary multiline-log parser.
+Production logs should be processed using structured/typed SIEM fields.
+
+Model-free tests cover: 64 simultaneous rewrite calls, 64 concurrent
+Log4j RewriteAppender → FileAppender writes, forced reverse-completion
+with numeric sequence recovery, forged incoming metadata, and
+fail-closed/reload sequence continuity. These tests are **committed but
+must be run locally**; a separate real-ONNX parallel saturation test is
+still required before claiming production concurrency validation.
+
+---
 
 ## Current assurance boundary
 
