@@ -4620,6 +4620,55 @@ and multi-hour soak.
 
 ---
 
+### 2026-10-17 — Unique synthetic benchmark evidence archives and Git provenance
+
+**Status:** IMPLEMENTED IN REPOSITORY; USER-LOCAL ARCHIVING/COMMIT PENDING
+
+**Change:** Added `scripts/archive-application-log-results.ps1`, which
+creates a uniquely named UTC timestamp + workload label + random-suffix
+directory for each successful representative application-log run. Each
+archive contains an individually named result JSON, the associated
+synthetic protected log, a matching reconstructed log when available,
+and a JSON manifest with file SHA-256 hashes, sizes, and benchmark
+configuration. Prior root-level comparison JSON files can be imported as
+historical references with `-IncludeExistingReports`; they are not
+falsely attributed to the current run. Updated
+`run-application-log-benchmark.ps1` to archive on every successful run
+unless `-SkipArchive` is specified. `-CommitResults` explicitly
+creates a Git commit containing only the new archive directory;
+`-PushResults` explicitly publishes that commit to the same branch.
+Added `scripts/run-parallel-sequence-tests.ps1` with quoted Maven
+Surefire properties for Windows PowerShell.
+
+**Reason:** Running a benchmark repeatedly overwrote its top-level
+`result.json` and `protected-application.log`. Reproducible evidence
+needs durable per-run names, measured settings, immutable hashes, and
+clear provenance rather than accidental replacement. Test reports
+should remain separated from unrelated uncommitted changes.
+
+**Evidence:** The file
+`reports/application-log-benchmark/history/2026-10-17-user-reported-console-results.json`
+preserves values directly reported by the user in the conversation,
+explicitly marked as a *console transcription* rather than an original
+benchmark artifact. Actual prior Windows `result.json` / protected and
+reconstructed log bytes are not accessible to the GitHub connector;
+they must be archived and committed from the user's local repository.
+
+**Security:** The archiver is restricted to the synthetic benchmark and
+refuses to publish a current report unless it indicates success, zero
+fail-closed events and no fixture leakage; it independently checks
+known synthetic raw sensitive strings against the protected and matching
+reconstructed logs. It does not prove that arbitrary real customer data
+is safe for public GitHub. It never commits or pushes without explicit
+switches and refuses to commit from an unexpected branch.
+
+**Next gates:** Pull the branch locally, archive current and historical
+synthetic results using `-IncludeExistingReports -CommitResults -PushResults`,
+run the quoted Surefire concurrency tests, review source files before
+publishing, and continue real ONNX parallel saturation testing.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
