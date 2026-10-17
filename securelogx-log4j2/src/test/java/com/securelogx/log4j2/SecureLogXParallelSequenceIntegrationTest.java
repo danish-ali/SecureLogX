@@ -6,6 +6,9 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.appender.FileAppender;
+import org.apache.logging.log4j.core.appender.rewrite.RewriteAppender;
+import org.apache.logging.log4j.core.config.AppenderRef;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.config.DefaultConfiguration;
 import org.apache.logging.log4j.core.impl.Log4jLogEvent;
 import org.apache.logging.log4j.core.layout.PatternLayout;
@@ -216,6 +219,120 @@ class SecureLogXParallelSequenceIntegrationTest {
         } finally {
             release.countDown();
             callers.shutdownNow();
+        }
+    }
+
+    @Test
+    void concurrentLog4jRewriteAppenderWritesKeepUniqueRecoverableIds()
+            throws Exception {
+        DefaultConfiguration configuration = new DefaultConfiguration();
+        Path output = tempDir.resolve("concurrent-logger-protected.log");
+        PatternLayout layout = PatternLayout.newBuilder()
+                .setConfiguration(configuration)
+                .setPattern(
+                        "eventId=%X{eventId}|level=%p"
+                                + "|instanceId=%X{securelogx.instanceId}"
+                                + "|seq=%X{securelogx.seq}"
+                                + "|ingressId=%X{securelogx.ingressId}"
+                                + "|ml=%X{securelogx.mlInvoked}"
+                                + "|failClosed=%X{securelogx.failClosed}"
+                                + "|reason=%X{securelogx.reason}"
+                                + "|customer=|stack=|msg=%m|throwable=%n"
+                )
+                .build();
+
+        FileAppender file = FileAppender.newBuilder()
+                .setName("ProtectedConcurrentFile")
+                .setConfiguration(configuration)
+                .setFileName(output.toString())
+                .setAppend(false)
+                .setImmediateFlush(true)
+                .setLayout(layout)
+                .build();
+        assertNotNull(file);
+        configuration.addAppender(file);
+
+        SecureLogXRewritePolicy policy = new SecureLogXRewritePolicy(
+                "test", "SecureLogXRewrite",
+                true, false, configuration,
+                SecureLogXParallelSequenceIntegrationTest::maskAllForTest
+        );
+
+        RewriteAppender rewrite = RewriteAppender.createAppender(
+                "SecureLogXRewrite",
+                "false",
+                new AppenderRef[]{
+                        AppenderRef.createAppenderRef(
+                                "ProtectedConcurrentFile", null, null
+                        )
+                },
+                configuration, policy, null
+        );
+        assertNotNull(rewrite);
+        configuration.addAppender(rewrite);
+
+        LoggerConfig root = configuration.getRootLogger();
+        root.setLevel(Level.ALL);
+        for (String name : List.copyOf(root.getAppenders().keySet())) {
+            root.removeAppender(name);
+        }
+        root.addAppender(rewrite, Level.ALL, null);
+
+        file.start();
+        rewrite.start();
+        int count = 64;
+        ExecutorService callers = Executors.newFixedThreadPool(8);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<?>> pending = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                final int ordinal = i;
+                pending.add(callers.submit(() -> {
+                    try {
+                        if (!start.await(5, TimeUnit.SECONDS)) {
+                            throw new IllegalStateException(
+                                    "Concurrent ingress start timed out"
+                            );
+                        }
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException(interrupted);
+                    }
+                    root.log(source(
+                            "bench-" + ordinal,
+                            "parallel-log-" + ordinal + " ssn=" + RAW
+                    ));
+                }));
+            }
+            start.countDown();
+            for (Future<?> future : pending) {
+                future.get(10, TimeUnit.SECONDS);
+            }
+            String protectedOutput = Files.readString(
+                    output, StandardCharsets.UTF_8
+            );
+
+            assertFalse(protectedOutput.contains(RAW));
+            assertFalse(protectedOutput.contains("attacker-instance"));
+            assertFalse(protectedOutput.contains("|failClosed=true|"));
+            SecureLogXSequenceAudit.Audit audit =
+                    SecureLogXSequenceAudit.inspect(protectedOutput);
+            assertEquals(count, audit.records());
+            assertEquals(1, audit.instances());
+            assertEquals(count,
+                    audit.reconstructedByInstance()
+                            .values().iterator().next().size());
+            assertEquals(count, new HashSet<>(
+                    audit.reconstructedByInstance()
+                            .values().iterator().next().stream()
+                            .map(SecureLogXSequenceAudit.Stamp::ingressId)
+                            .toList()
+            ).size());
+        } finally {
+            start.countDown();
+            callers.shutdownNow();
+            rewrite.stop();
+            file.stop();
         }
     }
 
