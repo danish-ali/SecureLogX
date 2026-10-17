@@ -11,6 +11,10 @@ param(
     [ValidateRange(1, 10000)][int]$MaskingQueueCapacity = 64,
     [switch]$CollectMlRuleProposals,
     [switch]$UseExampleOrganizationRules,
+    # A study runner builds the modules once, then invokes these profiles.
+    [switch]$SkipBuild,
+    # Optional machine-readable pointer to the fully validated archived run.
+    [string]$RunReceiptPath,
     [switch]$CommitResults,
     [switch]$PushResults
 )
@@ -21,6 +25,14 @@ if ($PushResults -and -not $CommitResults) {
 }
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $reportRoot = Join-Path $root "reports\parallel-onnx\history"
+if (-not [string]::IsNullOrWhiteSpace($RunReceiptPath) -and
+        (Test-Path -LiteralPath $RunReceiptPath)) {
+    throw "Refusing to overwrite an existing run receipt: $RunReceiptPath"
+}
+if (-not [string]::IsNullOrWhiteSpace($RunReceiptPath) -and
+        $Callers.Contains(",")) {
+    throw "-RunReceiptPath requires exactly one -Callers count."
+}
 $model = Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\model.onnx"
 $tokenizer = Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\tokenizer.json"
 
@@ -57,10 +69,14 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Maven is unavailable."
     }
-    Write-Host "Compiling real-ONNX Log4j benchmark reactor (native session loads during each run)..."
-    & mvn "-pl" "securelogx-log4j2" "-am" "-DskipTests" "install"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Maven build failed: parallel ONNX benchmark not run."
+    if (-not $SkipBuild) {
+        Write-Host "Compiling real-ONNX Log4j benchmark reactor (native session loads during each run)..."
+        & mvn "-pl" "securelogx-log4j2" "-am" "-DskipTests" "install"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Maven build failed: parallel ONNX benchmark not run."
+        }
+    } else {
+        Write-Host "Reusing the caller's previously built/installed benchmark reactor."
     }
 
     $previousJavaOptions = [Environment]::GetEnvironmentVariable(
@@ -212,6 +228,28 @@ try {
             $manifest | ConvertTo-Json -Depth 8 |
                 Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
+            if (-not [string]::IsNullOrWhiteSpace($RunReceiptPath)) {
+                $receiptFile = [System.IO.Path]::GetFullPath($RunReceiptPath)
+                $receiptDir = [System.IO.Path]::GetDirectoryName($receiptFile)
+                if (-not (Test-Path -LiteralPath $receiptDir -PathType Container)) {
+                    throw "Run receipt directory does not exist: $receiptDir"
+                }
+                $receipt = [ordered]@{
+                    schema_version = 1
+                    archive_relative_path = $relative
+                    run_id = $runId
+                    result_file = [System.IO.Path]::GetFileName($resultPath)
+                    manifest_file = [System.IO.Path]::GetFileName($manifestPath)
+                    callers = $count
+                    mode = $CallerMode
+                    events = $Events
+                    security_passed = $result.security_passed
+                    functional_passed = $result.functional_passed
+                    source_commit_sha = $commitSha
+                }
+                $receipt | ConvertTo-Json -Depth 5 |
+                    Set-Content -LiteralPath $receiptFile -Encoding UTF8
+            }
             Write-Host "Unique real ONNX run archived: $relative"
             Write-Host "Security pass: $($result.security_passed)  Functional pass: $($result.functional_passed)"
             Write-Host "Successful / fail-closed: $($result.successful_masked_events) / $($result.fail_closed_events)"
