@@ -1,1 +1,5 @@
 onnx-model/*.onnx filter=lfs diff=lfs merge=lfs -text
+# Immutable synthetic ONNX benchmark evidence: preserve exact archived
+# file bytes so recorded SHA-256 values survive Git checkouts on Windows.
+reports/parallel-onnx/history/** -text
+reports/parallel-onnx/studies/** -text
