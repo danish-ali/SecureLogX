@@ -1,8 +1,17 @@
 param(
-    [switch]$FullSuite
+    [switch]$FullSuite,
+    [switch]$SkipArchive,
+    [switch]$CommitResults,
+    [switch]$PushResults
 )
 
 $ErrorActionPreference = "Stop"
+if ($PushResults -and -not $CommitResults) {
+    throw "-PushResults requires -CommitResults."
+}
+if ($SkipArchive -and ($CommitResults -or $PushResults)) {
+    throw "Cannot publish test results when -SkipArchive is set."
+}
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 Push-Location $repoRoot
@@ -24,6 +33,9 @@ try {
         throw "Parallel sequencing Maven tests failed (exit code $LASTEXITCODE)."
     }
     Write-Host "Parallel sequencing Maven tests passed."
+    if (-not $SkipArchive) {
+        & (Join-Path $PSScriptRoot "archive-parallel-sequence-tests.ps1") -RunLabel $(if ($FullSuite) { "parallel-fullsuite" } else { "parallel-targeted" }) -CommitResults:$CommitResults -PushResults:$PushResults
+    }
 } finally {
     Pop-Location
 }
