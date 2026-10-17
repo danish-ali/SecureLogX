@@ -388,8 +388,8 @@ field is trusted, schema-constrained and not sourced from arbitrary user
 input. Safe-metadata rules are disabled unless adaptive enforcement is on.
 
 **Comparative benchmark commands** (with the same 15-second diagnostic
-deadline; each invocation overwrites result.json, so copy it between
-runs to compare):
+deadline; each invocation overwrites the top-level result.json but now also
+preserves a uniquely named archive after successful completion):
 
 ~~~powershell
 # Phase 1: new code, no organization rules; ML telemetry enabled
@@ -485,6 +485,81 @@ tokenizer/window overlap, no native-memory regression. A single faster
 p95 is not sufficient: compare repeated runs and report ONNX call/window
 counts and stage costs alongside p50/p95/p99/throughput. The
 **2-second pilot latency gate is still OPEN** until validated.
+
+## Preserve and commit synthetic benchmark results
+
+**Every successful invocation** of
+`scripts/run-application-log-benchmark.ps1` now automatically archives
+the current synthetic outputs under a **new, unique run directory**:
+
+```text
+reports/application-log-benchmark/history/
+  20261017T221500Z-c4-w4-d2000-org-on-1a2b3c4d5e6f/
+    result-20261017T221500Z-c4-w4-d2000-org-on-1a2b3c4d5e6f.json
+    protected-application-20261017T221500Z-c4-w4-d2000-org-on-1a2b3c4d5e6f.log
+    reconstructed-application-20261017T221500Z-c4-w4-d2000-org-on-1a2b3c4d5e6f.log  # only if matching
+    manifest-20261017T221500Z-c4-w4-d2000-org-on-1a2b3c4d5e6f.json
+```
+
+Actual IDs are UTC timestamp + configuration label + random suffix.
+The manifest records source filenames, content SHA-256 hashes, file sizes,
+event count, masking deadline, CPU threads and window cap. Historical
+comparison JSON files may be imported **as separate historical references**,
+not misrepresented as outputs from the current run.
+
+**Save your existing local results before starting another benchmark:**
+
+```powershell
+git pull origin chatgpt/hybrid-detection-pipeline
+powershell -ExecutionPolicy Bypass -File .\scripts\archive-application-log-results.ps1 -RunLabel initial-2s-sequence -IncludeExistingReports -CommitResults -PushResults
+```
+
+This imports any existing locally saved comparison `*.json` reports in
+`reports/application-log-benchmark` (e.g. CPU-2 versus CPU-4 runs)
+alongside the current `result.json`, `protected-application.log`
+and, if the lines match, `reconstructed-application.log`.
+Any historical JSON without the expected **passed, no-leak, no-fail-closed
+synthetic** flags is skipped with a warning. Reports that were overwritten
+before archiving cannot be recovered.
+
+**Automatically archive, Git commit and push new successful results:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-application-log-benchmark.ps1 -MaskingDeadlineMillis 2000 -CollectMlRuleProposals -UseExampleOrganizationRules -CpuThreads 4 -WindowBatchLimit 4 -CommitResults -PushResults
+```
+
+`-CommitResults` commits only the new archive directory on
+`chatgpt/hybrid-detection-pipeline`; unrelated staged changes are
+left alone. `-PushResults` also pushes the result commit to GitHub and
+requires `-CommitResults`. Omitting both still archives automatically
+on disk, without publishing. `-SkipArchive` opts out;
+`-RunLabel` provides a custom semantic name, and
+`-IncludeExistingReports` imports old root-level JSON snapshots.
+
+**Security boundary:** These scripts are **only for the known synthetic
+benchmark**, not production application logs. An archive/commit is refused
+unless the current report confirms `passed=true`,
+`raw_payload_forwarded=false`, zero fail-closed, and known synthetic
+sensitive fixtures are absent from protected output. The archiver also
+checks the reconstructed log against protected output to reject stale
+copies. These tests do **not** prove that arbitrary real customer data
+is safe to upload to a public GitHub repository. Review files before
+pushing. The scripts never auto-commit or push without explicit flags.
+
+### Run sequencing tests without PowerShell Maven argument parsing issues
+
+Use the checked-in wrapper, which quotes Surefire properties correctly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-parallel-sequence-tests.ps1
+```
+
+For the entire relevant Maven reactor test suite, specify `-FullSuite`.
+Test output and successes are separate from the synthetic inference
+benchmark; do not treat a model-free test pass as real-ONNX concurrency
+validation.
+
+---
 
 ## Parallel log sequencing and reconstruction (October 17, 2026)
 
