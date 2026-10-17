@@ -161,6 +161,29 @@ final class SecureMaskerRegistry {
         return java.util.Optional.empty();
     }
 
+    static java.util.Optional<com.securelogx.api.MaskingRuntimeStats>
+    runtimeSnapshot(
+            LoggerContext context,
+            String environment
+    ) {
+        synchronized (LOCK) {
+            Map<String, MaskerHandle> byEnvironment =
+                    MASKERS_BY_CONTEXT.get(context);
+            if (byEnvironment != null) {
+                MaskerHandle handle =
+                        byEnvironment.get(normalize(environment));
+                if (handle != null
+                        && handle.closeable() instanceof SecureMasker masker) {
+                    return java.util.Optional.of(
+                            masker.getRuntimeStats()
+                    );
+                }
+            }
+        }
+        // Read-only: never initialize ONNX merely to inspect counters.
+        return java.util.Optional.empty();
+    }
+
     static MlRoutingTelemetry.Snapshot mlTelemetrySnapshot(
             LoggerContext context,
             String environment
