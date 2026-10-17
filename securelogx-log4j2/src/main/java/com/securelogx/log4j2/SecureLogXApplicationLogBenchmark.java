@@ -46,7 +46,7 @@ public final class SecureLogXApplicationLogBenchmark {
 
     private static final String REWRITE_NAME = "SecureLogXRewrite";
     private static final int DEFAULT_EVENTS = 48;
-    private static final int WARMUP_EVENTS = 4;
+    static final int WARMUP_EVENTS = 4;
 
     private static final String SSN = "123-45-6789";
     private static final String EMAIL = "jane.doe@example.com";
@@ -57,9 +57,9 @@ public final class SecureLogXApplicationLogBenchmark {
             "eyJTEST0.TESTPAYLOAD.TESTSIGNATURE";
     private static final String ACCOUNT = "9876543210";
     private static final String PHONE = "7045551212";
-    private static final String VERSION_CONTROL = "1.2.3.4";
+    static final String VERSION_CONTROL = "1.2.3.4";
 
-    private static final List<String> RAW_SENSITIVE_VALUES = List.of(
+    static final List<String> RAW_SENSITIVE_VALUES = List.of(
             SSN,
             EMAIL,
             CARD,
@@ -426,7 +426,7 @@ public final class SecureLogXApplicationLogBenchmark {
         }
     }
 
-    private static void configurePipeline(
+    static void configurePipeline(
             BenchmarkConfiguration configuration,
             Path logFile
     ) {
@@ -512,7 +512,7 @@ public final class SecureLogXApplicationLogBenchmark {
         );
     }
 
-    private static void emit(
+    static void emit(
             Logger logger,
             String eventId,
             int ordinal
@@ -891,7 +891,7 @@ public final class SecureLogXApplicationLogBenchmark {
                 .put("stage_total_millis", stages);
     }
 
-    private static JSONObject latencyJson(
+    static JSONObject latencyJson(
             List<Long> nanos
     ) {
         List<Long> sorted = nanos.stream()
@@ -929,7 +929,7 @@ public final class SecureLogXApplicationLogBenchmark {
         return nanos / 1_000_000.0;
     }
 
-    private static RuntimeMemorySnapshot settledSnapshot(
+    static RuntimeMemorySnapshot settledSnapshot(
             String label
     ) throws InterruptedException {
         System.gc();
@@ -939,7 +939,7 @@ public final class SecureLogXApplicationLogBenchmark {
         return RuntimeMemorySnapshot.capture(label);
     }
 
-    private static JSONObject memoryDelta(
+    static JSONObject memoryDelta(
             RuntimeMemorySnapshot before,
             RuntimeMemorySnapshot after
     ) {
@@ -1116,10 +1116,10 @@ public final class SecureLogXApplicationLogBenchmark {
     ) {
     }
 
-    private static final class BenchmarkConfiguration
+    static final class BenchmarkConfiguration
             extends AbstractConfiguration {
 
-        private BenchmarkConfiguration(
+        BenchmarkConfiguration(
                 LoggerContext context
         ) {
             super(
