@@ -4815,6 +4815,17 @@ At 100 callers both thread modes hit queue capacity 64 and recorded
 reported at 100 callers is dominated by fast failures and must
 **never** be advertised as true ONNX masking throughput.
 
+**Deadline/liveness caveat:** A masking request's 2,000 ms
+deadline is **not an absolute 2-second caller-response guarantee**:
+`MaskingRequestExecutor` waits uninterruptibly for a native worker
+to finish following an in-flight timeout/cancellation before returning
+a fail-closed record. This is intentional worker/native-lifecycle
+containment but carries tail-latency exposure. The 50-caller virtual
+run measured p95=2,281 ms and max=2,302 ms despite the configured
+2,000 ms masking deadline. Treat an upper bound on caller blocking
+time as an **open liveness requirement**; do not silently remove the
+wait or reintroduce unsafe, unowned native work.
+
 **Memory:** After-workload process working sets were ~661–705 MiB,
 with post-context-stop samples ~167–170 MiB and zero owned maskers.
 These are snapshots, not runtime peaks; do not infer a proven
