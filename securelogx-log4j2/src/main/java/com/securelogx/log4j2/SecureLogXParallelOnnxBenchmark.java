@@ -265,7 +265,10 @@ public final class SecureLogXParallelOnnxBenchmark {
                             validation.failClosedCount())
                     .put("fail_closed_reason_counts",
                             new JSONObject(validation.failClosedReasonCounts()))
-                    .put("missing_or_duplicate_event_ids", 0)
+                    .put("duplicate_successful_event_ids", 0)
+                    .put("undelivered_or_duplicate_ingress_ids", 0)
+                    .put("original_event_ids_omitted_on_fail_closed",
+                            validation.failClosedCount())
                     .put("raw_payload_forwarded", false)
                     .put("benign_control_success_count",
                             validation.benignControlSuccessCount())
