@@ -684,7 +684,7 @@ per-run output folders and **never overwrite prior benchmark history**:
 ```powershell
 powershell -ExecutionPolicy Bypass `
   -File .\scripts\run-parallel-onnx-benchmark.ps1 `
-  -Callers 10,50,100 `
+  -Callers "10,50,100" `
   -Events 200 `
   -CallerMode platform `
   -MaskingDeadlineMillis 2000 `
