@@ -333,6 +333,13 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
                 Long.toString(sequence)
         );
         context.putValue("securelogx.instanceId", instanceId);
+        // Stable globally unique correlation key for deduplication and
+        // retrieval. Numeric ordering must still use securelogx.seq within
+        // one instanceId; cross-instance order is not defined.
+        context.putValue(
+                "securelogx.ingressId",
+                instanceId + "-" + sequence
+        );
         context.putValue(
                 "securelogx.mlInvoked",
                 Boolean.toString(mlInvoked)
