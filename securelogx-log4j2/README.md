@@ -742,10 +742,94 @@ treated as permission to forward raw log payloads. Never increase
 worker count, window batch or queue size merely to claim better
 throughput without validating native memory and data safety.
 
-**Validation status:** Implementation and model-free parser tests
-committed; the real model has not yet been run through this new
-parallel harness. These tests do not claim multi-hour soak or
-production acceptance.
+**Validation status:** The real-ONNX 10/50/100-caller platform
+and virtual runs were executed and archived; all six passed synthetic
+security/sequence checks and failed the strict functional deadline
+gate. See the paired low-concurrency follow-up below. These runs do
+not claim multi-hour soak or production acceptance.
+
+---
+
+## Paired low-concurrency real ONNX study (October 17, 2026)
+
+The earlier **10/50/100-caller platform/virtual** experiments were
+completed and archived in GitHub; all six passed synthetic protected
+delivery/sequence validation, but **none met the strict 2-second
+functional gate**. Their comparison is recorded in
+`reports/parallel-onnx/comparisons/2026-10-17-real-onnx-parallel-platform-vs-virtual.json`.
+At 100 callers, each mode recorded 70 overload rejections and the
+overall logging rate mostly reflected fail-closed output, not true
+masking throughput.
+
+To identify a finite-run candidate for sustainable operation, the
+next stage runs **1, 2, 4, 8** simultaneous logging callers through
+the same actual Log4j2 + ONNX pipeline, with **two repetitions per
+configuration** (16 independent runs), a reproducibly shuffled caller
+count order and **AB/BA** platform/virtual pairing:
+
+```powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+
+powershell -ExecutionPolicy Bypass `
+  -File .\scripts\run-low-concurrency-onnx-study.ps1 `
+  -Callers "1,2,4,8" `
+  -Repetitions 2 `
+  -Events 200 `
+  -MaskingDeadlineMillis 2000 `
+  -CpuThreads 4 `
+  -WindowBatchLimit 4 `
+  -MaskingQueueCapacity 64 `
+  -RandomSeed 20261017 `
+  -UseExampleOrganizationRules `
+  -CommitResults `
+  -PushResults
+```
+
+- The study runner executes the module **Maven test suite once**
+  before load testing, builds once, and reuses the compiled
+  real-ONNX benchmark for every trial. This does not substitute
+  mock masking, change native worker count or widen the queue.
+- Each run has a distinct directory under
+  `reports/parallel-onnx/history/`, with original result JSON,
+  protected synthetic log, reconstructed sequence and SHA-256
+  manifest. A separate machine-readable receipt proves which
+  validated archive belongs to which scheduled trial.
+- The study folder
+  `reports/parallel-onnx/studies/<unique UTC run ID>/`
+  contains the seeded run plan, the 16 verified receipt references
+  and consolidated study summary. The exact file hashes are checked
+  before any Git staging. `-CommitResults -PushResults` commits
+  **only** those explicit synthetic evidence paths as one commit.
+  If publishing fails, the local study commit is retained; retry
+  `git push` rather than rerunning and duplicating experiments.
+- The summary reports a separate
+  `normal_masked_events_per_second` metric, which excludes
+  fail-closed outputs; success fraction, p50/p95/p99,
+  overload/deadline counts, ONNX calls/windows, sequence
+  inversions and endpoint working-set samples remain traceable
+  to each original run.
+- For each mode and concurrency level, the conservative
+  `strict_deadline_candidate_all_repetitions` flag is true
+  only when **all** repeated trials had **zero fail-closed events**
+  and **zero caller latencies beyond the 2-second deadline**.
+  This is a candidate for further load/soak assessment, **not**
+  an established production concurrency limit or SLA.
+- Functional degradation with intact synthetic protection is
+  preserved as valid diagnostic evidence, not mislabeled success.
+  A failed security, completeness, ownership or hash check stops
+  the study; no trial is pushed as a verified pass.
+
+Use `-Repetitions 4` for a stronger follow-up with the same
+balanced mode-order protocol. Two repetitions establish an
+exploratory comparison only. Thread type remains a
+**caller-side variable**—the ONNX worker stays a single
+platform thread. Stable causal performance conclusions require
+controlled load, repeated measurements and eventual soak testing.
+
+**State:** New orchestrator and archival logic committed; these
+low-concurrency measurements have **not** yet been executed
+in the user's local ONNX environment.
 
 ---
 
