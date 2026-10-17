@@ -318,6 +318,23 @@ public final class SecureLogXApplicationLogBenchmark {
                     "measured_output_events",
                     validation.measuredOutputEvents()
             );
+            // Audited over the entire protected output including warmup.
+            // Ingress order is reconstructable per instanceId, not
+            // necessarily identical to physical FileAppender write order.
+            result.put(
+                    "protected_sequence_audit",
+                    new JSONObject()
+                            .put("records_including_warmup",
+                                    validation.sequenceAudit().records())
+                            .put("instance_count",
+                                    validation.sequenceAudit().instances())
+                            .put("physical_order_inversions",
+                                    validation.sequenceAudit()
+                                            .physicalOrderInversions())
+                            .put("unique_ingress_ids", true)
+                            .put("reconstruction_scope",
+                                    "per-instance-numeric-sequence")
+            );
             result.put(
                     "severity_counts",
                     validation.severityCounts()
@@ -418,6 +435,9 @@ public final class SecureLogXApplicationLogBenchmark {
                 .setPattern(
                         "eventId=%X{eventId}"
                                 + "|level=%p"
+                                + "|instanceId=%X{securelogx.instanceId}"
+                                + "|seq=%X{securelogx.seq}"
+                                + "|ingressId=%X{securelogx.ingressId}"
                                 + "|ml=%X{securelogx.mlInvoked}"
                                 + "|failClosed=%X{securelogx.failClosed}"
                                 + "|reason=%X{securelogx.reason}"
@@ -715,6 +735,14 @@ public final class SecureLogXApplicationLogBenchmark {
             );
         }
 
+        SecureLogXSequenceAudit.Audit audit =
+                SecureLogXSequenceAudit.inspect(output);
+        if (audit.records() != eventLines.size()) {
+            throw new IllegalStateException(
+                    "Sequence audit missed protected event records"
+            );
+        }
+
         long mlInvoked = measured.stream()
                 .filter(line -> line.contains("|ml=true|"))
                 .count();
@@ -765,7 +793,8 @@ public final class SecureLogXApplicationLogBenchmark {
                 mlInvoked,
                 failClosed,
                 versionPreserved,
-                severityCounts
+                severityCounts,
+                audit
         );
     }
 
@@ -1070,7 +1099,8 @@ public final class SecureLogXApplicationLogBenchmark {
             long mlInvokedEvents,
             long failClosedEvents,
             boolean benignVersionPreserved,
-            JSONObject severityCounts
+            JSONObject severityCounts,
+            SecureLogXSequenceAudit.Audit sequenceAudit
     ) {
     }
 
