@@ -29,6 +29,23 @@ public final class SecureLogXInferenceDiagnostics {
         );
     }
 
+    /**
+     * Read-only bounded-executor counters for already initialized maskers.
+     * Includes admission rejection, deadline, peak queue and active requests.
+     */
+    public static Optional<com.securelogx.api.MaskingRuntimeStats>
+    runtimeStats(
+            LoggerContext context,
+            String environment
+    ) {
+        if (context == null) {
+            throw new IllegalArgumentException(
+                    "LoggerContext is required"
+            );
+        }
+        return SecureMaskerRegistry.runtimeSnapshot(context, environment);
+    }
+
     public record Snapshot(
             HybridRuntimeStats routing,
             InferenceStageStats stages
