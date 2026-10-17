@@ -56,20 +56,24 @@ Timeout/backpressure correctness VALIDATED (real ONNX cancellation)
 Concurrency saturation policy    VALIDATED (single-worker pilot)
 Hot redeploy/native lifecycle    VALIDATED (4 real ONNX context cycles)
 Real application log benchmark   FUNCTIONAL PASS (48/48 at 15-second deadline)
-2-second application-log latency NOT MET (5/48 exceeded pilot deadline)
+2-second application-log latency SINGLE-RUN PASS (48/48; 0 over 2s; repeat pending)
 Organization-aware masking       EXPERIMENTAL (38 metadata matches measured)
 Event-local duplicate reuse      BENCHMARK OBSERVED (27 evaluations saved)
 Origin-aware ML route telemetry  IMPLEMENTED (aggregate counts observed)
-ONNX per-stage profiling         IMPLEMENTED; LOCAL RUN PENDING
-CPU thread cap                   IMPLEMENTED; LOCAL A/B PENDING
+ONNX per-stage profiling         LOCAL RUN REPORTED (53 calls/196 windows)
+CPU thread cap                   BENCHMARK: 4 threads faster than 2
+Parallel sequence reconstruction IMPLEMENTED; LOCAL CONCURRENCY TEST PENDING
 Multi-hour soak                  OPEN
 ```
 
-Remaining performance and soak items are release gates, not documentation
-TODOs. The October 12 application benchmark is a successful *functional*
-characterization at an explicitly longer deadline, not a production-latency
-validation. Organization-specific adaptive rules are experimental until their
-security and operating characteristics are locally validated.
+Remaining concurrency, representativeness, security and soak items are release
+gates, not documentation TODOs. The October 17 user-reported 48-event
+2-second-deadline benchmark passed once at p95 638.3143 ms and p99
+668.0808 ms with zero events over 2 seconds, zero fail-closed events, and
+no raw fixture forwarded. That is a **single-run pilot workload pass**, not
+a production SLO or concurrency guarantee. Organization-specific adaptive
+rules remain experimental until broader security and operating
+characteristics are validated.
 
 For timeout/backpressure specifically, do **not** wrap
 `tokenizationFuture.get()` with a caller timeout and call that bounded. The
@@ -573,26 +577,94 @@ A future appender marker such as `SECURELOGX` / `FORCE_SECURE` may be used
 as an explicit policy hint, but it must not imply that unmarked INFO/WARN/ERROR
 records bypass protection.
 
-#### Sequence contract
+#### Sequence contract for concurrent logging (October 17, 2026)
 
-SecureLogX owns a process-wide monotonic `long` ingress sequence.
+The Log4j2 rewrite integration uses an `AtomicLong` in
+`SecureLogXLog4j2Runtime` to allocate a **strictly increasing `long`
+sequence in the order in which concurrent rewrite calls reach the atomic
+increment**. The associated UUID `instanceId` is static per process/
+classloader and remains stable through Log4j2 configuration reloads.
+A process restart or separate application classloader creates a new UUID and
+a new sequence domain. Do not claim one globally increasing counter across
+independent processes or classloaders.
 
-The sequence is assigned:
+The sequence is assigned at the **start of `SecureLogXRewritePolicy.rewrite`**,
+after the source LogEvent is made immutable and before all of the following:
 
-1. when the event enters SecureLogX,
-2. before inference queues,
-3. before batching,
-4. before ONNX execution,
-5. before writer queues.
+1. configuration validation and masker acquisition,
+2. deterministic/ML routing and masking,
+3. bounded inference executor admission, queueing, ONNX inference and decoding,
+4. result reconstruction or synthetic fail-closed replacement,
+5. any destination File/Console/Kafka appender and any downstream async queue.
 
-Therefore `seq` represents **SecureLogX ingestion order**, not completion or
-physical file-write order.
+**Stable protected fields added after masking, overwriting any forged
+incoming fields with these names:**
 
-Asynchronous inference and multiple writer threads may complete events out of
-order; `seq` is the stable field used to reconstruct ingress ordering.
+| MDC key | Value / purpose |
+|---|---|
+| `securelogx.instanceId` | Generated producer/classloader UUID; defines a sequence namespace |
+| `securelogx.seq` | Atomic, positive, numeric `long` for that instance |
+| `securelogx.ingressId` | `instanceId + "-" + seq`; unique event identity/deduplication key |
+| `securelogx.mlInvoked` | Whether this Log4j event invoked ML |
+| `securelogx.failClosed` | Whether event content was replaced by synthetic protection |
+| `securelogx.reason` | Safe outcome classification |
 
-The old per-request/thread-local sequence has been removed. Request context now
-owns correlation (`traceId`) only.
+The three sequence fields survive both successful masking and fail-closed
+event replacement. The original source timestamp/severity remains intact.
+`traceId` is a separate request correlation ID and is not a substitute for
+the event's ingress ID. Internal `SecureMasker` *per-field* sequence values
+are separate and **must not** be confused with the Log4j *per-event* sequence.
+
+**Concurrency invariant:** a lower `seq` can legitimately appear *later*
+in the destination file because another log event may finish masking first.
+No global synchronous write lock, artificial wait-for-sequence buffer,
+unbounded reorder queue, or serial blocking around ONNX is introduced.
+Consumers reconstruct **within each `instanceId`** by sorting `seq` as a
+64-bit number. `ingressId` is for deduplication and tamper/mismatch checks;
+lexicographic sorting of composite IDs is not a correct numeric order.
+
+Example output pattern for a protected destination:
+
+```text
+eventId=%X{eventId}|level=%p|instanceId=%X{securelogx.instanceId}|seq=%X{securelogx.seq}|ingressId=%X{securelogx.ingressId}|ml=%X{securelogx.mlInvoked}|failClosed=%X{securelogx.failClosed}|msg=%m%n
+```
+
+Index `securelogx.seq` as a numeric 64-bit field in SIEM/storage, and
+`securelogx.instanceId` and `securelogx.ingressId` as keyword identifiers.
+For multiple JVMs, process restarts, or classloaders, **there is no valid
+cross-instance total order from sequence IDs alone**. Time correlation
+requires timestamps (with clock synchronization uncertainty), trace/span
+IDs and application causality; UUID lexical order has no chronological
+meaning. Sequence gaps in a *subset* of a producer's destinations are not
+necessarily data loss: other destinations, filtered events, extra contexts
+and fail-closed events can consume sequence numbers. Use a closed-world
+event inventory to establish missing events.
+
+**Test and retrieval contract:**
+
+- `SecureLogXSequenceAudit` verifies the synthetic benchmark's protected
+  lines contain canonical instance UUID, valid positive numeric seq,
+  matching ingressId, and no duplicate IDs. It reconstructs each producer's
+  numeric ingress order and counts physical-order inversions.
+- `SecureLogXParallelSequenceIntegrationTest` exercises simultaneous
+  rewriting from 64 callers, a real Log4j RewriteAppender/FileAppender
+  topology with 64 concurrent entries, and deliberately reversed masking
+  completion where file-write order differs from ingress order. It also
+  checks that spoofed incoming sequence metadata is overwritten and no
+  synthetic sensitive fixture leaks.
+- `scripts/reconstruct-protected-application-log.ps1` validates and
+  numerically reorders only the repository's **single-line synthetic
+  application benchmark format** into a separate output file. It rejects
+  missing, inconsistent and duplicate event IDs. For general structured
+  production logs, use typed fields and native SIEM operations instead of
+  parsing untrusted raw message text.
+- Both sequential and parallel regression tests must be run locally. The
+  concurrency harness uses a deterministic **model-free masker**, so it is
+  not a substitute for a real ONNX parallel saturation, timeout and
+  fail-closed lifecycle test.
+
+The old per-request/thread-local ingress sequence has been removed. Request
+context owns correlation (`traceId`) only.
 
 #### Timestamp and identity contract
 
@@ -4502,6 +4574,49 @@ ONNX 15-second comparative benchmarks for CPU thread counts and
 window batch limits, inspect measured-only ONNX calls/windows/stages,
 verify raw-fixture/benign/zero fail-closed gates and memory, and do not
 announce production latency readiness until the 2-second target is met.
+
+---
+
+### 2026-10-17 — Parallel Log4j ingress identity and reconstructable protected order
+
+**Status:** IMPLEMENTED; CONCURRENCY TESTS COMMITTED, LOCAL EXECUTION PENDING
+
+**Change:** Added `securelogx.ingressId` as the deterministic composite
+of `instanceId` and atomic `seq`, including on fail-closed outputs.
+Exposed all three ordering fields in the application benchmark's protected
+FileAppender layout. Added audit of numeric sequence identity, duplicate
+and mismatched IDs and per-instance reconstruction; model-free 64-caller
+concurrency tests for real RewriteAppender/FileAppender and a forced
+reverse-completion test; a benchmark-only PowerShell reconstruction script.
+
+**Reason:** Parallel inference and asynchronous destinations can finish
+later-sequenced events first. SecureLogX must preserve a durable ordering
+token without serializing native inference or conflating output completion
+order with ingress order.
+
+**Evidence / benchmark:** Prior user-reported real ONNX pilot with
+4 CPU intra-op threads and 4 windows/call: `passed=true`, 48 measured
+events, p95 638.3143 ms, p99 668.0808 ms, zero calls over 2,000 ms,
+zero fail-closed events, no raw sensitive fixture forwarded. This was
+a sequential application benchmark *before* the ordering instrumentation.
+The new parallel tests and sequence audit are committed but not yet run
+in the user's Windows environment.
+
+**Affected modules:** Log4j2 runtime/rewrite metadata, synthetic application
+benchmark, SecureLogXSequenceAudit, parallel and existing test classes,
+PowerShell reconstruction script, README and canonical architecture.
+
+**Backward compatibility:** Existing `securelogx.seq` and
+`securelogx.instanceId` unchanged; extra `securelogx.ingressId`
+is additive. No additional writer ordering lock, virtual-thread
+requirement, ML model modification, queue expansion, or relaxed fail-closed
+behavior. Destination consumers must explicitly project/index sequence
+fields; physical file append order is not guaranteed under concurrency.
+
+**Next gates:** `mvn clean test`; repeated live 2-second ONNX benchmark
+with explicit sequence audit; parallel ONNX load/saturation test under
+bounded admission, output reconstruction, no-leak checks, native memory
+and multi-hour soak.
 
 ---
 
