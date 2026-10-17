@@ -27,7 +27,6 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * SecureLogX RewritePolicy for Apache Log4j2's existing RewriteAppender.
@@ -53,7 +52,9 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
     private final boolean requirePreQueueSanitization;
     private final Configuration configuration;
     private final SecureMaskingService maskingServiceOverride;
-    private final AtomicBoolean validated = new AtomicBoolean();
+    // Visibility + synchronized initialization prevent concurrent rewrite
+    // callers from observing incomplete strict configuration validation.
+    private volatile boolean validated;
 
     private volatile List<String> configurationViolations = List.of();
 
@@ -124,7 +125,18 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
         String secureInstanceId =
                 SecureLogXLog4j2Runtime.instanceId();
 
-        validateOnce();
+        try {
+            validateOnce();
+        } catch (Exception validationFailure) {
+            StatusLogger.getLogger().error(
+                    "SecureLogX configuration validation failed closed: {}",
+                    validationFailure.getClass().getSimpleName()
+            );
+            return failClosedEvent(
+                    original, secureSequence, secureInstanceId,
+                    "CONFIGURATION_VALIDATION_FAILURE"
+            );
+        }
         if (strictConfiguration
                 && !configurationViolations.isEmpty()) {
             return failClosedEvent(
@@ -231,8 +243,8 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
         }
     }
 
-    private void validateOnce() {
-        if (!validated.compareAndSet(false, true)) {
+    private synchronized void validateOnce() {
+        if (validated) {
             return;
         }
 
@@ -241,6 +253,7 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
         // full Log4j configuration graph.
         if (configuration == null && maskingServiceOverride != null) {
             configurationViolations = List.of();
+            validated = true;
             return;
         }
 
@@ -257,6 +270,7 @@ public final class SecureLogXRewritePolicy implements RewritePolicy {
                     String.join("; ", configurationViolations)
             );
         }
+        validated = true;
     }
 
     private LogEvent failClosedEvent(
