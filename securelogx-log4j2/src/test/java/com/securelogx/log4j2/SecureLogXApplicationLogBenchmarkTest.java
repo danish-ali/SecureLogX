@@ -22,6 +22,9 @@ class SecureLogXApplicationLogBenchmarkTest {
         assertEquals(12, result.measuredOutputEvents());
         assertEquals(1, result.mlInvokedEvents());
         assertEquals(0, result.failClosedEvents());
+        assertEquals(12, result.sequenceAudit().records());
+        assertEquals(1, result.sequenceAudit().instances());
+        assertEquals(0, result.sequenceAudit().physicalOrderInversions());
     }
 
     @Test
@@ -127,8 +130,13 @@ class SecureLogXApplicationLogBenchmarkTest {
         String message = number == 6
                 ? "version=1.2.3.4"
                 : "safe-control";
+        String instanceId = "00000000-0000-0000-0000-000000000001";
+        long seq = number + 1L;
         return "eventId=bench-" + number
                 + "|level=" + level
+                + "|instanceId=" + instanceId
+                + "|seq=" + seq
+                + "|ingressId=" + instanceId + "-" + seq
                 + "|ml=" + (number == 0)
                 + "|failClosed=false|reason=DETERMINISTIC_RESOLVED"
                 + "|customer=|stack=|msg=" + message
