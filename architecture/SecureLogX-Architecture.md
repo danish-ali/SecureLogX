@@ -4774,6 +4774,70 @@ before changing native concurrency.
 
 ---
 
+### 2026-10-17 — Measured real ONNX concurrency: 10/50/100 platform versus virtual callers
+
+**Status: SIX SECURITY CHECKS PASSED; ZERO FUNCTIONAL PASSES UNDER
+THE STRICT 2-SECOND GATE**
+
+**Evidence:** Original reports and protected synthetic output are archived
+under `reports/parallel-onnx/history/`. A reproducible aggregate
+is committed at
+`reports/parallel-onnx/comparisons/2026-10-17-real-onnx-parallel-platform-vs-virtual.json`.
+Each run used 200 measured events + 4 warmup events, one ONNX worker,
+4 intra-op CPU threads, a four-window cap, a 64-request queue and
+2,000 ms deadline. Results are one trial per configuration with
+platform runs executed before virtual; no causal performance inference
+about thread type is justified.
+
+| Callers | Mode | Normal masked | Fail closed | p95 ms | Overall logs/s | Numeric write inversions |
+|---|---|---:|---:|---:|---:|---:|
+| 10 | Platform | 176/200 | 24 | 2026 | 7.78 | 49 |
+| 10 | Virtual | 82/200 | 118 | 2033 | 4.91 | 92 |
+| 50 | Platform | 69/200 | 131 | 2008 | 24.72 | 125 |
+| 50 | Virtual | 22/200 | 178 | 2281 | 23.14 | 159 |
+| 100 | Platform | 31/200 | 169 | 2009 | 49.16 | 188 |
+| 100 | Virtual | 29/200 | 171 | 2012 | 49.19 | 190 |
+
+**Safety result:** All six synthetic-output checks returned
+`security_passed=true`, `unique_ingress_ids=true`, exactly 204
+protected records each, no known raw fixture, and per-instance
+numeric sequence reconstruction. 0 live masker/context owners
+remained after shutdown. Sequence inversions show that physical write
+order diverged from ingress sequence and was reconstructed; sorting
+must remain **numeric**, not lexicographic.
+
+**Functional finding:** No run met `functional_passed=true` under
+the chosen admission/deadline settings. Fail-closed output is
+delivered/protected but is *not* a normally masked log record.
+At 100 callers both thread modes hit queue capacity 64 and recorded
+70 overload rejections, plus 99/101 deadline expirations. At 10 and
+50, failures were deadlines, not overload rejections. The 49 events/s
+reported at 100 callers is dominated by fast failures and must
+**never** be advertised as true ONNX masking throughput.
+
+**Memory:** After-workload process working sets were ~661–705 MiB,
+with post-context-stop samples ~167–170 MiB and zero owned maskers.
+These are snapshots, not runtime peaks; do not infer a proven
+long-duration leak-free profile.
+
+**Interpretation limits:** Single sequentially ordered trial per
+configuration, synthetic patterns only, workload-dependent ML routing,
+not a representative randomized production load. Fail-closed logs
+intentionally drop original synthetic `eventId` MDC, so ingress
+identity establishes unique delivery but cannot independently map
+each failure back to the original upstream event. Separate workload
+mix, ONNX call/window count, queue service time, native memory peaks,
+and repeated A/B trials before deciding whether caller type causes
+the observed gap.
+
+**Next:** Baseline realistic low concurrency (1/2/4/8) and repeat
+randomized/interleaved platform-versus-virtual trials; record normal
+masking throughput separately from protected record emission; inspect
+bounded deadline/queue mechanics and long-record ONNX service time;
+do **not** enlarge worker count or deadline just to mask overload.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
