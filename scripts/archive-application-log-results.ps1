@@ -64,6 +64,25 @@ if (-not $protectedText.Contains("eventId=")) {
     throw "Protected benchmark log contains no recognizable benchmark events."
 }
 
+# Guard against pairing an older protected log with a newer report.
+$protectedEvents = @(
+    ($protectedText -split '\r?\n') |
+        Where-Object { $_ -like 'eventId=*' }
+)
+$warmupCount = if ($null -ne $report.warmup_events) {
+    [int]$report.warmup_events
+} else {
+    0
+}
+$expectedProtectedEvents = [int]$report.events + $warmupCount
+if ($protectedEvents.Count -ne $expectedProtectedEvents) {
+    throw "Protected record count does not match result.json (expected $expectedProtectedEvents, got $($protectedEvents.Count))."
+}
+if ($null -ne $report.protected_sequence_audit -and
+        [int]$report.protected_sequence_audit.records_including_warmup -ne $protectedEvents.Count) {
+    throw "Protected log record count disagrees with its recorded sequence audit."
+}
+
 $items = [System.Collections.Generic.List[object]]::new()
 $items.Add([pscustomobject]@{
     Role = "measured_result"
