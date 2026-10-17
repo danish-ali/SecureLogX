@@ -124,12 +124,12 @@ class SecureLogXParallelSequenceIntegrationTest {
             long firstSequence = sequence(firstResult);
             long secondSequence = sequence(secondResult);
             assertTrue(firstSequence < secondSequence);
-            assertEquals(
-                    firstResult.getContextData()
-                            .getValue("securelogx.instanceId"),
-                    secondResult.getContextData()
-                            .getValue("securelogx.instanceId")
-            );
+            String firstInstanceId = (String) firstResult
+                    .getContextData().getValue("securelogx.instanceId");
+            String secondInstanceId = (String) secondResult
+                    .getContextData().getValue("securelogx.instanceId");
+            assertNotNull(firstInstanceId);
+            assertEquals(firstInstanceId, secondInstanceId);
 
             String protectedFile = Files.readString(
                     output, StandardCharsets.UTF_8
