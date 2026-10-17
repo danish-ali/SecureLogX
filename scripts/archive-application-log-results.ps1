@@ -147,7 +147,7 @@ $idSuffix = [guid]::NewGuid().ToString("N").Substring(0, 12)
 $runId = "$timestamp-$RunLabel-$idSuffix"
 $archiveRelative = "reports/application-log-benchmark/history/$runId"
 $archiveDir = Join-Path $repoRoot (
-    $archiveRelative.Replace("/", [System.IO.Path]::DirectorySeparatorChar)
+    "reports\application-log-benchmark\history\" + $runId
 )
 New-Item -ItemType Directory -Path $archiveDir -ErrorAction Stop |
     Out-Null
