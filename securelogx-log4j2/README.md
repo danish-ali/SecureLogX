@@ -546,18 +546,39 @@ copies. These tests do **not** prove that arbitrary real customer data
 is safe to upload to a public GitHub repository. Review files before
 pushing. The scripts never auto-commit or push without explicit flags.
 
-### Run sequencing tests without PowerShell Maven argument parsing issues
+### Run and archive parallel-sequencing JUnit evidence
 
-Use the checked-in wrapper, which quotes Surefire properties correctly:
+The checked-in PowerShell wrapper quotes Surefire properties correctly
+and now **archives passing test-suite summaries with unique file names**.
+Raw Maven Surefire XML can include environment/JVM properties and captured
+output and is **not** uploaded. Instead, the archive contains test
+counts, timing, Suite IDs, result status, and the local source-XML SHA-256:
 
 ```powershell
+# Re-run tests; archive a sanitized JSON outcome automatically.
 powershell -ExecutionPolicy Bypass -File .\scripts\run-parallel-sequence-tests.ps1
+
+# To commit and push the sanitized JSON after a successful re-run:
+powershell -ExecutionPolicy Bypass -File .\scripts\run-parallel-sequence-tests.ps1 -CommitResults -PushResults
+
+# If tests have already passed, archive existing JUnit files without re-running:
+powershell -ExecutionPolicy Bypass -File .\scripts\archive-parallel-sequence-tests.ps1 -RunLabel oct17-parallel-pass -CommitResults -PushResults
 ```
 
+The archiver requires passing, non-skipped results from
+`SecureLogXParallelSequenceIntegrationTest` and
+`SecureLogXSequenceAuditTest`; by default it rejects JUnit XML over
+24 hours old. Set `-AllowOlderReports` only when you intentionally
+need to archive older evidence, and retain source-file provenance.
+All archived JUnit summaries go in
+`reports/parallel-sequence-tests/history/<UTC timestamp>-<run label>-<unique suffix>/`.
+The separately recorded user-reported pass is not a substitute for
+locally parsed JUnit evidence.
+
 For the entire relevant Maven reactor test suite, specify `-FullSuite`.
-Test output and successes are separate from the synthetic inference
-benchmark; do not treat a model-free test pass as real-ONNX concurrency
-validation.
+These model-free concurrency tests do not establish real ONNX
+parallel-load latency, bounded queue saturation, native-resource
+stability, or a production SLO.
 
 ---
 
