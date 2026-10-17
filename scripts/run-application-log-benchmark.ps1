@@ -4,10 +4,23 @@ param(
     [switch]$CollectMlRuleProposals,
     [switch]$UseExampleOrganizationRules,
     [ValidateRange(0, 64)][int]$CpuThreads = 0,
-    [ValidateRange(0, 32)][int]$WindowBatchLimit = 0
+    [ValidateRange(0, 32)][int]$WindowBatchLimit = 0,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$')]
+    [string]$RunLabel,
+    [switch]$SkipArchive,
+    [switch]$IncludeExistingReports,
+    [switch]$CommitResults,
+    [switch]$PushResults
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($PushResults -and -not $CommitResults) {
+    throw "-PushResults requires -CommitResults."
+}
+if ($SkipArchive -and ($CommitResults -or $PushResults)) {
+    throw "Cannot commit or push results when -SkipArchive is set."
+}
 
 if ($Events -lt 12) {
     throw "Events must be at least 12."
@@ -104,3 +117,26 @@ if ($benchmarkExitCode -ne 0) { exit $benchmarkExitCode }
 Write-Host ""
 Write-Host "Representative application-log benchmark complete."
 Write-Host "Result: $resultPath"
+
+if (-not $SkipArchive) {
+    # Archive is on by default for every successful benchmark run.
+    $cpuLabel = if ($CpuThreads -gt 0) { "c$CpuThreads" } else { "cdefault" }
+    $windowLabel = if ($WindowBatchLimit -gt 0) {
+        "w$WindowBatchLimit"
+    } else {
+        "wdefault"
+    }
+    $orgLabel = if ($UseExampleOrganizationRules) {
+        "org-on"
+    } else {
+        "org-off"
+    }
+    $effectiveLabel = if ([string]::IsNullOrWhiteSpace($RunLabel)) {
+        "$cpuLabel-$windowLabel-d$MaskingDeadlineMillis-$orgLabel"
+    } else {
+        $RunLabel
+    }
+
+    & (Join-Path $PSScriptRoot "archive-application-log-results.ps1") -RunLabel $effectiveLabel -IncludeExistingReports:$IncludeExistingReports -CommitResults:$CommitResults -PushResults:$PushResults
+}
+
