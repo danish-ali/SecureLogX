@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "observed_date": "2026-10-17",
+  "evidence_type": "user_reported_console_output",
+  "reported_message": "Parallel sequencing Maven tests passed.",
+  "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run-parallel-sequence-tests.ps1",
+  "test_scope": "Model-free SecureLogXParallelSequenceIntegrationTest and SecureLogXSequenceAuditTest, invoked by run-parallel-sequence-tests.ps1 default configuration",
+  "passed": true,
+  "limitations": [
+    "GitHub connector cannot inspect locally generated Maven Surefire XML files.",
+    "Reported pass is not accompanied by independently parsed test counts in this record.",
+    "Successful model-free concurrency tests do not establish real ONNX concurrent latency, resource saturation, or an end-to-end production SLO."
+  ],
+  "next_evidence": "Archive locally generated sanitized JUnit suite summary from Maven Surefire XML using scripts/archive-parallel-sequence-tests.ps1 and commit/push it."
+}
