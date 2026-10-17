@@ -55,7 +55,6 @@ try {
     $previousJavaOptions = [Environment]::GetEnvironmentVariable(
         "JAVA_TOOL_OPTIONS", "Process"
     )
-    $previousError = $null
     try {
         $orgOptions = @()
         if ($UseExampleOrganizationRules) {
@@ -128,8 +127,8 @@ try {
                     "real-onnx-application-logger-parallel-load" -or
                     [int]$result.events -ne $Events -or
                     [int]$result.parallel_callers -ne $count -or
-                    [int]$result.successful_masked_events +
-                    [int]$result.fail_closed_events -ne $Events -or
+                    ([int]$result.successful_masked_events +
+                        [int]$result.fail_closed_events) -ne $Events -or
                     [int]$result.total_protected_records -ne
                     ($Events + [int]$result.warmup_events) -or
                     $result.protected_sequence_audit.unique_ingress_ids -ne $true) {
