@@ -1,5 +1,8 @@
 param(
-    [ValidateRange(1, 200)][int[]]$Callers = @(10, 50, 100),
+    # A comma-separated STRING is intentional: Windows PowerShell
+    # powershell.exe -File does not reliably bind array-valued arguments.
+    [ValidatePattern('^[0-9]{1,3}(,[0-9]{1,3})*$')]
+    [string]$Callers = "10,50,100",
     [ValidateRange(12, 5000)][int]$Events = 200,
     [ValidateSet("platform", "virtual")][string]$CallerMode = "platform",
     [ValidateRange(1, 60000)][int]$MaskingDeadlineMillis = 2000,
@@ -21,10 +24,18 @@ $reportRoot = Join-Path $root "reports\parallel-onnx\history"
 $model = Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\model.onnx"
 $tokenizer = Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\tokenizer.json"
 
-foreach ($count in $Callers) {
-    if ($count -gt $Events) {
-        throw "Callers=$count cannot exceed Events=$Events."
+$callerCounts = @(
+    foreach ($rawCount in $Callers.Split(',')) {
+        [int]$count = 0
+        if (-not [int]::TryParse($rawCount, [ref]$count) -or
+                $count -lt 1 -or $count -gt 200 -or $count -gt $Events) {
+            throw "Each caller count must be 1..min(200,Events): $rawCount"
+        }
+        $count
     }
+)
+if (@($callerCounts | Select-Object -Unique).Count -ne $callerCounts.Count) {
+    throw "Caller counts must not repeat in one run: $Callers"
 }
 foreach ($artifact in @($model, $tokenizer)) {
     if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
@@ -91,7 +102,7 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to record benchmark source revision."
         }
-        foreach ($count in $Callers) {
+        foreach ($count in $callerCounts) {
             $time = [DateTime]::UtcNow.ToString(
                 "yyyyMMddTHHmmssZ",
                 [System.Globalization.CultureInfo]::InvariantCulture
