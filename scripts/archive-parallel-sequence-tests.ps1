@@ -19,6 +19,7 @@ $classes = @(
 )
 $expectedPackage = "com.securelogx.log4j2"
 $suites = @()
+$totalTests = 0
 $nowUtc = [DateTime]::UtcNow
 
 foreach ($class in $classes) {
@@ -69,6 +70,7 @@ foreach ($class in $classes) {
         throw "Refusing to mark incomplete, skipped or failing tests as passed: $filename"
     }
 
+    $totalTests += $tests
     $suites += [ordered]@{
         suite_name = $suiteName
         test_count = $tests
@@ -98,7 +100,7 @@ $summary = [ordered]@{
     evidence_type = "sanitized_junit_surefire_summary"
     provenance = "Aggregates parsed from local Maven Surefire XML; raw XML intentionally excluded to avoid exposing JVM/system properties, machine paths, credentials or captured log payloads."
     passed = $true
-    total_tests = ($suites | Measure-Object -Property test_count -Sum).Sum
+    total_tests = $totalTests
     suite_count = $suites.Count
     no_failed_or_skipped_tests = $true
     model_free_test_scope = "Log4j sequence uniqueness, protected destination output, forced out-of-order reconstruction and sequence-audit logic"
