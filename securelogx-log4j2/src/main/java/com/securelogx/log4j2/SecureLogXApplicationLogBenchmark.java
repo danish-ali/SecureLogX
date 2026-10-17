@@ -1067,6 +1067,18 @@ public final class SecureLogXApplicationLogBenchmark {
                                 "fail_closed_events"
                         )
         );
+        JSONObject sequenceAudit = result.getJSONObject(
+                "protected_sequence_audit"
+        );
+        System.out.println(
+                "Protected ordering IDs validated (including warmup): "
+                        + sequenceAudit.getInt("records_including_warmup")
+                        + " records, "
+                        + sequenceAudit.getInt("instance_count")
+                        + " producer instance(s), "
+                        + sequenceAudit.getInt("physical_order_inversions")
+                        + " physical write-order inversions"
+        );
         System.out.println(
                 "Masking deadline: "
                         + result.getLong("masking_deadline_millis")
