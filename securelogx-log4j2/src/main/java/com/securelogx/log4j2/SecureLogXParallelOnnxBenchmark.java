@@ -482,9 +482,15 @@ public final class SecureLogXParallelOnnxBenchmark {
                     "Missing benchmark events after distinguishing failures"
             );
         }
+        if (audit.instances() != 1) {
+            throw new IllegalStateException(
+                    "One benchmark LoggerContext must use one ingress "
+                            + "instanceId, found " + audit.instances()
+            );
+        }
         return new Validation(
                 successfulIds.size(), failed, reasons, audit,
-                benignControlSuccess, true
+                benignControlSuccess, benignControlSuccess > 0
         );
     }
 
