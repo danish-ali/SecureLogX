@@ -1,2 +1,6 @@
 # Compiled Java
 *.class
+
+# Raw synthetic real-ONNX steady-rate benchmark runs/ZIPs stay local only.
+# The study runner publishes one compact summary JSON per study instead.
+reports/parallel-onnx/.local-steady-runs/
