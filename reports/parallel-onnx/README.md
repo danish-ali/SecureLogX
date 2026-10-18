@@ -131,6 +131,74 @@ SecureLogX clones or backups rather than treating a console-only
 pass as a completed archived study. Git cannot restore ignored
 local ZIPs or benchmark outputs that were never committed.
 
+## Experimental pre-queue routing A/B gate (off by default)
+
+A source-level implementation now supports the **explicit experimental**
+`securelogx.experimental.preQueueDeterministicRoutingEnabled`
+flag. It is **false by default** and is **not approved as a production
+route** before full locked-corpus and real-ONNX A/B validation. The
+same immutable hybrid scanner and organization rules are used on the
+caller and native worker; only complete fields already deterministically
+resolved skip native queue admission. Every unresolved field continues
+through the original bounded single worker, and any failed field fails
+the **entire** Log4j event closed.
+
+First verify the model-free routing/merge regressions and usual
+Log4j topology and deadline tests:
+
+```powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+mvn -pl securelogx-log4j2 -am clean test
+```
+
+For an apples-to-apples real-ONNX pilot, run the same seeded
+5/6-event/s synthetic study twice without modifying settings,
+model, native worker, queue, deadline, or policy. Run the baseline
+first:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 `
+  -Rates "5,6" -Repetitions 2 -DurationSeconds 60 `
+  -CallerMode platform -MaxOutstanding 32 `
+  -MaskingDeadlineMillis 2000 -CpuThreads 4 `
+  -WindowBatchLimit 4 -MaskingQueueCapacity 64 `
+  -MemorySampleMillis 5000 -RandomSeed 20261018 `
+  -UseExampleOrganizationRules -CommitResults -PushResults
+```
+
+Run the identical experiment with only the feature flag enabled:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 `
+  -Rates "5,6" -Repetitions 2 -DurationSeconds 60 `
+  -CallerMode platform -MaxOutstanding 32 `
+  -MaskingDeadlineMillis 2000 -CpuThreads 4 `
+  -WindowBatchLimit 4 -MaskingQueueCapacity 64 `
+  -MemorySampleMillis 5000 -RandomSeed 20261018 `
+  -UseExampleOrganizationRules -EnablePreQueueRouting `
+  -CommitResults -PushResults
+```
+
+Each entire study produces **one compact Git JSON**, with detailed
+synthetic outputs retained only in local, Git-ignored ZIP archives.
+The JSON now includes
+`pre_queue_routing_measured_only`:
+deterministically bypassed fields, escalated fields, and entire
+events failed closed. Native ONNX calls/windows, normal masking
+throughput, p99/max, measured-only queue waiting, benign
+`version=1.2.3.4` retention, ingress reconstruction
+and sampled RSS are comparison gates.
+
+**Fail the A/B gate** on any newly unmasked known sensitive fixture,
+new benign overmask, nonzero regression in sequence/output completeness,
+or violation of whole-event fail-closed; compare all individual
+trials rather than only median throughput. A less reliable functional
+trial cannot be rescued by higher total protected-output throughput.
+Finally run the locked 6,463-record high-risk corpus with the same
+policy/model and compare recall and negative controls. The feature
+**must stay off** until that independent gate passes.
+
 ## Run the 5/6/7-per-second pilot
 
 Run from a JDK 21+ development environment with the validated
