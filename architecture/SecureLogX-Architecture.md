@@ -4956,7 +4956,7 @@ reported zero remaining runtime owners after shutdown.
 gave the highest **observed median** normal throughput;
 8 callers still passed but slowed the single worker rather
 than improving useful throughput, with higher p95. Earlier
-10-caller results (one pass per caller mode measured in a
+10-caller results (one run per caller mode measured in a
 different earlier saturation study) had nonzero deadline
 failures. The operating boundary may be between eight and
 ten *for this fixed synthetic burst workload*, but it has
