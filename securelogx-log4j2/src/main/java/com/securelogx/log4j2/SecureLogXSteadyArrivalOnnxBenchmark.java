@@ -138,6 +138,9 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
             AtomicInteger memorySampleErrors = new AtomicInteger();
             long[] durations = new long[plannedEvents];
             long[] startLateness = new long[plannedEvents];
+            long[] dispatchLateness = new long[plannedEvents];
+            long firstDispatchAt = 0L;
+            long lastDispatchAt = 0L;
             List<Future<?>> futures = new ArrayList<>(plannedEvents);
             List<JSONObject> memorySamples =
                     Collections.synchronizedList(new ArrayList<>());
@@ -197,6 +200,14 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                         generatorRejected.incrementAndGet();
                         continue;
                     }
+                    long dispatchedAt = System.nanoTime();
+                    dispatchLateness[ordinal] = Math.max(
+                            0L, dispatchedAt - scheduledAt
+                    );
+                    if (firstDispatchAt == 0L) {
+                        firstDispatchAt = dispatchedAt;
+                    }
+                    lastDispatchAt = dispatchedAt;
                     final int outstandingNow = inflight.incrementAndGet();
                     peakInflight.accumulateAndGet(
                             outstandingNow, Math::max
@@ -307,6 +318,8 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     new ArrayList<>(plannedEvents);
             List<Long> schedulerDelays =
                     new ArrayList<>(plannedEvents);
+            List<Long> dispatchDelays =
+                    new ArrayList<>(plannedEvents);
             for (int i = 0; i < plannedEvents; i++) {
                 if (durations[i] <= 0) {
                     throw new IllegalStateException(
@@ -315,6 +328,7 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                 }
                 completedDurations.add(durations[i]);
                 schedulerDelays.add(startLateness[i]);
+                dispatchDelays.add(dispatchLateness[i]);
             }
             SecureLogXConfig effective = new SecureLogXConfig("dev");
             long deadlineNanos = TimeUnit.MILLISECONDS.toNanos(
@@ -381,7 +395,11 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                             effective.getMaskingQueueCapacity())
                     .put("elapsed_millis",
                             TimeUnit.NANOSECONDS.toMillis(wallNanos))
-                    .put("actual_offered_rate_per_second",
+                    .put("observed_dispatched_rate_per_second",
+                            (plannedEvents - 1.0)
+                                    / ((lastDispatchAt - firstDispatchAt)
+                                            / 1_000_000_000.0))
+                    .put("protected_completions_per_second",
                             plannedEvents
                                     / (wallNanos / 1_000_000_000.0))
                     .put("normal_masked_events_per_second",
@@ -394,6 +412,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     .put("caller_start_lag_millis",
                             SecureLogXApplicationLogBenchmark.latencyJson(
                                     schedulerDelays
+                            ))
+                    .put("producer_dispatch_lag_millis",
+                            SecureLogXApplicationLogBenchmark.latencyJson(
+                                    dispatchDelays
                             ))
                     .put("bounded_executor_measured_only",
                             SecureLogXParallelOnnxBenchmark.executorStatsJson(
