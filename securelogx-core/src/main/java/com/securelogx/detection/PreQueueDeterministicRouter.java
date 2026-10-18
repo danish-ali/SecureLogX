@@ -21,6 +21,10 @@ import java.util.Objects;
  */
 public final class PreQueueDeterministicRouter {
 
+    // Never execute unbounded regex/structured parsing on an application
+    // logging caller. Long input stays on the existing bounded worker.
+    private static final int MAX_PREQUEUE_FIELD_CHARS = 1024;
+
     private static final String FAILURE_MARKER =
             "[SECURELOGX_REDACTED_PROCESSING_FAILURE]";
 
@@ -39,8 +43,18 @@ public final class PreQueueDeterministicRouter {
 
         for (int i = 0; i < all.size(); i++) {
             LogEvent event = all.get(i);
-            DeterministicScanResult scan =
-                    pipeline.scan(event.getMessage());
+            String original = event.getMessage();
+            if (original == null
+                    || original.length() > MAX_PREQUEUE_FIELD_CHARS
+                    || original.indexOf('\n') >= 0
+                    || original.indexOf('\r') >= 0) {
+                // Preserve existing long/complex-input handling and
+                // native deadline/cancellation semantics.
+                unresolved.add(event);
+                indices.add(i);
+                continue;
+            }
+            DeterministicScanResult scan = pipeline.scan(original);
             if (scan.requiresMl()) {
                 unresolved.add(event);
                 indices.add(i);
