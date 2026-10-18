@@ -56,12 +56,14 @@ class SecureLogXSteadyArrivalOnnxBenchmarkTest {
                 List.of(1L, 5L, 10L), List.of(1L, 3L, 2L, 1L)
         );
         JSONObject d = SecureLogXSteadyArrivalOnnxBenchmark
-                .queueWaitDelta(before, after);
+                .queueWaitDelta(before, after, 11.5);
         assertEquals(3L, d.getLong("worker_started_requests"));
         assertEquals(21_000_000L, d.getLong("total_wait_nanos"));
         assertEquals(7.0, d.getDouble("average_millis"), 0.001);
         assertEquals(12.0,
                 d.getDouble("max_millis_including_warmup"), 0.001);
+        assertEquals(11.5,
+                d.getDouble("max_millis_measured_only"), 0.001);
         assertEquals(4,
                 d.getJSONArray("mutually_exclusive_bucket_counts").length());
         assertEquals(1L,
