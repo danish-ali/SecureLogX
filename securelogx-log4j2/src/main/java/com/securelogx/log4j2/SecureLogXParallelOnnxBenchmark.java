@@ -236,7 +236,8 @@ public final class SecureLogXParallelOnnxBenchmark {
                     .filter(value -> value > TimeUnit.MILLISECONDS.toNanos(2000))
                     .count();
             boolean functionalPass = validation.failClosedCount() == 0
-                    && callsOverDeadline == 0;
+                    && callsOverDeadline == 0
+                    && validation.benignVersionPreserved();
 
             JSONObject result = new JSONObject()
                     .put("status", functionalPass
