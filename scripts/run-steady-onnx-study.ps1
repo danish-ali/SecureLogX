@@ -103,11 +103,13 @@ $oldJavaOptions = [Environment]::GetEnvironmentVariable("JAVA_TOOL_OPTIONS","Pro
 $trials = [System.Collections.Generic.List[object]]::new()
 Push-Location $root
 try {
-    Write-Host "Testing and compiling once for a rate-controlled real ONNX study."
-    & mvn "-pl" "securelogx-log4j2" "-am" "clean" "test"
-    if ($LASTEXITCODE -ne 0) { throw "Maven test reactor failed." }
-    & mvn "-pl" "securelogx-log4j2" "-am" "-DskipTests" "install"
-    if ($LASTEXITCODE -ne 0) { throw "Maven install reactor failed." }
+    if (-not $RecoverLatest) {
+        Write-Host "Testing and compiling once for a rate-controlled real ONNX study."
+        & mvn "-pl" "securelogx-log4j2" "-am" "clean" "test"
+        if ($LASTEXITCODE -ne 0) { throw "Maven test reactor failed." }
+        & mvn "-pl" "securelogx-log4j2" "-am" "-DskipTests" "install"
+        if ($LASTEXITCODE -ne 0) { throw "Maven install reactor failed." }
+    }
 
     $javaOptions = @(
         $oldJavaOptions,
@@ -131,14 +133,26 @@ try {
         $ordinal++
         $rate=[int]$item.rate
         $runDir = Join-Path $detailDir ("run-" + $ordinal.ToString("000") + "-r$rate")
-        New-Item -ItemType Directory -Path $runDir | Out-Null
         $resultPath = Join-Path $runDir "result.json"
         $logPath = Join-Path $runDir "protected-application.log"
-        $execArgs = '"' + $resultPath + '" ' + $rate + ' ' + $DurationSeconds + ' ' + $CallerMode + ' ' + $MaxOutstanding + ' ' + $MemorySampleMillis
-        Write-Host "STEADY RUN $ordinal/$($plan.Count): rate=$rate/s, duration=$DurationSeconds, mode=$CallerMode"
-        & mvn "-pl" "securelogx-log4j2" "-Dexec.mainClass=com.securelogx.log4j2.SecureLogXSteadyArrivalOnnxBenchmark" "-Dexec.args=$execArgs" "org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Steady run $ordinal failed. Detailed local evidence retained: $detailDir"
+        if ($RecoverLatest) {
+            if (-not (Test-Path -LiteralPath $resultPath) -and
+                    -not (Test-Path -LiteralPath $logPath)) {
+                Write-Host "Unexecuted trial $ordinal at $rate/s; keeping summary partial."
+                continue
+            }
+            Write-Host "Validating existing trial $ordinal/$($plan.Count) at rate=$rate/s."
+        } else {
+            if (Test-Path -LiteralPath $runDir) {
+                throw "Refusing to overwrite an existing trial directory."
+            }
+            New-Item -ItemType Directory -Path $runDir | Out-Null
+            $execArgs = '"' + $resultPath + '" ' + $rate + ' ' + $DurationSeconds + ' ' + $CallerMode + ' ' + $MaxOutstanding + ' ' + $MemorySampleMillis
+            Write-Host "STEADY RUN $ordinal/$($plan.Count): rate=$rate/s, duration=$DurationSeconds, mode=$CallerMode"
+            & mvn "-pl" "securelogx-log4j2" "-Dexec.mainClass=com.securelogx.log4j2.SecureLogXSteadyArrivalOnnxBenchmark" "-Dexec.args=$execArgs" "org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Steady run $ordinal failed. Detailed local evidence retained: $detailDir"
+            }
         }
         if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf) -or -not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
             throw "Missing original result or protected log at run $ordinal."
