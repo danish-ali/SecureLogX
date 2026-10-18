@@ -196,6 +196,18 @@ public class ONNXDynamicInferenceEngine {
         );
     }
 
+    /**
+     * Shared read-only deterministic policy for caller-thread admission
+     * experiment. Same approved organization rule registry and resolver
+     * as production inference; must never be mutated or replaced.
+     */
+    public com.securelogx.detection.PreQueueDeterministicRouter
+    preQueueDeterministicRouter() {
+        return new com.securelogx.detection.PreQueueDeterministicRouter(
+                hybridMaskingPipeline
+        );
+    }
+
     public MlRoutingTelemetry.Snapshot getMlRoutingTelemetrySnapshot() {
         return mlRoutingTelemetry.snapshot();
     }
