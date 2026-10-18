@@ -175,6 +175,33 @@ class PreQueueDeterministicRouterTest {
     }
 
     @Test
+    void incorrectMlOrderingCannotReleaseAnyDeterministicAllowOrMask()
+            throws Exception {
+        var plan = approvedRouter().route(List.of(
+                event("eventId=bench-12", 1),
+                event("name=Jane Doe", 2),
+                event("customerReference=CUST-834729", 3),
+                event("email=alice@example.com name=Jane Doe", 4)
+        ));
+        assertEquals(2, plan.unresolvedFields().size());
+        var reversed = plan.merge(List.of(
+                masked(plan.unresolvedFields().get(1), "[MASKED-B]"),
+                masked(plan.unresolvedFields().get(0), "[MASKED-A]")
+        ));
+        assertEquals(4, reversed.size());
+        assertTrue(reversed.stream().allMatch(MaskedResult::failClosed));
+        assertTrue(reversed.stream().allMatch(x ->
+                x.reasonCode() == MaskReasonCode.PROCESSING_FAILURE));
+        for (int i = 0; i < reversed.size(); i++) {
+            assertEquals(i + 1, reversed.get(i).sequence());
+            assertFalse(reversed.get(i).maskedText().contains("bench-12"));
+            assertFalse(reversed.get(i).maskedText().contains("CUST-834729"));
+            assertFalse(reversed.get(i).maskedText().contains("Jane"));
+            assertFalse(reversed.get(i).maskedText().contains("alice@example.com"));
+        }
+    }
+
+    @Test
     void disabledRegistryNeverApprovesUnknownOrganizationMetadata() {
         var router = new PreQueueDeterministicRouter(
                 new HybridMaskingPipeline()
