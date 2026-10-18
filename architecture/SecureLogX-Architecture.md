@@ -5339,7 +5339,11 @@ HybridMaskingPipeline** owned by the native engine: there is
 no independently loaded or mutable organization registry.
 For each unique field, call `scan` on the caller thread. Only
 `requiresMl=false` entire fields may take the identical
-`maskWithoutMl` policy path ahead of the queue. Fields with
+`maskWithoutMl` policy path ahead of the queue. This
+caller-thread scan is explicitly limited to **single-line
+fields of at most 1,024 characters**; longer, multiline or
+null input is handed to the original bounded worker without
+pre-queue scanning. Fields with
 `requiresMl=true` (unknown keys, free-text semantic risk, nested
 mixed inputs, conflicting evidence) remain in index-preserving
 order and enter the **existing** single-worker
@@ -5377,7 +5381,13 @@ has a separate `-EnablePreQueueRouting` synthetic switch.
 Compare **normally masked events per second** and ML native
 calls/windows, measured-only worker queue wait, p99/max
 latency, all fail-closed reasons, and sampled native/process
-memory against the same unmodified-model baseline.
+memory against the same unmodified-model baseline. The
+study report now records configured model/tokenizer SHA-256
+fingerprints for A/B artifact provenance. Pre-queue
+deterministic-resolved counts reflect *candidate work avoided*;
+if a later unresolved field fails, the whole event is still
+discarded/fail-closed and those candidates must not be
+misrepresented as emitted successful records.
 
 **Validation gates before enabling by default:**
 1. Run model-free `PreQueueDeterministicRouterTest`
