@@ -16,6 +16,9 @@ param(
     [switch]$PushResults
 )
 $ErrorActionPreference = "Stop"
+if (($DurationSeconds * 1000) -lt (2 * $MemorySampleMillis)) {
+    throw "The study requires at least two expected RSS samples per trial. Reduce -MemorySampleMillis."
+}
 if ($PushResults -and -not $CommitResults) {
     throw "-PushResults requires -CommitResults."
 }
@@ -128,6 +131,8 @@ try {
             [int]$result.planned_events -ne $expected -or
             [int]$result.completed_callers -ne $expected -or
             [double]$result.observed_dispatched_rate_per_second -le 0 -or
+            [int]$result.memory_sample_count -lt 2 -or
+            [int64]$result.sampled_peak_working_set_bytes -le 0 -or
             ([int]$result.successful_masked_events + [int]$result.fail_closed_events) -ne $expected -or
             [int]$result.total_protected_records -ne ($expected + [int]$result.warmup_events) -or
             $result.protected_sequence_audit.unique_ingress_ids -ne $true -or
@@ -151,7 +156,9 @@ try {
             events=$expected; normal_masked=[int]$result.successful_masked_events
             fail_closed=[int]$result.fail_closed_events
             fail_closed_reasons=$result.fail_closed_reason_counts
-            security_passed=$true; functional_passed=[bool]$result.functional_passed
+            security_passed=$true
+            rate_fidelity_passed=[bool]$result.rate_fidelity_passed
+            functional_passed=[bool]$result.functional_passed
             observed_dispatch_rate=[double]$result.observed_dispatched_rate_per_second
             protected_completion_rate=[double]$result.protected_completions_per_second
             producer_dispatch_lag_p95_ms=[double]$result.producer_dispatch_lag_millis.p95
