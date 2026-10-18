@@ -93,6 +93,7 @@ class MaskingRequestExecutorTest {
             MaskingRuntimeStats stats = executor.stats();
             assertEquals(1L, stats.overloadRejectedRequests());
 
+            Thread.sleep(35);
             releaseFirst.countDown();
             firstCaller.join(1000);
             secondCaller.join(1000);
@@ -101,6 +102,14 @@ class MaskingRequestExecutorTest {
             assertFalse(secondCaller.isAlive());
             assertNotNull(firstResult.get());
             assertNotNull(secondResult.get());
+
+            MaskingQueueWaitStats waited = executor.queueWaitStats();
+            assertEquals(2L, waited.observedStarts(),
+                    "Only the two accepted worker starts count");
+            assertEquals(2L, waited.bucketCounts().stream()
+                    .mapToLong(Long::longValue).sum());
+            assertTrue(waited.maxWaitMillis() >= 25.0,
+                    "Second accepted call must record actual queue wait");
         }
     }
 
