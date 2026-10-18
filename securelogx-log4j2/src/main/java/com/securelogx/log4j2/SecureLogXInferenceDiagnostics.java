@@ -86,6 +86,20 @@ public final class SecureLogXInferenceDiagnostics {
         );
     }
 
+    /**
+     * Read-only counters for the disabled-by-default pre-queue experiment.
+     * Values contain no payloads, tokens, org rules or detected spans.
+     */
+    public static Optional<com.securelogx.api.PreQueueRoutingStats>
+    preQueueRoutingStats(LoggerContext context, String environment) {
+        if (context == null) {
+            throw new IllegalArgumentException("LoggerContext is required");
+        }
+        return SecureMaskerRegistry.preQueueRoutingSnapshot(
+                context, environment
+        );
+    }
+
     public record Snapshot(
             HybridRuntimeStats routing,
             InferenceStageStats stages
