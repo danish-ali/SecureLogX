@@ -104,6 +104,33 @@ A new study run after pulling the fix will report
 A recovered older trial cannot retroactively gain measurements
 or acceptance gates absent from its original evidence.
 
+### Recovery folder discovery
+
+If the original timestamp/name filter finds no folder, the current
+script searches for completed `result.json` files underneath each local
+study folder instead. It also accepts an explicit `-RecoverFromPath`
+argument. Neither recovery option launches Maven or the ONNX model.
+
+List the actual saved paths in PowerShell:
+
+```powershell
+cd D:\workspace\SecureLogX
+Get-ChildItem .\reports\parallel-onnx -Filter result.json -File -Recurse -Force -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty FullName
+```
+
+If output includes a path such as
+`...\.local-steady-runs\<study-id>\run-001-r5\result.json`,
+pass the parent `<study-id>` folder to `-RecoverFromPath`
+in place of `-RecoverLatest` while keeping all original
+rates, repetitions, seed, caller mode and limits.
+
+If the file search returns no results, there is no recoverable raw
+`result.json` in that workspace. Search other local
+SecureLogX clones or backups rather than treating a console-only
+pass as a completed archived study. Git cannot restore ignored
+local ZIPs or benchmark outputs that were never committed.
+
 ## Run the 5/6/7-per-second pilot
 
 Run from a JDK 21+ development environment with the validated
