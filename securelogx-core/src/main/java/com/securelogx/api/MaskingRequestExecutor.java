@@ -19,6 +19,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 
@@ -34,6 +35,8 @@ final class MaskingRequestExecutor implements AutoCloseable {
     private static final String FAILURE_TEXT =
             "[SECURELOGX_REDACTED_PROCESSING_FAILURE]";
     private static final int WORKER_COUNT = 1;
+    private static final long[] QUEUE_WAIT_UPPER_MS =
+            {1, 5, 10, 25, 50, 100, 250, 500, 1000, 2000};
 
     @FunctionalInterface
     interface Operation {
@@ -62,6 +65,10 @@ final class MaskingRequestExecutor implements AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean();
     private final AtomicInteger peakActiveRequests = new AtomicInteger();
     private final AtomicInteger peakQueuedRequests = new AtomicInteger();
+    private final LongAdder queueWaitStarts = new LongAdder();
+    private final LongAdder queueWaitNanos = new LongAdder();
+    private final AtomicLong maxQueueWaitNanos = new AtomicLong();
+    private final LongAdder[] queueWaitBuckets = newWaitBuckets();
 
     MaskingRequestExecutor(
             int queueCapacity,
@@ -134,8 +141,12 @@ final class MaskingRequestExecutor implements AutoCloseable {
                 new AtomicReference<>();
         CountDownLatch finished = new CountDownLatch(1);
 
+        final long submittedAtNanos = System.nanoTime();
         FutureTask<List<MaskedResult>> task =
                 new FutureTask<>(() -> {
+                    recordQueueWait(Math.max(
+                            0L, System.nanoTime() - submittedAtNanos
+                    ));
                     workerThread.set(Thread.currentThread());
                     updatePeak(
                             peakActiveRequests,
@@ -314,6 +325,46 @@ final class MaskingRequestExecutor implements AutoCloseable {
                 queueCapacity,
                 deadlineMillis
         );
+    }
+
+    MaskingQueueWaitStats queueWaitStats() {
+        List<Long> bins = new ArrayList<>(queueWaitBuckets.length);
+        for (LongAdder bucket : queueWaitBuckets) {
+            bins.add(bucket.sum());
+        }
+        List<Long> bounds = new ArrayList<>(QUEUE_WAIT_UPPER_MS.length);
+        for (long upper : QUEUE_WAIT_UPPER_MS) {
+            bounds.add(upper);
+        }
+        return new MaskingQueueWaitStats(
+                queueWaitStarts.sum(),
+                queueWaitNanos.sum(),
+                maxQueueWaitNanos.get(),
+                bounds,
+                bins
+        );
+    }
+
+    private void recordQueueWait(long nanos) {
+        queueWaitStarts.increment();
+        queueWaitNanos.add(nanos);
+        maxQueueWaitNanos.accumulateAndGet(nanos, Math::max);
+        int index = 0;
+        while (index < QUEUE_WAIT_UPPER_MS.length
+                && nanos > TimeUnit.MILLISECONDS.toNanos(
+                        QUEUE_WAIT_UPPER_MS[index]
+                )) {
+            index++;
+        }
+        queueWaitBuckets[index].increment();
+    }
+
+    private static LongAdder[] newWaitBuckets() {
+        LongAdder[] buckets = new LongAdder[QUEUE_WAIT_UPPER_MS.length + 1];
+        for (int index = 0; index < buckets.length; index++) {
+            buckets[index] = new LongAdder();
+        }
+        return buckets;
     }
 
     @Override
