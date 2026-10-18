@@ -345,9 +345,9 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                             / 1_000_000_000.0);
             // An experiment whose generator delivers late bursts is not a
             // valid sustained-rate pass, even if masking returns normally.
-            boolean rateFidelity = dispatchRate >= rate * 0.95
-                    && dispatchLag.getDouble("p95")
-                            <= 1000.0 / rate;
+            boolean rateFidelity = meetsRateFidelity(
+                    rate, dispatchRate, dispatchLag.getDouble("p95")
+            );
             boolean functional = validation.failClosedCount() == 0
                     && lateCallers == 0
                     && completedCallers.get() == plannedEvents
@@ -504,6 +504,17 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                 context.stop();
             }
         }
+    }
+
+    static boolean meetsRateFidelity(
+            int targetRate, double dispatchRate, double p95DispatchLagMillis
+    ) {
+        if (targetRate <= 0 || !Double.isFinite(dispatchRate)
+                || !Double.isFinite(p95DispatchLagMillis)) {
+            return false;
+        }
+        return dispatchRate >= targetRate * 0.95
+                && p95DispatchLagMillis <= 1000.0 / targetRate;
     }
 
     static long scheduledAtNanos(long originNanos, int index, int rate) {
