@@ -101,10 +101,11 @@ if (-not [string]::IsNullOrWhiteSpace($RecoverFromPath)) {
     )
     if ($candidates.Count -lt 1) {
         $names = ($allDirectories | Select-Object -ExpandProperty Name) -join ", "
-        throw ("No result.json files found under {0}. Local subfolders: {1}. " +
-            "Find local files with: Get-ChildItem 'D:\workspace\SecureLogX\reports' " +
+        $message = ("No result.json files found under {0}. Local subfolders: {1}. " +
+            "To locate benchmark files run: Get-ChildItem '{2}' " +
             "-Filter result.json -File -Recurse -Force | Select-Object -ExpandProperty FullName. " +
-            "Then pass the parent STUDY folder using -RecoverFromPath.") -f $localRoot, $names
+            "Then pass its parent STUDY folder via -RecoverFromPath.") -f $localRoot, $names, (Join-Path $root "reports")
+        throw $message
     }
     $latest = @($candidates | Sort-Object LastWriteTimeUtc -Descending)[0]
     $detailDir = $latest.FullName
