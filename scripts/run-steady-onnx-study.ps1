@@ -314,8 +314,8 @@ try {
         provenance="Original protected synthetic logs and full sample timelines are stored only in an ignored local ZIP; each published row has their SHA-256 hashes."
         limitations="Memory peaks are periodic sampled maxima; rate studies are exploratory and not an extended soak or a production SLA."
     }
-    $compact | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath $publishedPath -Encoding UTF8
-
+    # Publication occurs only AFTER local ZIP checksums succeed, so a
+    # failed archive never leaves a misleading review-ready JSON.
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zipPath = Join-Path $localRoot "detail-$studyId.zip"
     if (Test-Path -LiteralPath $zipPath) { throw "Refusing local ZIP overwrite." }
@@ -354,9 +354,13 @@ try {
             $hasher.Dispose()
         }
     } finally { $archive.Dispose() }
-    if (-not $KeepLocalDetails) {
+    # Do not discard partial local runs: they may be needed for further
+    # inspection. Complete studies can safely retain the validated ZIP only.
+    if (-not $KeepLocalDetails -and $completeStudy) {
         Remove-Item -LiteralPath $detailDir -Recurse -Force
     }
+    $compact | ConvertTo-Json -Depth 15 |
+        Set-Content -LiteralPath $publishedPath -Encoding UTF8
 
     Write-Host "STEADY ONNX $($compact.status): $($trials.Count)/$($plan.Count) individually safety-validated runs."
     foreach ($g in $groups) {
