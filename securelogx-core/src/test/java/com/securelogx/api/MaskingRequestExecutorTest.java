@@ -60,6 +60,8 @@ class MaskingRequestExecutorTest {
                     )
             );
 
+            executor.beginQueueWaitMeasurementWindow();
+
             Thread secondCaller = new Thread(
                     () -> secondResult.set(
                             executor.execute(
@@ -110,6 +112,10 @@ class MaskingRequestExecutorTest {
                     .mapToLong(Long::longValue).sum());
             assertTrue(waited.maxWaitMillis() >= 25.0,
                     "Second accepted call must record actual queue wait");
+            assertTrue(executor.maxMeasuredQueueWaitMillis() >= 25.0,
+                    "Post-window queue maximum must include second request");
+            assertTrue(waited.maxWaitMillis()
+                    >= executor.maxMeasuredQueueWaitMillis());
         }
     }
 
