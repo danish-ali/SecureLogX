@@ -46,6 +46,12 @@ $rateValues = @(
 if (@($rateValues | Select-Object -Unique).Count -ne $rateValues.Count) {
     throw "Rates must be distinct."
 }
+$recoveryMode = $RecoverLatest -or
+    -not [string]::IsNullOrWhiteSpace($RecoverFromPath)
+if ($RecoverLatest -and
+        -not [string]::IsNullOrWhiteSpace($RecoverFromPath)) {
+    throw "Use either -RecoverLatest or -RecoverFromPath, not both."
+}
 # Archival-only recovery must work even if model files have been moved
 # since the original run: no native session or Maven process is started.
 if (-not $recoveryMode) {
@@ -64,12 +70,6 @@ if ($UseExampleOrganizationRules -and -not (Test-Path -LiteralPath (Join-Path $r
 }
 
 $localRoot = Join-Path $root "reports\parallel-onnx\.local-steady-runs"
-$recoveryMode = $RecoverLatest -or
-    -not [string]::IsNullOrWhiteSpace($RecoverFromPath)
-if ($RecoverLatest -and
-        -not [string]::IsNullOrWhiteSpace($RecoverFromPath)) {
-    throw "Use either -RecoverLatest or -RecoverFromPath, not both."
-}
 $detailDir = $null
 if (-not [string]::IsNullOrWhiteSpace($RecoverFromPath)) {
     $detailDir = (Resolve-Path -LiteralPath $RecoverFromPath -ErrorAction Stop).Path
