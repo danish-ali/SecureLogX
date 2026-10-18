@@ -181,6 +181,18 @@ public final class SecureMasker implements AutoCloseable {
     }
 
     /**
+     * Observational-only, post-warmup queue wait measurement.
+     * Never changes masking or the bounded worker/queue.
+     */
+    public void beginQueueWaitMeasurementWindow() {
+        maskingRuntime.beginQueueWaitMeasurementWindow();
+    }
+
+    public double getMaxMeasuredQueueWaitMillis() {
+        return maskingRuntime.maxMeasuredQueueWaitMillis();
+    }
+
+    /**
      * Returns only aggregate rule-proposal metadata; never raw log values.
      * Opt-in telemetry is in-memory and scoped to this masker instance.
      */
