@@ -60,6 +60,32 @@ public final class SecureLogXInferenceDiagnostics {
         );
     }
 
+    /**
+     * Begin a post-warmup observation window. Never changes masking routing,
+     * native worker count, queue capacity or inference sessions.
+     */
+    public static boolean beginQueueWaitWindow(
+            LoggerContext context, String environment
+    ) {
+        if (context == null) {
+            throw new IllegalArgumentException("LoggerContext is required");
+        }
+        return SecureMaskerRegistry.beginQueueWaitWindow(
+                context, environment
+        );
+    }
+
+    public static java.util.OptionalDouble maxMeasuredQueueWaitMillis(
+            LoggerContext context, String environment
+    ) {
+        if (context == null) {
+            throw new IllegalArgumentException("LoggerContext is required");
+        }
+        return SecureMaskerRegistry.maxMeasuredQueueWaitMillis(
+                context, environment
+        );
+    }
+
     public record Snapshot(
             HybridRuntimeStats routing,
             InferenceStageStats stages
