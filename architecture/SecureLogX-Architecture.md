@@ -5189,6 +5189,127 @@ the previously observed non-monotonic burst failures.
 
 ---
 
+### 2026-10-18 — Concurrency optimization review and sequencing of six proposals
+
+**Decision: FIX INSTRUMENTATION NOW; DEFER SEMANTIC/RUNTIME CHANGES UNTIL
+A COMPLETE STEADY-RATE BASELINE IS PUBLISHED.**
+
+**Evidence/issue:** User-local open-loop 5-events/s real-ONNX pilot
+reported 300/300 normally masked events, no fail-closed, p95 ~1,138ms,
+p99 ~1,285ms, average native queue wait ~369ms and sampled RSS maximum
+742,666,240 bytes. This is an *individual console-reported run*, not
+an archived full 5/6/7 study. The Windows study script failed when
+`Measure-Object -Property fail_closed` was applied to ordered-dictionary
+trial records. Fix: aggregate typed `PSCustomObject` trials and explicitly
+project scalar numeric properties, validate group sizes and support a
+no-Maven/no-ONNX `-RecoverLatest` path that archives existing local
+results under a clearly labeled complete/partial study status. The
+recovery path does not invent the Git source revision of older raw runs.
+
+**Required benchmark fixes:**
+- **Actual measured-only max queue wait**: lifetime
+  `max_millis_including_warmup` is not a valid per-workload maximum.
+  Begin an observational queue-window *after warmup*, record the max
+  for worker tasks **submitted since the window start**, and emit
+  `max_millis_measured_only`. No change to worker count, queue sizing
+  or masking behavior. Keep a precise explanation: requests abandoned
+  before worker start do not contribute to worker-start wait histograms.
+- **Benign negative control as a functional gate**: all applicable
+  successful `bench-ordinal % 10 == 6` fixtures must preserve
+  `version=1.2.3.4`. Overmasking the version makes
+  `functional_passed=false` even when protected-output security and
+  event completeness are intact. Do not relabel benign overmask as a
+  raw-data confidentiality leak. Older collected results lack this
+  explicit gate, so treat their status as historical, not revalidated.
+- Keep measured offered dispatch rate distinct from completed protected
+  events/s and useful **normally masked** events/s; a good p95 achieved
+  by failing closed is not healthy functional capacity.
+
+**Optimization decision log (no production behavior changed in this
+instrumentation-only commit):**
+
+1. **Pre-queue deterministic split — APPROVE FOR ISOLATED NEXT PHASE.**
+   Today `SecureMasker.maskAllWithOrigins` deduplicates field values
+   and submits **the entire event's fields** to
+   `MaskingRequestExecutor.execute`, which wraps
+   `ONNXDynamicInferenceEngine.maskBatch`. Hybrid deterministic
+   routing currently runs *inside* that native-worker task. Move only
+   independently, conclusively policy-proven MASK/ALLOW decisions to
+   the caller/rewrite side and send only ESCALATE fields to ONNX.
+   This must preserve ordered origin associations, deterministic/ML
+   conflict escalation, full-event fail-closed on any unresolved
+   security failure, per-organization policy immutability, identical
+   final results/sequence and no destination-before-rewrite bypass.
+   `ALLOW` must require an actual safe negative-context decision,
+   not mere absence of a regex match. Measure false-ALLOW, recall,
+   latency and per-field model invocation with parity/fuzz tests
+   before enabling a default. **No untested regex-only bypass.**
+
+2. **Isolate long multi-window fields — APPROVE DESIGN, NOT A NEW
+   NATIVE LANE.** Long 384-token-window records can cause
+   head-of-line blocking on the single ONNX worker. Explore
+   a bounded token/window cost estimate ahead of admission; any
+   over-budget item must emit an entirely safe fail-closed event
+   (preserving ingress identity), not raw or partially sanitized
+   fields. A dedicated native lane would require its own native
+   session/memory envelope and soak; do not introduce it now.
+   Compare short-field p99 with/without long-record interference
+   under the same fixed-rate profile.
+
+3. **Deadline-aware admission — APPROVE EXPERIMENT.** Read-only
+   queue-wait histogram is a measurement, not sufficient alone
+   to predict deadlines. Use conservative outstanding-work estimates
+   plus recent measured *worker service-time* statistics, not
+   a caller latency percentile mistaken for native service time.
+   Provide explicit `BUDGET_REJECTED` fail-closed accounting,
+   do not silently classify as successfully masked, and verify
+   cancellation/native lifecycle/sequence integrity. Do not change
+   this gate until steady-rate baseline shows need and regression
+   tests cover every rejection race.
+
+4. **Short ESCALATE-field batching — DEFER.** First measure
+   post-split normal requests and native `session.run` time.
+   Only combine independent short fields within one bounded
+   execution session after ownership, origins, privacy isolation,
+   per-field result count, time accounting and contamination tests
+   prove safe. No cross-organization batching.
+
+5. **H2 cheap cascade — RESEARCH ONLY.** H2 remains
+   `EXPERIMENTAL_NOT_IMPLEMENTED`; compare recall-first cascade
+   on the frozen challenge corpus before claiming equivalent
+   high-risk full-span recall and appropriate negative controls.
+   Never trade down the existing sensitivity gate merely for
+   lower ONNX invocation rate.
+
+6. **Shared one-model process per host — FUTURE ARCHITECTURE.**
+   A separate per-host masking service could share one ONNX model
+   among multiple Java services and avoid ~700 MiB *per app JVM*,
+   but it introduces protocol trust, isolation, local availability,
+   health checks, request timeouts, and strict fail-closed handling.
+   No network/on-host plaintext persistence, and no fallback to
+   unprotected application appenders. A second in-process ONNX
+   worker remains blocked on a native-memory soak and performance
+   characterization.
+
+**Non-negotiable invariants:** Synchronous rewriting before any
+output destination/async writer queue; no raw payload forwarding
+on disabled masking, model failure, deadline, overload or policy
+inconsistency; one organization per masker and no shared
+cross-organization rule state; one native worker until approved
+resource-validation evidence exists. **Per-field fail-closed must NOT
+replace whole-event fail-closed** until field-boundary reconstruction
+and adjacency attacks prove that no sensitive value can be recovered
+from surviving fields.
+
+**Release order:** Fix benchmark gate/provenance → recover existing
+study → complete independent 5/6/7 arrival-rate testing →
+characterize long-window and worker service times → design/verify
+pre-queue split in isolation → steady-rate/soak again →
+Spring Boot starter/Maven release only after sustained correctness,
+confidentiality, latency and dependency-security gates pass.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
