@@ -12,6 +12,9 @@ param(
     [ValidateRange(1,2147483647)][int]$RandomSeed = 20261017,
     [switch]$UseExampleOrganizationRules,
     [switch]$KeepLocalDetails,
+    # Rebuild a compact report from already finished local results;
+    # never reruns Maven or ONNX when recovering.
+    [switch]$RecoverLatest,
     [switch]$CommitResults,
     [switch]$PushResults
 )
@@ -53,15 +56,34 @@ if ($UseExampleOrganizationRules -and -not (Test-Path -LiteralPath (Join-Path $r
     throw "Synthetic organization policy not found."
 }
 
-$studyId = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssZ") + "-steady-" + [guid]::NewGuid().ToString("N").Substring(0,12)
 $localRoot = Join-Path $root "reports\parallel-onnx\.local-steady-runs"
+if ($RecoverLatest) {
+    $candidates = @(Get-ChildItem -LiteralPath $localRoot -Directory -ErrorAction Stop |
+        Where-Object { $_.Name -match '^\d{8}T\d{6}Z-steady-[A-Za-z0-9]+$' } |
+        Sort-Object LastWriteTimeUtc -Descending)
+    if ($candidates.Count -lt 1) {
+        throw "No existing local steady-rate study can be recovered."
+    }
+    $studyId = $candidates[0].Name
+    Write-Host "RECOVERY ONLY: $studyId. No Maven or ONNX execution."
+} else {
+    $studyId = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssZ") +
+        "-steady-" + [guid]::NewGuid().ToString("N").Substring(0,12)
+}
 $detailDir = Join-Path $localRoot $studyId
 $publishedRelative = "reports/parallel-onnx/steady/study-$studyId.json"
 $publishedPath = Join-Path $root $publishedRelative
-if ((Test-Path -LiteralPath $detailDir) -or (Test-Path -LiteralPath $publishedPath)) {
-    throw "Steady study destination already exists."
+if (Test-Path -LiteralPath $publishedPath) {
+    throw "Compact study file already exists; refuse overwrite."
 }
-New-Item -ItemType Directory -Path $detailDir -Force | Out-Null
+if (-not $RecoverLatest) {
+    if (Test-Path -LiteralPath $detailDir) {
+        throw "Steady study detail directory already exists."
+    }
+    New-Item -ItemType Directory -Path $detailDir -Force | Out-Null
+} elseif (-not (Test-Path -LiteralPath $detailDir -PathType Container)) {
+    throw "Recovery detail directory missing."
+}
 New-Item -ItemType Directory -Path (Split-Path $publishedPath -Parent) -Force | Out-Null
 
 $rng = [System.Random]::new($RandomSeed)
