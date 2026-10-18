@@ -164,6 +164,13 @@ try {
             $result.raw_payload_forwarded -ne $false -or
             [int]$result.generator_rejections -ne 0 -or
             [int]$result.offered_rate_per_second -ne $rate -or
+            [int]$result.duration_seconds -ne $DurationSeconds -or
+            $result.caller_mode -cne $CallerMode -or
+            [int]$result.max_outstanding_callers -ne $MaxOutstanding -or
+            [int]$result.masking_deadline_millis -ne $MaskingDeadlineMillis -or
+            [int]$result.max_configured_cpu_threads -ne $CpuThreads -or
+            [int]$result.max_inference_windows_per_batch -ne $WindowBatchLimit -or
+            [int]$result.masking_queue_capacity -ne $MaskingQueueCapacity -or
             [int]$result.planned_events -ne $expected -or
             [int]$result.completed_callers -ne $expected -or
             [double]$result.observed_dispatched_rate_per_second -le 0 -or
@@ -205,6 +212,16 @@ try {
             scheduler_start_lag_p95_ms=[double]$result.caller_start_lag_millis.p95
             queue_wait_avg_ms=[double]$result.queue_wait.average_millis
             queue_wait_max_ms_including_warmup=[double]$result.queue_wait.max_millis_including_warmup
+            # Older recovery source did not measure this separately.
+            queue_wait_max_ms_measured_only=$(if ($null -ne $result.queue_wait.max_millis_measured_only) {
+                [double]$result.queue_wait.max_millis_measured_only
+            } else { $null })
+            benign_version_preserved=$(if ($null -ne $result.benign_version_preserved) {
+                [bool]$result.benign_version_preserved
+            } else { $null })
+            benign_control_success_count=$(if ($null -ne $result.benign_control_success_count) {
+                [int]$result.benign_control_success_count
+            } else { $null })
             queue_wait_buckets=$result.queue_wait.mutually_exclusive_bucket_counts
             queue_wait_upper_bounds_ms=$result.queue_wait.upper_bounds_millis
             worker_started=[int]$result.queue_wait.worker_started_requests
@@ -270,10 +287,21 @@ try {
         }
     )
 
+    $completeStudy = ($trials.Count -eq $plan.Count)
+    if ($trials.Count -eq 0) {
+        throw "No local complete benchmark records were recovered."
+    }
     $compact = [ordered]@{
-        schema_version=1; kind="compact-real-onnx-steady-arrival-study"
+        schema_version=2; kind="compact-real-onnx-steady-arrival-study"
         study_id=$studyId; created_at_utc=[DateTime]::UtcNow.ToString("o")
-        source_commit_sha=$sourceSha; synthetic_only=$true
+        # Old raw reports did not capture the Git SHA, do not invent it.
+        source_commit_sha=$(if ($RecoverLatest) { $null } else { $sourceSha })
+        aggregation_commit_sha=$sourceSha
+        recovery_from_existing_local_evidence=[bool]$RecoverLatest
+        status=$(if ($completeStudy) { "COMPLETE_VERIFIED" } else { "PARTIAL_VERIFIED" })
+        expected_trials=$plan.Count
+        validated_trials=$trials.Count
+        synthetic_only=$true
         rate_plan=@($plan.ToArray()); random_seed=$RandomSeed
         repetitions=$Repetitions; duration_seconds=$DurationSeconds
         caller_mode=$CallerMode; max_outstanding=$MaxOutstanding
@@ -281,7 +309,7 @@ try {
         deadline_millis=$MaskingDeadlineMillis; cpu_threads=$CpuThreads
         max_windows_per_batch=$WindowBatchLimit
         masking_queue_capacity=$MaskingQueueCapacity; native_worker_count=1
-        security_validated_all_runs=$true
+        security_validated_all_runs=$completeStudy
         groups=$groups; trials=@($trials.ToArray())
         provenance="Original protected synthetic logs and full sample timelines are stored only in an ignored local ZIP; each published row has their SHA-256 hashes."
         limitations="Memory peaks are periodic sampled maxima; rate studies are exploratory and not an extended soak or a production SLA."
@@ -294,7 +322,7 @@ try {
     [System.IO.Compression.ZipFile]::CreateFromDirectory($detailDir,$zipPath,[System.IO.Compression.CompressionLevel]::Optimal,$false)
     $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
     try {
-        if ($archive.Entries.Count -ne ($plan.Count * 2)) {
+        if ($archive.Entries.Count -ne ($trials.Count * 2)) {
             throw "Local ZIP count validation failed; original directories remain."
         }
         $digests = @{}
@@ -330,7 +358,7 @@ try {
         Remove-Item -LiteralPath $detailDir -Recurse -Force
     }
 
-    Write-Host "STEADY ONNX COMPLETE: $($trials.Count)/$($plan.Count) safety-validated runs."
+    Write-Host "STEADY ONNX $($compact.status): $($trials.Count)/$($plan.Count) individually safety-validated runs."
     foreach ($g in $groups) {
         Write-Host ("Rate {0}/s: functional {1}/{2}, failClosed={3}, minNormal/s={4}, maxP99={5}ms" -f $g.rate_per_second,$g.functional_passes,$g.trials,$g.fail_closed_total,$g.min_normal_masked_per_second,$g.worst_p99_millis)
     }
