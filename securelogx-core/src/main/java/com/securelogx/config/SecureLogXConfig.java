@@ -82,6 +82,17 @@ public class SecureLogXConfig {
         );
     }
 
+    /**
+     * Experimental caller-side deterministic split. Default is false
+     * until parity, frozen high-risk recall and sustained ONNX A/B pass.
+     */
+    public boolean isPreQueueDeterministicRoutingEnabled() {
+        return Boolean.parseBoolean(runtimeProperty(
+                "securelogx.experimental.preQueueDeterministicRoutingEnabled",
+                "false"
+        ));
+    }
+
     public boolean isMlRuleTelemetryEnabled() {
         return Boolean.parseBoolean(
                 runtimeProperty(
