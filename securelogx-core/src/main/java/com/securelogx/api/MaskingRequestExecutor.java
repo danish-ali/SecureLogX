@@ -68,6 +68,10 @@ final class MaskingRequestExecutor implements AutoCloseable {
     private final LongAdder queueWaitStarts = new LongAdder();
     private final LongAdder queueWaitNanos = new LongAdder();
     private final AtomicLong maxQueueWaitNanos = new AtomicLong();
+    // Observation-only workload window; the lifetime max is untouched.
+    private final AtomicLong measuredQueueWindowStartNanos =
+            new AtomicLong(Long.MAX_VALUE);
+    private final AtomicLong measuredQueueMaxWaitNanos = new AtomicLong();
     private final LongAdder[] queueWaitBuckets = newWaitBuckets();
 
     MaskingRequestExecutor(
@@ -144,9 +148,11 @@ final class MaskingRequestExecutor implements AutoCloseable {
         final long submittedAtNanos = System.nanoTime();
         FutureTask<List<MaskedResult>> task =
                 new FutureTask<>(() -> {
-                    recordQueueWait(Math.max(
-                            0L, System.nanoTime() - submittedAtNanos
-                    ));
+                    recordQueueWait(
+                            submittedAtNanos,
+                            Math.max(0L,
+                                    System.nanoTime() - submittedAtNanos)
+                    );
                     workerThread.set(Thread.currentThread());
                     updatePeak(
                             peakActiveRequests,
@@ -345,7 +351,22 @@ final class MaskingRequestExecutor implements AutoCloseable {
         );
     }
 
-    private void recordQueueWait(long nanos) {
+    void beginQueueWaitMeasurementWindow() {
+        // Called after synchronous warmups finish. No effect on admission,
+        // executor scheduling, native inference or lifetime queue statistics.
+        measuredQueueWindowStartNanos.set(Long.MAX_VALUE);
+        measuredQueueMaxWaitNanos.set(0L);
+        measuredQueueWindowStartNanos.set(System.nanoTime());
+    }
+
+    double maxMeasuredQueueWaitMillis() {
+        return measuredQueueMaxWaitNanos.get() / 1_000_000.0;
+    }
+
+    private void recordQueueWait(long submittedAt, long nanos) {
+        if (submittedAt >= measuredQueueWindowStartNanos.get()) {
+            measuredQueueMaxWaitNanos.accumulateAndGet(nanos, Math::max);
+        }
         queueWaitStarts.increment();
         queueWaitNanos.add(nanos);
         maxQueueWaitNanos.accumulateAndGet(nanos, Math::max);
