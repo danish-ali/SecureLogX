@@ -121,6 +121,19 @@ class PreQueueDeterministicRouterTest {
     }
 
     @Test
+    void longAndMultilineFieldsStayOnTheBoundedNativeWorker()
+            throws Exception {
+        var router = approvedRouter();
+        LogEvent longField =
+                event("status=ok " + "a".repeat(2048), 1);
+        LogEvent multiline =
+                event("eventId=bench-12\npassword=do-not-forward", 2);
+        var plan = router.route(List.of(longField, multiline));
+        assertEquals(0, plan.deterministicFields());
+        assertEquals(List.of(longField, multiline), plan.unresolvedFields());
+    }
+
+    @Test
     void anyWorkerDeadlineFailureFailsTheWholeStructuredEventClosed()
             throws Exception {
         var router = approvedRouter();
