@@ -351,6 +351,7 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
             boolean functional = validation.failClosedCount() == 0
                     && lateCallers == 0
                     && completedCallers.get() == plannedEvents
+                    && validation.benignVersionPreserved()
                     && rateFidelity;
             long peakRssBytes = 0;
             long peakPrivateBytes = 0;
@@ -393,6 +394,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                             validation.successCount())
                     .put("fail_closed_events",
                             validation.failClosedCount())
+                    .put("benign_version_preserved",
+                            validation.benignVersionPreserved())
+                    .put("benign_control_success_count",
+                            validation.benignControlSuccessCount())
                     .put("fail_closed_reason_counts",
                             new JSONObject(
                                     validation.failClosedReasonCounts()
