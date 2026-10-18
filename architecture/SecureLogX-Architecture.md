@@ -5050,6 +5050,35 @@ raising the configured deadline.
 
 ---
 
+### 2026-10-18 — Four-repetition ONNX burst boundary is not stable
+
+**STATUS: 32/32 SYNTHETIC SECURITY PASSES; 15/32 STRICT FUNCTIONAL PASSES**
+
+**Evidence:** `reports/parallel-onnx/studies/20261018T003231Z-low-caller-seed20261019-3270749644d2/` (pushed under GitHub commit `42e2533`, tested at source commit `be469a36`). Derived, immutable-source comparison is in `reports/parallel-onnx/comparisons/2026-10-18-32-run-repeated-8-10-11-12-findings.json`.
+
+**Fixed configuration:** 200 measured events and 4 warmups per run, 4 repetitions per 8/10/11/12-caller platform/virtual configuration, seeded order with alternating mode pairs, real BERT/ONNX single worker, 4 intra-op CPU threads, 4 window batch, queue capacity 64, deadline 2,000 ms.
+
+| Callers | Mode | Functional passes | Median caller p95 ms | Median normal masks/s | Total fail-closed |
+|---|---|---:|---:|---:|---:|
+| 8 | Platform | 3/4 | 1,441 | 6.635 | 74 |
+| 8 | Virtual | 2/4 | 1,690 | 6.196 | 67 |
+| 10 | Platform | 4/4 | 1,424 | 7.086 | 0 |
+| 10 | Virtual | 2/4 | 1,736 | 5.893 | 77 |
+| 11 | Platform | 1/4 | 1,518 | 7.068 | 10 |
+| 11 | Virtual | 1/4 | 1,650 | 6.810 | 15 |
+| 12 | Platform | 1/4 | 1,592 | 7.108 | 15 |
+| 12 | Virtual | 1/4 | 1,796 | 6.764 | 53 |
+
+**Quality / integrity:** 6,089 normally masked measured events, 311 protected fail-closed outputs, 6,528 protected records including warmups, 1,842 physical ordering inversions, 6,661 measured ONNX calls and 27,052 windows. All protected records were accounted for, ingress identities unique, reconstructed output checked, and no known raw synthetic fixture exposed. No overload rejection was recorded; all 311 fails were `DEADLINE_EXCEEDED`.
+
+**Critical interpretation:** Earlier 8-caller profiles passed, but this larger 4-repetition study shows 8 platform can fail 74/200 and 8 virtual 52/200 in the third repetition. Ten platform passed all four, yet a fixed capacity cut-off cannot be inferred from this non-monotonic pattern. Transient host/ONNX service-time variability, deadline amplification and burst scheduling require investigation. A normal log event and a securely fail-closed event are **different functional outcomes**. Median p95 is not a sufficient acceptance metric: inspect per-run p99/max and failure counts.
+
+**Resource caveat:** After-workload working set around 698–714 MiB, returning to about 167–185 MiB after context shutdown. These are point samples and do not establish native in-flight memory peaks or soak/leak freedom.
+
+**Next engineering gate:** Stop repeated synchronized burst-only sweeps. Instrument native ONNX service-time distribution, request queue wait, host load and GC, then add a **steady-arrival rate-controlled load** with offered/admitted/success/fail-closed rates and in-flight RSS sampling. Characterize sustainable work rate at a conservative low offered rate (e.g. 5–7 events/s) before adjusting bounded worker capacity or masking deadlines. Preserve unique run evidence and full sequence audit. Do not advertise any passing caller count as a guaranteed production throughput/latency SLO.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
