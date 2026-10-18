@@ -11,6 +11,8 @@ param(
     [ValidateRange(1,10000)][int]$MaskingQueueCapacity = 64,
     [ValidateRange(1,2147483647)][int]$RandomSeed = 20261017,
     [switch]$UseExampleOrganizationRules,
+    # Synthetic A/B experiment only; the production default stays false.
+    [switch]$EnablePreQueueRouting,
     [switch]$KeepLocalDetails,
     # Rebuild a compact report from already finished local results;
     # never reruns Maven or ONNX when recovering.
@@ -169,7 +171,8 @@ try {
         "-Dsecurelogx.model.maxInferenceWindowsPerBatch=$WindowBatchLimit",
         "-Dsecurelogx.runtime.maskingQueueCapacity=$MaskingQueueCapacity",
         "-Dsecurelogx.runtime.maskingDeadlineMillis=$MaskingDeadlineMillis",
-        "-Dsecurelogx.adaptive.mlRoutingTelemetryEnabled=false"
+        "-Dsecurelogx.adaptive.mlRoutingTelemetryEnabled=false",
+        "-Dsecurelogx.experimental.preQueueDeterministicRoutingEnabled=$($EnablePreQueueRouting.IsPresent.ToString().ToLowerInvariant())"
     )
     if ($UseExampleOrganizationRules) {
         $javaOptions += @(
@@ -222,6 +225,9 @@ try {
             [int]$result.masking_deadline_millis -ne $MaskingDeadlineMillis -or
             [int]$result.max_configured_cpu_threads -ne $CpuThreads -or
             [int]$result.max_inference_windows_per_batch -ne $WindowBatchLimit -or
+            ((-not $recoveryMode) -and
+                ([bool]$result.pre_queue_routing_measured_only.enabled -ne
+                    $EnablePreQueueRouting.IsPresent)) -or
             [int]$result.masking_queue_capacity -ne $MaskingQueueCapacity -or
             [int]$result.planned_events -ne $expected -or
             [int]$result.completed_callers -ne $expected -or
@@ -277,6 +283,15 @@ try {
             queue_wait_buckets=$result.queue_wait.mutually_exclusive_bucket_counts
             queue_wait_upper_bounds_ms=$result.queue_wait.upper_bounds_millis
             worker_started=[int]$result.queue_wait.worker_started_requests
+            pre_queue_enabled=$(if ($null -ne $result.pre_queue_routing_measured_only) {
+                [bool]$result.pre_queue_routing_measured_only.enabled
+            } else { $null })
+            pre_queue_deterministic_fields=$(if ($null -ne $result.pre_queue_routing_measured_only) {
+                [long]$result.pre_queue_routing_measured_only.deterministic_fields_resolved
+            } else { $null })
+            pre_queue_escalated_fields=$(if ($null -ne $result.pre_queue_routing_measured_only) {
+                [long]$result.pre_queue_routing_measured_only.escalated_fields
+            } else { $null })
             peak_masking_queue=[int]$result.bounded_executor_measured_only.peak_queued_requests_including_warmup
             deadline_rejections=[int]$result.bounded_executor_measured_only.deadline_exceeded_requests
             overload_rejections=[int]$result.bounded_executor_measured_only.overload_rejected_requests
@@ -357,6 +372,11 @@ try {
         rate_plan=@($plan.ToArray()); random_seed=$RandomSeed
         repetitions=$Repetitions; duration_seconds=$DurationSeconds
         caller_mode=$CallerMode; max_outstanding=$MaxOutstanding
+        experimental_pre_queue_enabled=$(if ($recoveryMode) {
+            $null
+        } else {
+            $EnablePreQueueRouting.IsPresent
+        })
         memory_sample_interval_millis=$MemorySampleMillis
         deadline_millis=$MaskingDeadlineMillis; cpu_threads=$CpuThreads
         max_windows_per_batch=$WindowBatchLimit
