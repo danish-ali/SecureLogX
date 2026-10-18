@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "title": "SecureLogX low-concurrency real-ONNX study findings",
+  "measured_at_utc": "2026-10-17/2026-10-18",
+  "provenance": "Derived only from reports/parallel-onnx/studies/20261017T235150Z-low-caller-seed20261017-54d99978b774/summary-20261017T235150Z-low-caller-seed20261017-54d99978b774.json; no new benchmark was executed.",
+  "source_study_id": "20261017T235150Z-low-caller-seed20261017-54d99978b774",
+  "source_commit_sha": "7d741ffed5145bfdbbedd167dcacf59e96cf1ec8",
+  "github_branch": "chatgpt/hybrid-detection-pipeline",
+  "metrics": {
+    "trials": 16,
+    "measured_events": 3200,
+    "protected_records_including_warmups": 3264,
+    "successful_normal_masked_events": 3200,
+    "fail_closed_events": 0,
+    "onnx_native_calls_measured": 3520,
+    "onnx_windows_measured": 14240,
+    "physical_write_order_inversions": 538,
+    "highest_reported_trial_p99_ms": 1271.303,
+    "working_set_after_workload_mib_range": [
+      700.33,
+      703.68
+    ],
+    "working_set_post_shutdown_mib_range": [
+      167.62,
+      182.86
+    ]
+  },
+  "groups": [
+    {
+      "callers": 1,
+      "mode": "platform",
+      "verified_runs": 2,
+      "functional_passes": 2,
+      "median_p95_ms": 703.479,
+      "max_run_p95_ms": 709.197,
+      "median_normal_masked_events_per_sec": 8.954,
+      "total_fail_closed": 0,
+      "strict_candidate": true,
+      "trial_ids": [
+        "20261017T235318Z-c1-platform-cpu4-w4-d2000-a41a91c7cc13",
+        "20261017T235754Z-c1-platform-cpu4-w4-d2000-8b0d1a2110c4"
+      ]
+    },
+    {
+      "callers": 1,
+      "mode": "virtual",
+      "verified_runs": 2,
+      "functional_passes": 2,
+      "median_p95_ms": 747.412,
+      "max_run_p95_ms": 764.85,
+      "median_normal_masked_events_per_sec": 8.5,
+      "total_fail_closed": 0,
+      "strict_candidate": true,
+      "trial_ids": [
+        "20261017T235357Z-c1-virtual-cpu4-w4-d2000-a8630c234d1a",
+        "20261017T235715Z-c1-virtual-cpu4-w4-d2000-c309a2859944"
+      ]
+    },
+    {
+      "callers": 2,
+      "mode": "platform",
+      "verified_runs": 2,
+      "functional_passes": 2,
+      "median_p95_ms": 768.958,
+      "max_run_p95_ms": 783.341,
+      "median_normal_masked_events_per_sec": 8.955,
+      "total_fail_closed": 0,
+      "strict_candidate": true,
+      "trial_ids": [
+        "20261017T235438Z-c2-platform-cpu4-w4-d2000-12cc07aa35dc",
+        "20261018T000143Z-c2-platform-cpu4-w4-d2000-da8123862d9c"
+      ]
+    },
+    {
+      "callers": 2,
+      "mode": "virtual",
+      "verified_runs": 2,
+      "functional_passes": 2,
+      "median_p95_ms": 733.265,
+      "max_run_p95_ms": 795.08,
+      "median_normal_masked_events_per_sec": 9.393,
+      "total_fail_closed": 0,
+      "strict_candidate": true,
+      "trial_ids": [
+        "20261017T235516Z-c2-virtual-cpu4-w4-d2000-27a9129e8649",
+        "20261018T000108Z-c2-virtual-cpu4-w4-d2000-0f9748f66d10"
+      ]
+    },
+    {
+      "callers": 4,
+      "mode": "platform",
+      "verified_runs": 2,
+      "functional_passes": 2,
+      "median_p95_ms": 784.416,
+      "max_run_p95_ms": 823.743,
+      "median_normal_masked_events_per_sec": 10.074,
+      "total_fail_closed": 0,
+      "strict_candidate": true,
+      "trial_ids": [
+        "20261017T235209Z-c4-platform-cpu4-w4-d2000-a72afda77747",
+        "20261017T235909Z-c4-platform-cpu4-w4-d2000-e9d18962505a"
+      ]
+    },
+    {
+      "callers": 4,
+      "mode": "virtual",
+      "verified_runs": 2,
+      "functional_passes": 2,
+      "median_p95_ms": 813.692,
+      "max_run_p95_ms": 886.829,
+      "median_normal_masked_events_per_sec": 9.606,
+      "total_fail_closed": 0,
+      "strict_candidate": true,
+      "trial_ids": [
+        "20261017T235244Z-c4-virtual-cpu4-w4-d2000-d7c985046486",
+        "20261017T235832Z-c4-virtual-cpu4-w4-d2000-d791529cc5cc"
+      ]
+    },
+    {
+      "callers": 8,
+      "mode": "platform",
+      "verified_runs": 2,
+      "functional_passes": 2,
+      "median_p95_ms": 1146.139,
+      "max_run_p95_ms": 1147.54,
+      "median_normal_masked_events_per_sec": 8.227,
+      "total_fail_closed": 0,
+      "strict_candidate": true,
+      "trial_ids": [
+        "20261017T235554Z-c8-platform-cpu4-w4-d2000-13902ed6b143",
+        "20261018T000027Z-c8-platform-cpu4-w4-d2000-913515d0f4fa"
+      ]
+    },
+    {
+      "callers": 8,
+      "mode": "virtual",
+      "verified_runs": 2,
+      "functional_passes": 2,
+      "median_p95_ms": 1168.685,
+      "max_run_p95_ms": 1201.968,
+      "median_normal_masked_events_per_sec": 8.162,
+      "total_fail_closed": 0,
+      "strict_candidate": true,
+      "trial_ids": [
+        "20261017T235634Z-c8-virtual-cpu4-w4-d2000-97e838f82180",
+        "20261017T235946Z-c8-virtual-cpu4-w4-d2000-a5ba853b11fc"
+      ]
+    }
+  ],
+  "assessment": [
+    "All 16 synthetic runs pass both security and strict 2,000ms functional gate, with 200 normally masked events per trial and zero fail-closed events.",
+    "Four platform callers show highest observed median normally masked throughput (10.074/s); virtual at four show 9.606/s.",
+    "Eight callers remain functionally eligible in this brief workload but median throughput drops to about 8.2/s and p95 grows to about 1.15-1.17s.",
+    "Platform and virtual median comparisons are mixed across 1/2/4/8; do not claim a causal advantage from two trials per group.",
+    "All runs have the same native ONNX workload (220 calls, 890 windows) and preserve numeric per-instance ordering despite physical write inversions.",
+    "Post-shutdown memory snapshots show model resources being released, not a native peak or long soak guarantee.",
+    "Previous one-shot 10-caller runs failed functionality. The transition from repeatable 8-caller success to 10-caller failure warrants targeted 8/9/10/12 re-testing and longer steady-state tests.",
+    "Waves of synchronous callers do not model asynchronous/real-world arrival rates, cross-JVM total order, or sustained overload."
+  ],
+  "provisional_action": "Use 4 platform callers for the next reference performance and correctness run. Treat 8 as a demonstrated brief functional candidate, not validated production limit. Next test 8,9,10,12 with repeated AB/BA modes; keep existing worker, queue and deadline unchanged.",
+  "evidence_limits": "Synthetic known fixtures, only two repetitions per setting, no sustained soak or telemetry for in-flight working-set peaks. Zero failures observed is not proof of zero failure probability."
+}
