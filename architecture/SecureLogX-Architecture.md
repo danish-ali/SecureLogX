@@ -5079,6 +5079,103 @@ raising the configured deadline.
 
 ---
 
+### 2026-10-18 — Steady-arrival ONNX capacity characterization and compact evidence retention
+
+**Status: IMPLEMENTED AND COMMITTED; LOCAL 5/6/7 EVENTS/S MODEL RUNS PENDING**
+
+The repeated 8/10/11/12-caller burst profiles demonstrated
+non-monotonic normal masking throughput and deadline failures
+even at eight callers. Synchronized waves cannot establish
+a sustainable request arrival rate. The new
+`SecureLogXSteadyArrivalOnnxBenchmark` generates controlled
+open-loop fixed-rate application log arrivals using monotonic
+`System.nanoTime` scheduling with a separately bounded
+application caller executor. It exercises the **same real
+BERT/ONNX Log4j2 RewriteAppender**, four warmed synthetic
+events and the existing protected sequence-ID contract.
+The bounded native masking worker remains **one**, with
+intra-op CPU=4, windows/batch cap=4, masking queue=64 and
+deadline=2,000ms.
+
+**Measurements:** The Java benchmark differentiates intended
+offered rate, measured producer dispatch rate, end-to-end
+protected-output completion rate and useful normally masked
+events/second. Reported statistics include actual caller
+p50/p95/p99/max, dispatch/worker scheduling lag,
+separate generator permit rejection and masking queue
+admission rejection, deadline/fail-closed breakdown,
+ONNX native calls/windows, queue depth, peak outstanding
+callers, numeric producer ingress reconstruction, GC
+collections/pause time and periodically sampled process
+RSS/private footprint with a locally preserved timeline.
+The masking runtime now measures a **payload-free
+queue waiting time histogram** from actual submission
+to worker start; read-only diagnostics expose its bounds,
+counts, total/average and high-water mark. Queued
+requests canceled before worker start are not recorded as
+started; histogram totals cannot be assumed to include
+never-started rejected or timed-out jobs.
+
+**Safety gate:** For each rate test, planned generator arrivals
+must be submitted, all requested caller operations complete,
+and all corresponding protected application records must
+be present; unique ingress IDs and numeric sequence
+reconstruction must pass. Synthetic known-secret fixture
+bytes must not reach the protected output. Any generator
+drop invalidates the run rather than being mislabeled a
+masker fail-closed event. Masker deadline/overload
+failures are confidentially fail-closed **but** counted
+as loss of normal logging functionality. An absence of
+observed synthetic fixture leaks does not prove all
+customer data can be logged safely.
+
+**Evidence design:** Historic per-trial records and
+receipts for the prior 6+16+16+32 burst experiments
+have been removed from the *current branch tree*
+(344 files), without rewriting Git history. Four
+consolidated comparisons, three study plan/summary/
+manifest triples and `reports/parallel-onnx/README.md`
+provide a compact review interface, linking exact
+historical commits containing all original evidence.
+All those ancestor commits remain reachable through
+the branch. The steady-rate study runner, by default,
+creates **one committed JSON per study** under
+`reports/parallel-onnx/steady/`, preserving all
+individual run metrics/validation status and original
+file SHA-256. Original result JSON (including memory
+timeline) and protected synthetic logs are compressed
+into **one local Git-ignored ZIP**, its contents
+independently rehashed before extracted folders can
+be removed. The ZIP is not uploaded to Git and will
+need separate storage if long-term detailed raw
+forensic evidence is required. Never use production
+customer logs in this automation.
+
+**Pilot protocol:** Randomized repeated offered rates
+5, 6 and 7 events/second, 60 measured seconds each,
+platform application callers, maximum outstanding
+32, memory sampling every 5 seconds, unchanged native
+worker and deadlines. Run Maven tests/build once
+first; measure at least two repetitions per rate.
+The pilot evaluates short-term steady acceptance,
+**not** a multi-hour leak-free soak or production SLO.
+Rate overload can still occur; a secure fail-closed
+result is not a passing functional acceptance.
+See `scripts/run-steady-onnx-study.ps1` and
+`reports/parallel-onnx/README.md` for procedure.
+
+**Next gates:** Execute locally, inspect whether
+normal success remains 100% across both rate repeats
+with p99/max below the configured deadline,
+acceptable observed dispatch jitter, bounded
+request queue waiting and no memory-sampling gaps.
+Only then run longer stable-rate trials or adjust
+native inference admission. Record host load, thermal
+state and GC/JFR traces where available to explain
+the previously observed non-monotonic burst failures.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
