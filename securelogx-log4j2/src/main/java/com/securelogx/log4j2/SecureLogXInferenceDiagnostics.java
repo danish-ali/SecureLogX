@@ -46,6 +46,20 @@ public final class SecureLogXInferenceDiagnostics {
         return SecureMaskerRegistry.runtimeSnapshot(context, environment);
     }
 
+    /**
+     * Aggregate elapsed queue waits for started native masking jobs.
+     * Reading this does not initialize ONNX or reveal application data.
+     */
+    public static Optional<com.securelogx.api.MaskingQueueWaitStats>
+    queueWaitStats(LoggerContext context, String environment) {
+        if (context == null) {
+            throw new IllegalArgumentException("LoggerContext is required");
+        }
+        return SecureMaskerRegistry.queueWaitSnapshot(
+                context, environment
+        );
+    }
+
     public record Snapshot(
             HybridRuntimeStats routing,
             InferenceStageStats stages
