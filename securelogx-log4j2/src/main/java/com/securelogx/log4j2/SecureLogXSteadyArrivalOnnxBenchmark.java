@@ -336,9 +336,22 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
             );
             long lateCallers = completedDurations.stream()
                     .filter(n -> n > deadlineNanos).count();
+            JSONObject dispatchLag =
+                    SecureLogXApplicationLogBenchmark.latencyJson(
+                            dispatchDelays
+                    );
+            double dispatchRate = (plannedEvents - 1.0)
+                    / ((lastDispatchAt - firstDispatchAt)
+                            / 1_000_000_000.0);
+            // An experiment whose generator delivers late bursts is not a
+            // valid sustained-rate pass, even if masking returns normally.
+            boolean rateFidelity = dispatchRate >= rate * 0.95
+                    && dispatchLag.getDouble("p95")
+                            <= 1000.0 / rate;
             boolean functional = validation.failClosedCount() == 0
                     && lateCallers == 0
-                    && completedCallers.get() == plannedEvents;
+                    && completedCallers.get() == plannedEvents
+                    && rateFidelity;
             long peakRssBytes = 0;
             long peakPrivateBytes = 0;
             for (JSONObject point : memorySamples) {
@@ -358,6 +371,7 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                             "real-onnx-steady-arrival-log4j2")
                     .put("security_passed", true)
                     .put("functional_passed", functional)
+                    .put("rate_fidelity_passed", rateFidelity)
                     .put("passed", functional)
                     .put("raw_payload_forwarded", false)
                     .put("offered_rate_per_second", rate)
@@ -396,9 +410,7 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     .put("elapsed_millis",
                             TimeUnit.NANOSECONDS.toMillis(wallNanos))
                     .put("observed_dispatched_rate_per_second",
-                            (plannedEvents - 1.0)
-                                    / ((lastDispatchAt - firstDispatchAt)
-                                            / 1_000_000_000.0))
+                            dispatchRate)
                     .put("protected_completions_per_second",
                             plannedEvents
                                     / (wallNanos / 1_000_000_000.0))
@@ -414,9 +426,7 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                                     schedulerDelays
                             ))
                     .put("producer_dispatch_lag_millis",
-                            SecureLogXApplicationLogBenchmark.latencyJson(
-                                    dispatchDelays
-                            ))
+                            dispatchLag)
                     .put("bounded_executor_measured_only",
                             SecureLogXParallelOnnxBenchmark.executorStatsJson(
                                     runtimeBefore, runtimeAfter
