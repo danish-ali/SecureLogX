@@ -465,14 +465,11 @@ public final class SecureLogXParallelOnnxBenchmark {
                             "Duplicate successful benchmark eventId"
                     );
                 }
-                if (ordinal % 10 == 6) {
-                    if (!line.contains(
-                            SecureLogXApplicationLogBenchmark.VERSION_CONTROL
-                    )) {
-                        throw new IllegalStateException(
-                                "Benign version control was overmasked"
-                        );
-                    }
+                if (ordinal % 10 == 6
+                        && line.contains(
+                                "version="
+                                        + SecureLogXApplicationLogBenchmark.VERSION_CONTROL
+                        )) {
                     benignControlSuccess++;
                 }
             } else {
@@ -496,9 +493,16 @@ public final class SecureLogXParallelOnnxBenchmark {
                             + "instanceId, found " + audit.instances()
             );
         }
+        int expectedBenign = 0;
+        for (int ordinal = 0; ordinal < events; ordinal++) {
+            if (ordinal % 10 == 6) {
+                expectedBenign++;
+            }
+        }
         return new Validation(
                 successfulIds.size(), failed, reasons, audit,
-                benignControlSuccess, benignControlSuccess > 0
+                benignControlSuccess,
+                benignControlSuccess == expectedBenign
         );
     }
 
