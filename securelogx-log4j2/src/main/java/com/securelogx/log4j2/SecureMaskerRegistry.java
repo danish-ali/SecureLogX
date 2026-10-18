@@ -203,6 +203,45 @@ final class SecureMaskerRegistry {
         return java.util.Optional.empty();
     }
 
+    static boolean beginQueueWaitWindow(
+            LoggerContext context, String environment
+    ) {
+        synchronized (LOCK) {
+            Map<String, MaskerHandle> byEnvironment =
+                    MASKERS_BY_CONTEXT.get(context);
+            if (byEnvironment != null) {
+                MaskerHandle handle =
+                        byEnvironment.get(normalize(environment));
+                if (handle != null
+                        && handle.closeable() instanceof SecureMasker masker) {
+                    masker.beginQueueWaitMeasurementWindow();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    static java.util.OptionalDouble maxMeasuredQueueWaitMillis(
+            LoggerContext context, String environment
+    ) {
+        synchronized (LOCK) {
+            Map<String, MaskerHandle> byEnvironment =
+                    MASKERS_BY_CONTEXT.get(context);
+            if (byEnvironment != null) {
+                MaskerHandle handle =
+                        byEnvironment.get(normalize(environment));
+                if (handle != null
+                        && handle.closeable() instanceof SecureMasker masker) {
+                    return java.util.OptionalDouble.of(
+                            masker.getMaxMeasuredQueueWaitMillis()
+                    );
+                }
+            }
+        }
+        return java.util.OptionalDouble.empty();
+    }
+
     static MlRoutingTelemetry.Snapshot mlTelemetrySnapshot(
             LoggerContext context,
             String environment
