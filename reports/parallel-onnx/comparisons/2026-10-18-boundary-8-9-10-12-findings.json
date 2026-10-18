@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "kind": "real-onnx-fixed-synthetic-concurrency-boundary-comparison",
+  "study_id": "20261018T000917Z-low-caller-seed20261018-7edc022619a1",
+  "source_summary": "reports/parallel-onnx/studies/20261018T000917Z-low-caller-seed20261018-7edc022619a1/summary-20261018T000917Z-low-caller-seed20261018-7edc022619a1.json",
+  "source_sha": "a9cca12d7b6dc791ec0a495a3f16ec639498081e",
+  "note": "Derived directly from the pushed 16-trial study. No new execution. All runs use 200 synthetic measured events, four warmups, one bounded native ONNX worker, queue=64, 2-second deadline, four ONNX CPU threads and four-window cap.",
+  "trials": 16,
+  "functional_passes": 13,
+  "synthetic_security_passes": 16,
+  "measured_normal_masked_events": 3126,
+  "measured_fail_closed_events": 74,
+  "protected_records_including_warmup": 3264,
+  "actual_onnx_calls": 3433,
+  "actual_onnx_windows": 13912,
+  "physical_order_inversions": 1014,
+  "after_workload_working_set_mib_range": [
+    698.059,
+    703.191
+  ],
+  "after_stop_working_set_mib_range": [
+    167.172,
+    183.805
+  ],
+  "groups": [
+    {
+      "callers": 8,
+      "mode": "platform",
+      "runs": 2,
+      "functional_passes": 2,
+      "median_normal_masked_events_per_second": 8.706,
+      "median_p95_millis": 1084.706,
+      "total_fail_closed": 0,
+      "total_deadline_exceeded": 0,
+      "total_overload_rejected": 0,
+      "strict_candidate_all_repetitions": true,
+      "source_trial_ids": [
+        "20261018T001051Z-c8-platform-cpu4-w4-d2000-d10a6b630fe8",
+        "20261018T001524Z-c8-platform-cpu4-w4-d2000-6304cec201fd"
+      ]
+    },
+    {
+      "callers": 8,
+      "mode": "virtual",
+      "runs": 2,
+      "functional_passes": 2,
+      "median_normal_masked_events_per_second": 8.306,
+      "median_p95_millis": 1134.555,
+      "total_fail_closed": 0,
+      "total_deadline_exceeded": 0,
+      "total_overload_rejected": 0,
+      "strict_candidate_all_repetitions": true,
+      "source_trial_ids": [
+        "20261018T001129Z-c8-virtual-cpu4-w4-d2000-c0033b8a896f",
+        "20261018T001445Z-c8-virtual-cpu4-w4-d2000-1136a46ea4dc"
+      ]
+    },
+    {
+      "callers": 9,
+      "mode": "platform",
+      "runs": 2,
+      "functional_passes": 2,
+      "median_normal_masked_events_per_second": 8.708,
+      "median_p95_millis": 1292.538,
+      "total_fail_closed": 0,
+      "total_deadline_exceeded": 0,
+      "total_overload_rejected": 0,
+      "strict_candidate_all_repetitions": true,
+      "source_trial_ids": [
+        "20261018T001327Z-c9-platform-cpu4-w4-d2000-20371c6289d9",
+        "20261018T001638Z-c9-platform-cpu4-w4-d2000-a43e9896e8e2"
+      ]
+    },
+    {
+      "callers": 9,
+      "mode": "virtual",
+      "runs": 2,
+      "functional_passes": 2,
+      "median_normal_masked_events_per_second": 9.644,
+      "median_p95_millis": 1035.508,
+      "total_fail_closed": 0,
+      "total_deadline_exceeded": 0,
+      "total_overload_rejected": 0,
+      "strict_candidate_all_repetitions": true,
+      "source_trial_ids": [
+        "20261018T001405Z-c9-virtual-cpu4-w4-d2000-3317c0b113ef",
+        "20261018T001603Z-c9-virtual-cpu4-w4-d2000-9e04c18bdd9d"
+      ]
+    },
+    {
+      "callers": 10,
+      "mode": "platform",
+      "runs": 2,
+      "functional_passes": 2,
+      "median_normal_masked_events_per_second": 7.719,
+      "median_p95_millis": 1327.552,
+      "total_fail_closed": 0,
+      "total_deadline_exceeded": 0,
+      "total_overload_rejected": 0,
+      "strict_candidate_all_repetitions": true,
+      "source_trial_ids": [
+        "20261018T001210Z-c10-platform-cpu4-w4-d2000-524cf716a557",
+        "20261018T001956Z-c10-platform-cpu4-w4-d2000-3dc26b5a222b"
+      ]
+    },
+    {
+      "callers": 10,
+      "mode": "virtual",
+      "runs": 2,
+      "functional_passes": 2,
+      "median_normal_masked_events_per_second": 7.714,
+      "median_p95_millis": 1360.013,
+      "total_fail_closed": 0,
+      "total_deadline_exceeded": 0,
+      "total_overload_rejected": 0,
+      "strict_candidate_all_repetitions": true,
+      "source_trial_ids": [
+        "20261018T001249Z-c10-virtual-cpu4-w4-d2000-6b903623d0e3",
+        "20261018T001900Z-c10-virtual-cpu4-w4-d2000-001262d8bf45"
+      ]
+    },
+    {
+      "callers": 12,
+      "mode": "platform",
+      "runs": 2,
+      "functional_passes": 1,
+      "median_normal_masked_events_per_second": 6.748,
+      "median_p95_millis": 1617.36,
+      "total_fail_closed": 66,
+      "total_deadline_exceeded": 66,
+      "total_overload_rejected": 0,
+      "strict_candidate_all_repetitions": false,
+      "source_trial_ids": [
+        "20261018T000935Z-c12-platform-cpu4-w4-d2000-75d0115baf9c",
+        "20261018T001807Z-c12-platform-cpu4-w4-d2000-0cbd0830ab98"
+      ]
+    },
+    {
+      "callers": 12,
+      "mode": "virtual",
+      "runs": 2,
+      "functional_passes": 0,
+      "median_normal_masked_events_per_second": 7.722,
+      "median_p95_millis": 1522.26,
+      "total_fail_closed": 8,
+      "total_deadline_exceeded": 8,
+      "total_overload_rejected": 0,
+      "strict_candidate_all_repetitions": false,
+      "source_trial_ids": [
+        "20261018T001012Z-c12-virtual-cpu4-w4-d2000-446e360b3b27",
+        "20261018T001719Z-c12-virtual-cpu4-w4-d2000-4e6a9d3f0897"
+      ]
+    }
+  ],
+  "twelve_caller_details": [
+    {
+      "mode": "platform",
+      "run_id": "20261018T000935Z-c12-platform-cpu4-w4-d2000-75d0115baf9c",
+      "normal_masked": 200,
+      "fail_closed": 0,
+      "caller_p95_millis": 1217.9624,
+      "normal_masked_per_second": 9.244
+    },
+    {
+      "mode": "virtual",
+      "run_id": "20261018T001012Z-c12-virtual-cpu4-w4-d2000-446e360b3b27",
+      "normal_masked": 199,
+      "fail_closed": 1,
+      "caller_p95_millis": 1308.2302,
+      "normal_masked_per_second": 8.678
+    },
+    {
+      "mode": "virtual",
+      "run_id": "20261018T001719Z-c12-virtual-cpu4-w4-d2000-4e6a9d3f0897",
+      "normal_masked": 193,
+      "fail_closed": 7,
+      "caller_p95_millis": 1736.2894,
+      "normal_masked_per_second": 6.766
+    },
+    {
+      "mode": "platform",
+      "run_id": "20261018T001807Z-c12-platform-cpu4-w4-d2000-0cbd0830ab98",
+      "normal_masked": 134,
+      "fail_closed": 66,
+      "caller_p95_millis": 2016.758,
+      "normal_masked_per_second": 4.253
+    }
+  ],
+  "findings": [
+    "All synthetic output checks passed, and all expected protected records were present with unique ingress IDs and reconstructable per-instance numeric ordering.",
+    "8, 9 and 10 callers passed 4/4 trials at each concurrency level in this study; 12 callers passed 1/4 overall (platform 1/2, virtual 0/2).",
+    "All 74 protected fail-closed events at 12 callers were deadline exceeded, not queue-capacity rejections.",
+    "Failure profile at 12 callers was unstable: platform trial outcomes 0 then 66 failures, virtual 1 then 7 failures.",
+    "The 10-caller result contradicts apparent robustness from prior two one-shot 10-caller saturation runs, which timed out. Do not declare an absolute safe boundary of 10 based only on this later study.",
+    "Four platform callers remains the previously observed best normal-throughput baseline (median 10.074/s) for these short tests. At 8-10 callers there is little sustained throughput benefit from adding waiting callers to one ONNX worker.",
+    "The 64-slot queue did not reject at 12 callers; deadlining from wait/service time must be characterized separately from queue admission. Altering queue size alone will not solve the demonstrated issue.",
+    "Caller type did not confer a consistently better result across scenarios, with only two repeated trials per group.",
+    "Memory values are after-workload and after-shutdown snapshots only; neither instantaneous RSS peaks nor multi-hour stability are established."
+  ],
+  "next_gate": "Repeat 8/10/11/12-caller study with more repetitions (4), include per-run max/p99 and full error classification; then implement steady-rate admission/soak with peak memory tracking before worker scaling."
+}
