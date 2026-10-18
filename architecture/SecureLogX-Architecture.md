@@ -4913,6 +4913,74 @@ normal throughput and actual fail-closed rates.
 
 ---
 
+### 2026-10-17/18 — Measured paired real-ONNX low-concurrency acceptance (1/2/4/8)
+
+**STATUS: 16/16 SYNTHETIC SECURITY PASSES, 16/16 FUNCTIONAL PASSES;
+ZERO FAIL-CLOSED EVENTS IN THESE FINITE TRIALS**
+
+**Provenance:** Study ID
+`20261017T235150Z-low-caller-seed20261017-54d99978b774`
+was executed on source commit `7d741ffe` and pushed as Git
+commit `6a905d6a`. All 16 original logs/results, SHA-256
+manifests, planned seeded run order, receipts and consolidated
+summary are under `reports/parallel-onnx/studies/` and
+`reports/parallel-onnx/history/`. A derived analysis is recorded
+at `reports/parallel-onnx/comparisons/2026-10-17-low-concurrency-1-2-4-8-findings.json`.
+
+**Fixed workload:** 200 measured events plus four warmups per
+trial, two matched randomized-order AB/BA repetitions at each
+of 1, 2, 4, 8 platform or virtual callers. One bounded native
+ONNX worker, 4 CPU intra-op threads, 4 inference windows per
+batch, 64 queue slots, 2,000 ms deadline. Each run performed
+exactly **220 measured native ONNX calls and 890 windows**.
+
+| Callers | Mode | Functional runs | Median p95 ms | Median normal masked events/s |
+|---|---|---:|---:|---:|
+| 1 | Platform | 2/2 | 703 | 8.954 |
+| 1 | Virtual | 2/2 | 747 | 8.500 |
+| 2 | Platform | 2/2 | 769 | 8.955 |
+| 2 | Virtual | 2/2 | 733 | 9.393 |
+| 4 | Platform | 2/2 | 784 | **10.074** |
+| 4 | Virtual | 2/2 | 814 | 9.606 |
+| 8 | Platform | 2/2 | 1146 | 8.227 |
+| 8 | Virtual | 2/2 | 1169 | 8.162 |
+
+**Integrity and confidentiality:** 3,200 normally masked
+measured events, zero deadline/overload/fail-closed events,
+3,264 protected records including 64 warmups, 538 physical
+write-order inversions across runs, unique ingress IDs and
+valid per-instance numeric reconstruction. All 16 runs
+reported zero remaining runtime owners after shutdown.
+
+**Capacity indication, not an SLA:** Four platform callers
+gave the highest **observed median** normal throughput;
+8 callers still passed but slowed the single worker rather
+than improving useful throughput, with higher p95. Earlier
+10-caller results (one pass per caller mode measured in a
+different earlier saturation study) had nonzero deadline
+failures. The operating boundary may be between eight and
+ten *for this fixed synthetic burst workload*, but it has
+not been located or qualified for production. Mixed paired
+results provide no robust evidence that virtual callers
+outperform platform callers.
+
+**Memory evidence:** 16 end-of-workload process working
+sets ranged roughly 700.3–703.7 MiB and after-stop
+working sets 167.6–182.9 MiB; these are discrete endpoint
+samples, not native-memory peaks or multi-hour leak
+measurements.
+
+**Next gate:** Hold the one native worker, queue 64,
+2-second deadline and model fixed. Run a repeated 8/9/10/12
+caller boundary study in balanced AB/BA order and
+then a long, steady-arrival soak at an accepted concurrency.
+Record normal masking throughput separately from fail-closed
+delivery; retain complete protected sequencing evidence.
+Do not claim production service-level compliance from
+the present two repetitions.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
