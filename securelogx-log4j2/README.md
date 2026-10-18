@@ -827,9 +827,51 @@ exploratory comparison only. Thread type remains a
 platform thread. Stable causal performance conclusions require
 controlled load, repeated measurements and eventual soak testing.
 
-**State:** New orchestrator and archival logic committed; these
-low-concurrency measurements have **not** yet been executed
-in the user's local ONNX environment.
+**Measured outcome (October 17–18, 2026):** All 16/16
+paired 1/2/4/8-caller real-ONNX trials passed both the
+2,000 ms functional gate and protected-output sequencing/
+synthetic-fixture security checks. There were 3,200 normally
+masked measured events, zero fail-closed events and 538
+physical write-order inversions across all trials.
+
+The 4-caller platform configuration had the highest median
+normally masked throughput (10.074/s, p95 784 ms).
+Eight callers remained functional, but useful median
+throughput declined to roughly 8.2 events/s and p95 rose
+to about 1.15–1.17 seconds. Unlike the prior 10-caller
+saturation runs, these short 8-caller trials incurred
+no deadline failures. Full results:
+
+- `reports/parallel-onnx/studies/20261017T235150Z-low-caller-seed20261017-54d99978b774/`
+- `reports/parallel-onnx/comparisons/2026-10-17-low-concurrency-1-2-4-8-findings.json`
+
+**Next boundary characterization:** Keep the same actual
+ONNX worker/CPU/window/queue/deadline configuration and
+explore 8, 9, 10, 12 callers, using the same randomized
+paired execution order:
+
+```powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+powershell -ExecutionPolicy Bypass `
+  -File .\scripts\run-low-concurrency-onnx-study.ps1 `
+  -Callers "8,9,10,12" `
+  -Repetitions 2 `
+  -Events 200 `
+  -MaskingDeadlineMillis 2000 `
+  -CpuThreads 4 `
+  -WindowBatchLimit 4 `
+  -MaskingQueueCapacity 64 `
+  -RandomSeed 20261018 `
+  -UseExampleOrganizationRules `
+  -CommitResults `
+  -PushResults
+```
+
+These are short synthetic burst tests only. A larger multi-hour
+soak with steady arrivals, in-flight native-memory monitoring,
+and realistic workload variation remains required before any
+claim of production concurrency/SLO readiness.
 
 ---
 
