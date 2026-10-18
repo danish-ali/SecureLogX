@@ -52,20 +52,28 @@ Startup fail-fast API            IMPLEMENTED
 Legacy payload leak              FIXED
 Unsupported Kafka ingress        REMOVED
 
-Timeout/backpressure correctness VALIDATED (real ONNX cancellation)
-Concurrency saturation policy    VALIDATED (single-worker pilot)
-Hot redeploy/native lifecycle    VALIDATED (4 real ONNX context cycles)
-Real application log benchmark   FUNCTIONAL PASS (48/48 at 15-second deadline)
-2-second application-log latency SINGLE-RUN PASS (48/48; 0 over 2s; repeat pending)
-Organization-aware masking       EXPERIMENTAL (38 metadata matches measured)
-Event-local duplicate reuse      BENCHMARK OBSERVED (27 evaluations saved)
-Origin-aware ML route telemetry  IMPLEMENTED (aggregate counts observed)
-ONNX per-stage profiling         LOCAL RUN REPORTED (53 calls/196 windows)
-CPU thread cap                   BENCHMARK: 4 threads faster than 2
-Parallel sequence reconstruction IMPLEMENTED; LOCAL CONCURRENCY TEST PENDING
-Real ONNX parallel load         IMPLEMENTED; LOCAL 10/50/100 PENDING
-Virtual-thread caller comparison AVAILABLE; LOCAL A/B PENDING
-Multi-hour soak                  OPEN
+Timeout/backpressure security    VALIDATED on synthetic ONNX deadline/overload tests
+Normal logging under overload     NOT RELIABLE: real ONNX burst deadline failures
+Hot redeploy/native lifecycle     VALIDATED (4 real ONNX context cycles)
+Real application log benchmark    FUNCTIONAL PASS (48/48 at 15-second deadline)
+2-second application-log latency  SINGLE-RUN PASS (48/48 at 2-second deadline)
+Organization-aware masking        EXPERIMENTAL (38 metadata matches measured)
+Event-local duplicate reuse       BENCHMARK OBSERVED (27 evaluations saved)
+Origin-aware ML route telemetry   IMPLEMENTED (aggregate counts observed)
+ONNX per-stage profiling          MEASURED; per-run totals captured
+CPU thread cap                    BENCHMARK: 4 threads faster than 2
+Parallel sequence reconstruction  TESTS PASSED (8/8; 2 JUnit suites)
+Real ONNX 10/50/100 parallel      6/6 SECURITY; 0/6 strict FUNCTIONAL passes
+Real ONNX 1/2/4/8 parallel        16/16 SECURITY + FUNCTIONAL (short trials)
+Real ONNX 8/9/10/12 parallel      16/16 SECURITY; 13/16 FUNCTIONAL
+Real ONNX 8/10/11/12 repeated    32/32 SECURITY; 15/32 FUNCTIONAL
+Virtual-thread caller A/B         MEASURED; inconsistent functional results
+Steady real-ONNX 5 events/s       USER-REPORTED single run 300/300 normal,
+                                  p95 1138ms; p99 1285ms; no fail-closed
+Full 5/6/7 steady-rate study      OPEN: summary aggregate failed; recover locally
+Measured-only queue max + benign IMPLEMENTED; local Maven validation PENDING
+Multi-hour steady-state soak      OPEN
+Spring starter / Maven release    BLOCKED until representative sustained gate
 ```
 
 Remaining concurrency, representativeness, security and soak items are release
@@ -73,9 +81,14 @@ gates, not documentation TODOs. The October 17 user-reported 48-event
 2-second-deadline benchmark passed once at p95 638.3143 ms and p99
 668.0808 ms with zero events over 2 seconds, zero fail-closed events, and
 no raw fixture forwarded. That is a **single-run pilot workload pass**, not
-a production SLO or concurrency guarantee. Organization-specific adaptive
-rules remain experimental until broader security and operating
-characteristics are validated.
+a production SLO or concurrency guarantee. Subsequent 18 October real-ONNX
+burst studies demonstrated high confidentiality and reconstructable sequence
+integrity but **inconsistent normal-log functionality**: 32/32 synthetic
+security passes versus only 15/32 functional passes in the four-repetition
+8/10/11/12-caller study. Organization-specific adaptive rules remain
+experimental until broader security and operating characteristics are
+validated. The 5/s pilot figure shown above comes from a user-supplied
+console log, not an independently published, complete 5/6/7 study report.
 
 For timeout/backpressure specifically, do **not** wrap
 `tokenizationFuture.get()` with a caller timeout and call that bounded. The
