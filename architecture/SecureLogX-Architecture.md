@@ -4981,6 +4981,75 @@ the present two repetitions.
 
 ---
 
+### 2026-10-18 — Measured 8/9/10/12 real-ONNX caller boundary study
+
+**STATUS: 16/16 SYNTHETIC SECURITY PASSES; 13/16 STRICT FUNCTIONAL PASSES**
+
+**Provenance:** Source revision `a9cca12d`, study
+`20261018T000917Z-low-caller-seed20261018-7edc022619a1`, uploaded
+as Git commit `d7d3ad2`. Original 16 results, protected
+logs, reconstructed logs, SHA-256 manifests, AB/BA receipts,
+fixed random seed and study summary are retained under
+`reports/parallel-onnx/history/` and `reports/parallel-onnx/studies/`.
+Derived findings are committed to
+`reports/parallel-onnx/comparisons/2026-10-18-boundary-8-9-10-12-findings.json`.
+
+**Fixed configuration:** 200 measured events per run, four warmups,
+two repetitions for every platform/virtual mode at 8/9/10/12 callers,
+one real ONNX worker, max CPU threads 4, windows/batch 4,
+queue capacity 64 and deadline 2,000 ms.
+
+| Callers | Mode | Functional passes | Median caller p95 ms | Median normal masked/s | Fail-closed total |
+|---|---|---:|---:|---:|---:|
+| 8 | Platform | 2/2 | 1,085 | 8.706 | 0 |
+| 8 | Virtual | 2/2 | 1,135 | 8.306 | 0 |
+| 9 | Platform | 2/2 | 1,293 | 8.708 | 0 |
+| 9 | Virtual | 2/2 | 1,036 | 9.644 | 0 |
+| 10 | Platform | 2/2 | 1,328 | 7.719 | 0 |
+| 10 | Virtual | 2/2 | 1,360 | 7.714 | 0 |
+| 12 | Platform | 1/2 | 1,617 | 6.748 | 66 |
+| 12 | Virtual | 0/2 | 1,522 | 7.722 | 8 |
+
+**Security and ordering:** 3,126 normal measured events, 74
+protected fail-closed events, 3,264 total protected records including
+warmups, 1,014 physical write-order inversions, unique ingress IDs
+and per-instance numeric reconstruction across all runs.
+All 74 fail-closed records were **DEADLINE_EXCEEDED**, with **no
+OVERLOAD_REJECTED**. The fixed single worker is subject to
+service-time/queue-wait contention even before exhausting the
+64-slot admission queue.
+
+**Unstable 12-caller behavior:** Platform 12-caller runs recorded
+zero and 66 fail-closed records respectively (the latter only
+134/200 normal events); virtual runs had one and seven fail-closed
+records. Median p95 may be below 2,000 ms even when a run **fails**
+the strict functional gate because tail events exceed deadline.
+Do not describe 12 callers as dependable for this workload.
+
+**10-caller interpretation:** The newer repeated trial set
+passed 4/4 at 10 callers, but the older one-shot
+10-caller saturation comparison showed substantial deadline
+failures. Therefore 10 is a **conditional short-run candidate**,
+not a determined production operating threshold. Four platform
+callers remains the earlier observed highest median useful
+throughput baseline; increasing to 8–10 does not clearly raise
+normal event throughput under single-worker serial ONNX.
+
+**Memory:** End-of-workload process working set ~698–703 MiB;
+after-shutdown ~167–184 MiB. Only point-in-time measurements:
+peak native working set and multi-hour soak remain unvalidated.
+
+**Next gates:** Repeat 8/10/11/12 with at least four repetitions
+and consistently controlled host state, measure p99/max and
+normal masked throughput rather than combined protected throughput.
+Add constant-rate/steady-state arrival testing, in-flight
+peak RSS and native-memory monitoring and a multi-hour soak.
+Consider admission pacing, short-window batching and service-time
+optimization before increasing the number of native workers or
+raising the configured deadline.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
