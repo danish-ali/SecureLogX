@@ -127,6 +127,12 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     SecureLogXInferenceDiagnostics.queueWaitStats(
                             context, "dev"
                     ).orElseThrow();
+            if (!SecureLogXInferenceDiagnostics.beginQueueWaitWindow(
+                    context, "dev")) {
+                throw new IllegalStateException(
+                        "Cannot mark real ONNX post-warmup queue window"
+                );
+            }
             long gcMillisBefore = totalGcMillis();
             long gcCountBefore = totalGcCount();
 
@@ -267,6 +273,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     ).orElseThrow();
             MaskingQueueWaitStats waitsAfter =
                     SecureLogXInferenceDiagnostics.queueWaitStats(
+                            context, "dev"
+                    ).orElseThrow();
+            double measuredMaxQueueWaitMillis =
+                    SecureLogXInferenceDiagnostics.maxMeasuredQueueWaitMillis(
                             context, "dev"
                     ).orElseThrow();
             SecureLogXInferenceDiagnostics.Snapshot after =
@@ -437,7 +447,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                                     runtimeBefore, runtimeAfter
                             ))
                     .put("queue_wait",
-                            queueWaitDelta(waitsBefore, waitsAfter))
+                            queueWaitDelta(
+                                    waitsBefore, waitsAfter,
+                                    measuredMaxQueueWaitMillis
+                            ))
                     .put("real_inference_measured_only",
                             SecureLogXApplicationLogBenchmark.inferenceMetricsJson(
                                     before, after
@@ -551,6 +564,14 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
             MaskingQueueWaitStats before,
             MaskingQueueWaitStats after
     ) {
+        return queueWaitDelta(before, after, Double.NaN);
+    }
+
+    static JSONObject queueWaitDelta(
+            MaskingQueueWaitStats before,
+            MaskingQueueWaitStats after,
+            double measuredOnlyMaxMillis
+    ) {
         if (!before.upperBoundsMillis().equals(after.upperBoundsMillis())) {
             throw new IllegalArgumentException(
                     "Queue wait histograms use different boundaries"
@@ -563,7 +584,7 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
             buckets.put(after.bucketCounts().get(i)
                     - before.bucketCounts().get(i));
         }
-        return new JSONObject()
+        JSONObject summary = new JSONObject()
                 .put("worker_started_requests", started)
                 .put("total_wait_nanos", nanos)
                 .put("average_millis", started == 0
@@ -573,6 +594,11 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                 .put("upper_bounds_millis",
                         new JSONArray(after.upperBoundsMillis()))
                 .put("mutually_exclusive_bucket_counts", buckets);
+        if (Double.isFinite(measuredOnlyMaxMillis)
+                && measuredOnlyMaxMillis >= 0) {
+            summary.put("max_millis_measured_only", measuredOnlyMaxMillis);
+        }
+        return summary;
     }
 
     private static long totalGcMillis() {
