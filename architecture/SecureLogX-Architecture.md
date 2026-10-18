@@ -70,8 +70,12 @@ Real ONNX 8/10/11/12 repeated    32/32 SECURITY; 15/32 FUNCTIONAL
 Virtual-thread caller A/B         MEASURED; inconsistent functional results
 Steady real-ONNX 5 events/s       USER-REPORTED single run 300/300 normal,
                                   p95 1138ms; p99 1285ms; no fail-closed
-Full 5/6/7 steady-rate study      OPEN: summary aggregate failed; recover locally
+Full 5/6/7 steady-rate study      COMPLETE_VERIFIED: 6/6 synthetic security;
+                                   5/s 2/2 functional, 6/s 1/2, 7/s 0/2
 Measured-only queue max + benign IMPLEMENTED; local Maven validation PENDING
+Pre-queue deterministic split     EXPERIMENTAL OPT-IN; OFF by default
+Pre-queue parity + quality gate   MODEL-FREE TESTS ADDED; local Maven/real ONNX and
+                                   locked high-risk corpus parity PENDING
 Multi-hour steady-state soak      OPEN
 Spring starter / Maven release    BLOCKED until representative sustained gate
 ```
@@ -87,8 +91,12 @@ integrity but **inconsistent normal-log functionality**: 32/32 synthetic
 security passes versus only 15/32 functional passes in the four-repetition
 8/10/11/12-caller study. Organization-specific adaptive rules remain
 experimental until broader security and operating characteristics are
-validated. The 5/s pilot figure shown above comes from a user-supplied
-console log, not an independently published, complete 5/6/7 study report.
+validated. The 5/s single-run figure above is also present in the published
+`reports/parallel-onnx/steady/study-20261018T031837Z-steady-9fd6bcd890fb.json`
+compact evidence. That complete six-trial synthetic study
+reports **5/s 2/2 functional, 6/s 1/2 functional, 7/s 0/2 functional**;
+it predates the measured-only queue-maximum and benign-version gates.
+Do not infer production sustainability from two 60-second trials.
 
 For timeout/backpressure specifically, do **not** wrap
 `tokenizationFuture.get()` with a caller timeout and call that bounded. The
@@ -5307,6 +5315,100 @@ characterize long-window and worker service times → design/verify
 pre-queue split in isolation → steady-rate/soak again →
 Spring Boot starter/Maven release only after sustained correctness,
 confidentiality, latency and dependency-security gates pass.
+
+---
+
+### 2026-10-18 — Implement opt-in pre-queue deterministic MASK/ALLOW/ESCALATE split
+
+**STATUS: IMPLEMENTED IN CODE, DISABLED BY DEFAULT; PARITY AND REAL-ONNX
+EVIDENCE REQUIRED BEFORE RELEASE APPROVAL**
+
+**Motivation:** Published real-ONNX steady-arrival study
+`study-20261018T031837Z-steady-9fd6bcd890fb.json` recorded normal
+masking on both 5-event/s trials but deadline failures in one
+6-event/s trial and both 7-event/s trials. The existing
+`SecureMasker.maskAllWithOrigins` admitted every deduplicated
+Log4j field batch to the single bounded worker; the deterministic
+`HybridMaskingPipeline.scan` decision ran *after* admission.
+Approved structured MASK/ALLOW outcomes therefore waited on
+ONNX-bound operations even though they required no inference.
+
+**Implementation:** Introduced
+`PreQueueDeterministicRouter` using the **same immutable
+HybridMaskingPipeline** owned by the native engine: there is
+no independently loaded or mutable organization registry.
+For each unique field, call `scan` on the caller thread. Only
+`requiresMl=false` entire fields may take the identical
+`maskWithoutMl` policy path ahead of the queue. Fields with
+`requiresMl=true` (unknown keys, free-text semantic risk, nested
+mixed inputs, conflicting evidence) remain in index-preserving
+order and enter the **existing** single-worker
+`MaskingRequestExecutor` and ONNX `maskBatch` unchanged.
+Rejoin protected fields into the original position mapping
+and let event-local deduplication expand original-field sequence
+IDs as before. No caller result or field reaches a destination
+before a complete secure merge.
+
+**Failure containment:** Any unresolved field's deadline,
+overload, mask failure, missing/malformed worker result or
+sequence/instance-ID mismatch produces **whole-event
+fail-closed** protected markers, including fields that were
+already deterministically masked or approved ALLOW. There is no
+per-field release on a failed mixed event. Unexpected
+pre-queue runtime exceptions also fail all fields closed.
+Close/shutdown rejects new pre-queue calls with protected
+failure markers. Logging-framework rewrite bypass detection,
+original ingress sequencing, native-session worker limit and
+one-organization-per-masker policy remain unchanged.
+
+**Feature flag:** Opt-in only through
+`-Dsecurelogx.experimental.preQueueDeterministicRoutingEnabled=true`.
+Default **false** preserves the frozen whole-event admission path.
+Only synthetic pilot environments should enable this until
+locked-corpus accuracy, structured negative-control and
+real-model A/B acceptance pass.
+
+**Measurements:** Added in-memory, payload-free
+`PreQueueRoutingStats` (resolved field count, escalated
+field count, whole-event fail-closed count), available via
+Log4j2 inference diagnostics and the steady-rate JSON output
+`pre_queue_routing_measured_only`; the compact study runner
+has a separate `-EnablePreQueueRouting` synthetic switch.
+Compare **normally masked events per second** and ML native
+calls/windows, measured-only worker queue wait, p99/max
+latency, all fail-closed reasons, and sampled native/process
+memory against the same unmodified-model baseline.
+
+**Validation gates before enabling by default:**
+1. Run model-free `PreQueueDeterministicRouterTest`
+   for exact organization MASK/ALLOW, deterministic parity,
+   ambiguous/free-text escalation, negative-context version
+   preservation, original ordered identities, model timeout
+   and mismatched worker results with whole-event fail-closed.
+2. Run real Log4j2 integration and dedicated A/B on the
+   **same synthetic fixtures** with pre-queue off/on, keeping
+   model hash, rules, deadline, threads, window cap, logging
+   origins and output layout identical.
+3. Compare the locked **6,463-case H1+C1-S** challenge corpus
+   on/off. Block production rollout on **any new high-risk
+   missed sensitive span, worse high-risk full-span recall or
+   benign negative-control overmask**; record confusion counts
+   and full input coverage, not merely average F1. If the
+   corpus is not locally available, this gate is OPEN.
+4. Verify protective output parity including no raw payload
+   and no event/field sequence-ID mismatch on mixed structured
+   and free-text input under rejection/timeout.
+5. Repeat 5/6/7 steady-rate A/B, then longer steady-arrival
+   soak; no worker count/queue/deadline enlargement and no
+   per-host shared model service in this phase.
+
+**Limitations:** The router only saves work for fields
+currently classed `requiresMl=false`; every free-text field
+that remains semantically unresolved still needs ONNX. This
+may reduce queue delay without making whole events model-free
+or significantly increasing sustainable throughput. These
+changes are not equivalent to an H2 learned reviewer or a
+general regex-only bypass, neither of which has been approved.
 
 ---
 
