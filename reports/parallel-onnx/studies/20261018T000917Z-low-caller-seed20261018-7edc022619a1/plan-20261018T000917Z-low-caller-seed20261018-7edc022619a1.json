@@ -1,0 +1,120 @@
+﻿{
+    "schema_version":  1,
+    "study_id":  "20261018T000917Z-low-caller-seed20261018-7edc022619a1",
+    "created_at_utc":  "2026-10-18T00:09:17.1980142Z",
+    "source_commit_sha":  "a9cca12d7b6dc791ec0a495a3f16ec639498081e",
+    "synthetic_workload":  "200 events by default + four warmup",
+    "schedule":  "seeded Fisher-Yates per round, AB/BA thread mode alternation",
+    "random_seed":  20261018,
+    "repetitions":  2,
+    "caller_counts":  [
+                          8,
+                          9,
+                          10,
+                          12
+                      ],
+    "event_count":  200,
+    "deadline_millis":  2000,
+    "cpu_threads":  4,
+    "max_inference_windows_per_batch":  4,
+    "masking_queue_capacity":  64,
+    "synthetic_org_rules_enabled":  true,
+    "plan":  [
+                 {
+                     "index":  1,
+                     "repeat":  1,
+                     "callers":  12,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  2,
+                     "repeat":  1,
+                     "callers":  12,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  3,
+                     "repeat":  1,
+                     "callers":  8,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  4,
+                     "repeat":  1,
+                     "callers":  8,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  5,
+                     "repeat":  1,
+                     "callers":  10,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  6,
+                     "repeat":  1,
+                     "callers":  10,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  7,
+                     "repeat":  1,
+                     "callers":  9,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  8,
+                     "repeat":  1,
+                     "callers":  9,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  9,
+                     "repeat":  2,
+                     "callers":  8,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  10,
+                     "repeat":  2,
+                     "callers":  8,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  11,
+                     "repeat":  2,
+                     "callers":  9,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  12,
+                     "repeat":  2,
+                     "callers":  9,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  13,
+                     "repeat":  2,
+                     "callers":  12,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  14,
+                     "repeat":  2,
+                     "callers":  12,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  15,
+                     "repeat":  2,
+                     "callers":  10,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  16,
+                     "repeat":  2,
+                     "callers":  10,
+                     "mode":  "platform"
+                 }
+             ]
+}

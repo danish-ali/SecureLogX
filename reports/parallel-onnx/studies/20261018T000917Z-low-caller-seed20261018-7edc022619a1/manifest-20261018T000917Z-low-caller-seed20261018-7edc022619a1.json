@@ -1,0 +1,118 @@
+﻿{
+    "schema_version":  1,
+    "study_id":  "20261018T000917Z-low-caller-seed20261018-7edc022619a1",
+    "source_commit_sha":  "a9cca12d7b6dc791ec0a495a3f16ec639498081e",
+    "created_at_utc":  "2026-10-18T00:20:43.1899713Z",
+    "verified_trial_count":  16,
+    "trial_archives":  [
+                           "reports/parallel-onnx/history/20261018T000935Z-c12-platform-cpu4-w4-d2000-75d0115baf9c",
+                           "reports/parallel-onnx/history/20261018T001012Z-c12-virtual-cpu4-w4-d2000-446e360b3b27",
+                           "reports/parallel-onnx/history/20261018T001051Z-c8-platform-cpu4-w4-d2000-d10a6b630fe8",
+                           "reports/parallel-onnx/history/20261018T001129Z-c8-virtual-cpu4-w4-d2000-c0033b8a896f",
+                           "reports/parallel-onnx/history/20261018T001210Z-c10-platform-cpu4-w4-d2000-524cf716a557",
+                           "reports/parallel-onnx/history/20261018T001249Z-c10-virtual-cpu4-w4-d2000-6b903623d0e3",
+                           "reports/parallel-onnx/history/20261018T001327Z-c9-platform-cpu4-w4-d2000-20371c6289d9",
+                           "reports/parallel-onnx/history/20261018T001405Z-c9-virtual-cpu4-w4-d2000-3317c0b113ef",
+                           "reports/parallel-onnx/history/20261018T001445Z-c8-virtual-cpu4-w4-d2000-1136a46ea4dc",
+                           "reports/parallel-onnx/history/20261018T001524Z-c8-platform-cpu4-w4-d2000-6304cec201fd",
+                           "reports/parallel-onnx/history/20261018T001603Z-c9-virtual-cpu4-w4-d2000-9e04c18bdd9d",
+                           "reports/parallel-onnx/history/20261018T001638Z-c9-platform-cpu4-w4-d2000-a43e9896e8e2",
+                           "reports/parallel-onnx/history/20261018T001719Z-c12-virtual-cpu4-w4-d2000-4e6a9d3f0897",
+                           "reports/parallel-onnx/history/20261018T001807Z-c12-platform-cpu4-w4-d2000-0cbd0830ab98",
+                           "reports/parallel-onnx/history/20261018T001900Z-c10-virtual-cpu4-w4-d2000-001262d8bf45",
+                           "reports/parallel-onnx/history/20261018T001956Z-c10-platform-cpu4-w4-d2000-3dc26b5a222b"
+                       ],
+    "study_files":  [
+                        {
+                            "path":  "plan-20261018T000917Z-low-caller-seed20261018-7edc022619a1.json",
+                            "bytes":  3912,
+                            "sha256":  "4C2E4E7A7196BCA50CB18E5F478EAA3C876B85B1841CC30D3573E757F98B6619"
+                        },
+                        {
+                            "path":  "summary-20261018T000917Z-low-caller-seed20261018-7edc022619a1.json",
+                            "bytes":  36705,
+                            "sha256":  "AA85E5B0A3107DC31112917F0286F771949B67B22F3D9743E1F819987CFF54F0"
+                        },
+                        {
+                            "path":  "receipts/trial-001.json",
+                            "bytes":  625,
+                            "sha256":  "D28BC59256DCAFAE1DEB84B0DD289DF57DDB8DDEA5181ED8A0AE958F76191AB9"
+                        },
+                        {
+                            "path":  "receipts/trial-002.json",
+                            "bytes":  621,
+                            "sha256":  "EDC024CF51087D610E917A8BC90A91A94284CE0BD7056F33A249534CB16EA3B6"
+                        },
+                        {
+                            "path":  "receipts/trial-003.json",
+                            "bytes":  620,
+                            "sha256":  "07A28F2206440141D83DE1069D3E3668A9B220A4CB155ADC4DE5F25A6B9F613B"
+                        },
+                        {
+                            "path":  "receipts/trial-004.json",
+                            "bytes":  615,
+                            "sha256":  "3D507B9EA13D1EFCE97E96BC64EAEB840044E0D0D871A6D296DEC647C3CF97CF"
+                        },
+                        {
+                            "path":  "receipts/trial-005.json",
+                            "bytes":  625,
+                            "sha256":  "0EA1EB28DEB14AD8313F1B598B2E7111BE01193F5C06845DC0CD80C3245ECC08"
+                        },
+                        {
+                            "path":  "receipts/trial-006.json",
+                            "bytes":  620,
+                            "sha256":  "09404C5C3C7D1EE5BD59BB74CBCBC1972D43734A64A0E01065AE87AEE6D4F7D3"
+                        },
+                        {
+                            "path":  "receipts/trial-007.json",
+                            "bytes":  620,
+                            "sha256":  "0A16A816A44CAC6A1998911EB305B87991F682CE38F2B748C4FDDFA3535E1502"
+                        },
+                        {
+                            "path":  "receipts/trial-008.json",
+                            "bytes":  615,
+                            "sha256":  "1753E058778FB8C0AB2669F8126021B3513870154C5DA9817FE7DE8C3B4E8C90"
+                        },
+                        {
+                            "path":  "receipts/trial-009.json",
+                            "bytes":  615,
+                            "sha256":  "6A903C98BC0912B90AB4E9AA9D4EE11DF04ABE7DB1559619A86AF2662D8BF199"
+                        },
+                        {
+                            "path":  "receipts/trial-010.json",
+                            "bytes":  620,
+                            "sha256":  "7EA320B41D624B4A91E323DF15D090021AB2803E5E164656D684C576E2FBFA69"
+                        },
+                        {
+                            "path":  "receipts/trial-011.json",
+                            "bytes":  615,
+                            "sha256":  "E791FF80FF6B74673F3D435AA2B6EBD50C2BAE0235E7C746DBC122384CD62428"
+                        },
+                        {
+                            "path":  "receipts/trial-012.json",
+                            "bytes":  620,
+                            "sha256":  "8BEA95ACF16AA35FC00F53384C8B64D6BA1210A225FD777192A86A8B23ABABD0"
+                        },
+                        {
+                            "path":  "receipts/trial-013.json",
+                            "bytes":  621,
+                            "sha256":  "925DD8400DFEB7E684BF12C9483BA77AE36315FE2591992877D8740BAAD4CDC5"
+                        },
+                        {
+                            "path":  "receipts/trial-014.json",
+                            "bytes":  626,
+                            "sha256":  "F3E8DD96174A2688F95409C95E2397B359CD493723A4D3063DAA4209A984C4F7"
+                        },
+                        {
+                            "path":  "receipts/trial-015.json",
+                            "bytes":  620,
+                            "sha256":  "D2EFB90CFC2FD6D943EBD5B88B6163A8F3C99F4E7027C09535CC7CED5AA35E68"
+                        },
+                        {
+                            "path":  "receipts/trial-016.json",
+                            "bytes":  625,
+                            "sha256":  "533E751441CAB625821830C3AE582892043B0FB78F020E2169A97E814EFA9D6D"
+                        }
+                    ],
+    "note":  "SHA-256 hashes of local original study plan, receipts and summary before commit; each trial directory has its own independent integrity manifest."
+}

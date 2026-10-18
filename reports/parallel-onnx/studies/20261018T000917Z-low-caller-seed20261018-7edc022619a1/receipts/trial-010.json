@@ -1,0 +1,13 @@
+﻿{
+    "schema_version":  1,
+    "archive_relative_path":  "reports/parallel-onnx/history/20261018T001524Z-c8-platform-cpu4-w4-d2000-6304cec201fd",
+    "run_id":  "20261018T001524Z-c8-platform-cpu4-w4-d2000-6304cec201fd",
+    "result_file":  "result-20261018T001524Z-c8-platform-cpu4-w4-d2000-6304cec201fd.json",
+    "manifest_file":  "manifest-20261018T001524Z-c8-platform-cpu4-w4-d2000-6304cec201fd.json",
+    "callers":  8,
+    "mode":  "platform",
+    "events":  200,
+    "security_passed":  true,
+    "functional_passed":  true,
+    "source_commit_sha":  "a9cca12d7b6dc791ec0a495a3f16ec639498081e"
+}
