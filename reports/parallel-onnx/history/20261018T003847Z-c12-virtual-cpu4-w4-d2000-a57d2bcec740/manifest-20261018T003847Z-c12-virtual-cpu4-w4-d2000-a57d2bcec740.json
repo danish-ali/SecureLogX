@@ -1,0 +1,35 @@
+﻿{
+    "schema_version":  1,
+    "run_id":  "20261018T003847Z-c12-virtual-cpu4-w4-d2000-a57d2bcec740",
+    "source_commit_sha":  "be469a36dbfdd1eacd68b2130dc8650213dc5ddc",
+    "created_at_utc":  "2026-10-18T00:39:37.0245009Z",
+    "evidence_type":  "real_onnx_synthetic_concurrency_load",
+    "cpu_threads":  4,
+    "max_windows_per_batch":  4,
+    "deadline_millis":  2000,
+    "masking_queue_capacity":  64,
+    "caller_threads":  12,
+    "caller_mode":  "virtual",
+    "events":  200,
+    "security_passed":  true,
+    "functional_passed":  false,
+    "synthetic_fixture_safety_check":  "passed",
+    "raw_user_data_present":  false,
+    "files":  [
+                  {
+                      "filename":  "result-20261018T003847Z-c12-virtual-cpu4-w4-d2000-a57d2bcec740.json",
+                      "bytes":  7008,
+                      "sha256":  "0C00F44581D55E2A8E6FDB4F089E078122D2C22060FD18618D585EDE49341142"
+                  },
+                  {
+                      "filename":  "protected-application-20261018T003847Z-c12-virtual-cpu4-w4-d2000-a57d2bcec740.log",
+                      "bytes":  113913,
+                      "sha256":  "96B798EB7186F618E92FAA62D5117B94C3C8474EC5A505611C40BE7A7E182278"
+                  },
+                  {
+                      "filename":  "reconstructed-application-20261018T003847Z-c12-virtual-cpu4-w4-d2000-a57d2bcec740.log",
+                      "bytes":  113913,
+                      "sha256":  "51E463F54A2F77D8BA184596D293614272ED82B4633B8AE91853297448F47A01"
+                  }
+              ]
+}

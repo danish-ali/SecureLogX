@@ -1,0 +1,214 @@
+﻿{
+    "schema_version":  1,
+    "study_id":  "20261018T003231Z-low-caller-seed20261019-3270749644d2",
+    "source_commit_sha":  "be469a36dbfdd1eacd68b2130dc8650213dc5ddc",
+    "created_at_utc":  "2026-10-18T00:57:51.3018263Z",
+    "verified_trial_count":  32,
+    "trial_archives":  [
+                           "reports/parallel-onnx/history/20261018T003300Z-c11-platform-cpu4-w4-d2000-5f5fcbf7ab04",
+                           "reports/parallel-onnx/history/20261018T003348Z-c11-virtual-cpu4-w4-d2000-51e1c2d871b1",
+                           "reports/parallel-onnx/history/20261018T003436Z-c10-platform-cpu4-w4-d2000-d9c15127d457",
+                           "reports/parallel-onnx/history/20261018T003523Z-c10-virtual-cpu4-w4-d2000-22aa048427c2",
+                           "reports/parallel-onnx/history/20261018T003621Z-c8-platform-cpu4-w4-d2000-303e4e92acc0",
+                           "reports/parallel-onnx/history/20261018T003711Z-c8-virtual-cpu4-w4-d2000-ae13327f610b",
+                           "reports/parallel-onnx/history/20261018T003800Z-c12-platform-cpu4-w4-d2000-b366820480d6",
+                           "reports/parallel-onnx/history/20261018T003847Z-c12-virtual-cpu4-w4-d2000-a57d2bcec740",
+                           "reports/parallel-onnx/history/20261018T003938Z-c8-virtual-cpu4-w4-d2000-b27562dd8454",
+                           "reports/parallel-onnx/history/20261018T004025Z-c8-platform-cpu4-w4-d2000-d8cf1751e2f9",
+                           "reports/parallel-onnx/history/20261018T004113Z-c11-virtual-cpu4-w4-d2000-c7a65f3d0ef3",
+                           "reports/parallel-onnx/history/20261018T004202Z-c11-platform-cpu4-w4-d2000-5814b5b3bad6",
+                           "reports/parallel-onnx/history/20261018T004249Z-c10-virtual-cpu4-w4-d2000-5624a00a4144",
+                           "reports/parallel-onnx/history/20261018T004337Z-c10-platform-cpu4-w4-d2000-94ea65b4c241",
+                           "reports/parallel-onnx/history/20261018T004425Z-c12-virtual-cpu4-w4-d2000-1668a82eb11b",
+                           "reports/parallel-onnx/history/20261018T004513Z-c12-platform-cpu4-w4-d2000-4d10fa9a60a5",
+                           "reports/parallel-onnx/history/20261018T004559Z-c11-platform-cpu4-w4-d2000-f113a4d5e39c",
+                           "reports/parallel-onnx/history/20261018T004649Z-c11-virtual-cpu4-w4-d2000-4de6da2769f1",
+                           "reports/parallel-onnx/history/20261018T004739Z-c12-platform-cpu4-w4-d2000-0ee7940dd503",
+                           "reports/parallel-onnx/history/20261018T004826Z-c12-virtual-cpu4-w4-d2000-36450b42903e",
+                           "reports/parallel-onnx/history/20261018T004913Z-c10-platform-cpu4-w4-d2000-5b55a5f77280",
+                           "reports/parallel-onnx/history/20261018T005000Z-c10-virtual-cpu4-w4-d2000-f6c92e89ad32",
+                           "reports/parallel-onnx/history/20261018T005055Z-c8-platform-cpu4-w4-d2000-61b4f300affe",
+                           "reports/parallel-onnx/history/20261018T005158Z-c8-virtual-cpu4-w4-d2000-0317ab72930e",
+                           "reports/parallel-onnx/history/20261018T005308Z-c8-virtual-cpu4-w4-d2000-1f18346646d5",
+                           "reports/parallel-onnx/history/20261018T005401Z-c8-platform-cpu4-w4-d2000-29769c9f07aa",
+                           "reports/parallel-onnx/history/20261018T005439Z-c11-virtual-cpu4-w4-d2000-1fbe59ecacfb",
+                           "reports/parallel-onnx/history/20261018T005511Z-c11-platform-cpu4-w4-d2000-adc9be5d91be",
+                           "reports/parallel-onnx/history/20261018T005543Z-c12-virtual-cpu4-w4-d2000-c4e5b030f3ec",
+                           "reports/parallel-onnx/history/20261018T005614Z-c12-platform-cpu4-w4-d2000-2c201d840415",
+                           "reports/parallel-onnx/history/20261018T005646Z-c10-virtual-cpu4-w4-d2000-e4af4ef3fa16",
+                           "reports/parallel-onnx/history/20261018T005719Z-c10-platform-cpu4-w4-d2000-55dcd0ef878c"
+                       ],
+    "study_files":  [
+                        {
+                            "path":  "plan-20261018T003231Z-low-caller-seed20261019-3270749644d2.json",
+                            "bytes":  6993,
+                            "sha256":  "A0BF613D6D5FBC22332EC9ECEEE25F87AB23A15EA0D8B4D83A171A3A161D9141"
+                        },
+                        {
+                            "path":  "summary-20261018T003231Z-low-caller-seed20261019-3270749644d2.json",
+                            "bytes":  64961,
+                            "sha256":  "48802413C013CA50E2AF41982C6FC7DD1A5DD2EC182CABE8A4F7B9CF64D71105"
+                        },
+                        {
+                            "path":  "receipts/trial-001.json",
+                            "bytes":  626,
+                            "sha256":  "1F37A9EE7EF00E6AF571E52318BDBD67872AD8AD62F3B88562F10B661AF192B7"
+                        },
+                        {
+                            "path":  "receipts/trial-002.json",
+                            "bytes":  621,
+                            "sha256":  "EF7B58FDAD2BBBEFFBA804E69677933D73EE51CE969A96783C88F9BD82EBB406"
+                        },
+                        {
+                            "path":  "receipts/trial-003.json",
+                            "bytes":  625,
+                            "sha256":  "7D7B03D3436444BDD35B180A62D9FDCFB333E511B69AA7E1B34CFDE0E13DF187"
+                        },
+                        {
+                            "path":  "receipts/trial-004.json",
+                            "bytes":  621,
+                            "sha256":  "57DDAD8FBB4A98BDE49AC96897533DBEC6C76B2007D4EA668562ACEBA0C3C03E"
+                        },
+                        {
+                            "path":  "receipts/trial-005.json",
+                            "bytes":  620,
+                            "sha256":  "3BDA5D3E48C5BB6C105F51EC87B35D26D785787C9ADA47EEC21994D74A7AF124"
+                        },
+                        {
+                            "path":  "receipts/trial-006.json",
+                            "bytes":  615,
+                            "sha256":  "E75C25EFDD9A0C8FE91EC9F2C1630FEA944A70229D16B8C9135ADB11E5DA45D6"
+                        },
+                        {
+                            "path":  "receipts/trial-007.json",
+                            "bytes":  626,
+                            "sha256":  "D7C38F488B34EE940227F0F636402F8FEDB958D44DA523EFF309DAF2280FDE58"
+                        },
+                        {
+                            "path":  "receipts/trial-008.json",
+                            "bytes":  621,
+                            "sha256":  "A8024FA0ACE0247176C413EC6A4926D802854CC3C2D98F165066303C9450A42F"
+                        },
+                        {
+                            "path":  "receipts/trial-009.json",
+                            "bytes":  615,
+                            "sha256":  "A23A0C3A57E570DC74444AEEF9B12EEBA71BEB75651E1D5A8DB60F058442BA0B"
+                        },
+                        {
+                            "path":  "receipts/trial-010.json",
+                            "bytes":  620,
+                            "sha256":  "BCF50FEB787C62A008B7E8898338B1F4C98F8538D8FBF8FAA1E7C9D1378F26FD"
+                        },
+                        {
+                            "path":  "receipts/trial-011.json",
+                            "bytes":  621,
+                            "sha256":  "5747ED5599448BB84F2891CE0F2A57B287D315D7E5FF0C17C842D8085F890FB7"
+                        },
+                        {
+                            "path":  "receipts/trial-012.json",
+                            "bytes":  626,
+                            "sha256":  "F10A8AA9594F55E399D9C4CE7B96A7E56C7C9E68FE76821B934D2BE28D224805"
+                        },
+                        {
+                            "path":  "receipts/trial-013.json",
+                            "bytes":  620,
+                            "sha256":  "8BD95E442E805AECFBBC34CA55A85C50E72DDE5274BA42C2F7DC5CA0F1CA45FE"
+                        },
+                        {
+                            "path":  "receipts/trial-014.json",
+                            "bytes":  625,
+                            "sha256":  "F6FE113171531E3827134FEFC6712AFAF4C8A4D1DA439A832FCCF7C46ED01E42"
+                        },
+                        {
+                            "path":  "receipts/trial-015.json",
+                            "bytes":  621,
+                            "sha256":  "1400DA375CE2B2C7C3E5BBD584643402C0D04ECC7E29A71CC3FC1319491B4663"
+                        },
+                        {
+                            "path":  "receipts/trial-016.json",
+                            "bytes":  626,
+                            "sha256":  "B6E08168C0829D01DA52BBEA0BEBAE4EB5965E5E335ACBB9D54F3C62F6ABB131"
+                        },
+                        {
+                            "path":  "receipts/trial-017.json",
+                            "bytes":  626,
+                            "sha256":  "33921EE95C861554B7501B8F8B15C8F403A7391ABBFFA26902A839D6338C6D45"
+                        },
+                        {
+                            "path":  "receipts/trial-018.json",
+                            "bytes":  621,
+                            "sha256":  "8648720F31A41640170220E92A3DA2DCAC0B22707322CFD415D11D5388AC9A93"
+                        },
+                        {
+                            "path":  "receipts/trial-019.json",
+                            "bytes":  626,
+                            "sha256":  "C7F66EAE85C644338B3948A8C813D36DAAF1B5C03851FABA6491FEFD65E7DDDA"
+                        },
+                        {
+                            "path":  "receipts/trial-020.json",
+                            "bytes":  621,
+                            "sha256":  "248B7462D6D44B2009D6A5A37A0EBA029A9CFFDE597D060836EEDE36366E6EAF"
+                        },
+                        {
+                            "path":  "receipts/trial-021.json",
+                            "bytes":  625,
+                            "sha256":  "AFA692F700A505CA9824778909AA19B580B83FC1DC80CA0E1D16C06DDA4574F5"
+                        },
+                        {
+                            "path":  "receipts/trial-022.json",
+                            "bytes":  621,
+                            "sha256":  "FD515CC26715180B017C012E1F90CFFC4421E01CC70EE62E7A17EE5F4FA3ED60"
+                        },
+                        {
+                            "path":  "receipts/trial-023.json",
+                            "bytes":  621,
+                            "sha256":  "B1BA140B660A4426509BD098F699796A02327627B068797D033652B6CC0B265C"
+                        },
+                        {
+                            "path":  "receipts/trial-024.json",
+                            "bytes":  616,
+                            "sha256":  "9517351FB918A0621388A6C91ED5C5730BC3AB05C39727ED3A25BE3DD12A9A81"
+                        },
+                        {
+                            "path":  "receipts/trial-025.json",
+                            "bytes":  616,
+                            "sha256":  "358CBCBAD96C2383872E4FE5144FFF9D201FBEA68D0698BCCC44F08EF91E4238"
+                        },
+                        {
+                            "path":  "receipts/trial-026.json",
+                            "bytes":  620,
+                            "sha256":  "FB5D16E2927C87AC074EAEB9A38DC9784FE9BDD4FB76D3AF1921E31C931D4253"
+                        },
+                        {
+                            "path":  "receipts/trial-027.json",
+                            "bytes":  620,
+                            "sha256":  "4A359BD0392D2228DF920D159ACFB22A2935BDE859118C76D5EA0BFDF6DB0EB6"
+                        },
+                        {
+                            "path":  "receipts/trial-028.json",
+                            "bytes":  625,
+                            "sha256":  "CC62E3429996B04A7217151BABE621EC184BB9D149139DACAE7F50F1528EC954"
+                        },
+                        {
+                            "path":  "receipts/trial-029.json",
+                            "bytes":  620,
+                            "sha256":  "B785C252CAE62DC32811B85C6C9B1F6D5404EE4190454FE43F2FF49A96381A5C"
+                        },
+                        {
+                            "path":  "receipts/trial-030.json",
+                            "bytes":  625,
+                            "sha256":  "8F3E8B4E778DFDB134A21BE4E3464EDDE3F317FFDE0820C7393081E18D02B7F4"
+                        },
+                        {
+                            "path":  "receipts/trial-031.json",
+                            "bytes":  620,
+                            "sha256":  "C68EE3453F45C5FA3FDC5889490B8FFC23D9FD553B091995C14302DFB1A2E104"
+                        },
+                        {
+                            "path":  "receipts/trial-032.json",
+                            "bytes":  625,
+                            "sha256":  "C7A93247E1DD40DDC2EE3B5F5632B17D1C3DF1234B41706A6263960F395E9C7F"
+                        }
+                    ],
+    "note":  "SHA-256 hashes of local original study plan, receipts and summary before commit; each trial directory has its own independent integrity manifest."
+}

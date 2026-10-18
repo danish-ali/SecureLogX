@@ -1,0 +1,216 @@
+﻿{
+    "schema_version":  1,
+    "study_id":  "20261018T003231Z-low-caller-seed20261019-3270749644d2",
+    "created_at_utc":  "2026-10-18T00:32:31.8406345Z",
+    "source_commit_sha":  "be469a36dbfdd1eacd68b2130dc8650213dc5ddc",
+    "synthetic_workload":  "200 events by default + four warmup",
+    "schedule":  "seeded Fisher-Yates per round, AB/BA thread mode alternation",
+    "random_seed":  20261019,
+    "repetitions":  4,
+    "caller_counts":  [
+                          8,
+                          10,
+                          11,
+                          12
+                      ],
+    "event_count":  200,
+    "deadline_millis":  2000,
+    "cpu_threads":  4,
+    "max_inference_windows_per_batch":  4,
+    "masking_queue_capacity":  64,
+    "synthetic_org_rules_enabled":  true,
+    "plan":  [
+                 {
+                     "index":  1,
+                     "repeat":  1,
+                     "callers":  11,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  2,
+                     "repeat":  1,
+                     "callers":  11,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  3,
+                     "repeat":  1,
+                     "callers":  10,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  4,
+                     "repeat":  1,
+                     "callers":  10,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  5,
+                     "repeat":  1,
+                     "callers":  8,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  6,
+                     "repeat":  1,
+                     "callers":  8,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  7,
+                     "repeat":  1,
+                     "callers":  12,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  8,
+                     "repeat":  1,
+                     "callers":  12,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  9,
+                     "repeat":  2,
+                     "callers":  8,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  10,
+                     "repeat":  2,
+                     "callers":  8,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  11,
+                     "repeat":  2,
+                     "callers":  11,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  12,
+                     "repeat":  2,
+                     "callers":  11,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  13,
+                     "repeat":  2,
+                     "callers":  10,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  14,
+                     "repeat":  2,
+                     "callers":  10,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  15,
+                     "repeat":  2,
+                     "callers":  12,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  16,
+                     "repeat":  2,
+                     "callers":  12,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  17,
+                     "repeat":  3,
+                     "callers":  11,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  18,
+                     "repeat":  3,
+                     "callers":  11,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  19,
+                     "repeat":  3,
+                     "callers":  12,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  20,
+                     "repeat":  3,
+                     "callers":  12,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  21,
+                     "repeat":  3,
+                     "callers":  10,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  22,
+                     "repeat":  3,
+                     "callers":  10,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  23,
+                     "repeat":  3,
+                     "callers":  8,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  24,
+                     "repeat":  3,
+                     "callers":  8,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  25,
+                     "repeat":  4,
+                     "callers":  8,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  26,
+                     "repeat":  4,
+                     "callers":  8,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  27,
+                     "repeat":  4,
+                     "callers":  11,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  28,
+                     "repeat":  4,
+                     "callers":  11,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  29,
+                     "repeat":  4,
+                     "callers":  12,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  30,
+                     "repeat":  4,
+                     "callers":  12,
+                     "mode":  "platform"
+                 },
+                 {
+                     "index":  31,
+                     "repeat":  4,
+                     "callers":  10,
+                     "mode":  "virtual"
+                 },
+                 {
+                     "index":  32,
+                     "repeat":  4,
+                     "callers":  10,
+                     "mode":  "platform"
+                 }
+             ]
+}

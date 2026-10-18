@@ -1,0 +1,13 @@
+﻿{
+    "schema_version":  1,
+    "archive_relative_path":  "reports/parallel-onnx/history/20261018T005000Z-c10-virtual-cpu4-w4-d2000-f6c92e89ad32",
+    "run_id":  "20261018T005000Z-c10-virtual-cpu4-w4-d2000-f6c92e89ad32",
+    "result_file":  "result-20261018T005000Z-c10-virtual-cpu4-w4-d2000-f6c92e89ad32.json",
+    "manifest_file":  "manifest-20261018T005000Z-c10-virtual-cpu4-w4-d2000-f6c92e89ad32.json",
+    "callers":  10,
+    "mode":  "virtual",
+    "events":  200,
+    "security_passed":  true,
+    "functional_passed":  false,
+    "source_commit_sha":  "be469a36dbfdd1eacd68b2130dc8650213dc5ddc"
+}
