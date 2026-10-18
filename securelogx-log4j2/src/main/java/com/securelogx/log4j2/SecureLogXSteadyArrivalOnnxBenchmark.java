@@ -127,6 +127,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     SecureLogXInferenceDiagnostics.queueWaitStats(
                             context, "dev"
                     ).orElseThrow();
+            com.securelogx.api.PreQueueRoutingStats preQueueBefore =
+                    SecureLogXInferenceDiagnostics.preQueueRoutingStats(
+                            context, "dev"
+                    ).orElseThrow();
             if (!SecureLogXInferenceDiagnostics.beginQueueWaitWindow(
                     context, "dev")) {
                 throw new IllegalStateException(
@@ -273,6 +277,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     ).orElseThrow();
             MaskingQueueWaitStats waitsAfter =
                     SecureLogXInferenceDiagnostics.queueWaitStats(
+                            context, "dev"
+                    ).orElseThrow();
+            com.securelogx.api.PreQueueRoutingStats preQueueAfter =
+                    SecureLogXInferenceDiagnostics.preQueueRoutingStats(
                             context, "dev"
                     ).orElseThrow();
             double measuredMaxQueueWaitMillis =
@@ -446,6 +454,18 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                             SecureLogXParallelOnnxBenchmark.executorStatsJson(
                                     runtimeBefore, runtimeAfter
                             ))
+                    .put("pre_queue_routing_measured_only",
+                            new JSONObject()
+                                    .put("enabled", preQueueAfter.enabled())
+                                    .put("deterministic_fields_resolved",
+                                            preQueueAfter.deterministicFieldsResolved()
+                                                    - preQueueBefore.deterministicFieldsResolved())
+                                    .put("escalated_fields",
+                                            preQueueAfter.escalatedFields()
+                                                    - preQueueBefore.escalatedFields())
+                                    .put("whole_event_fail_closed",
+                                            preQueueAfter.wholeEventFailClosed()
+                                                    - preQueueBefore.wholeEventFailClosed()))
                     .put("queue_wait",
                             queueWaitDelta(
                                     waitsBefore, waitsAfter,
