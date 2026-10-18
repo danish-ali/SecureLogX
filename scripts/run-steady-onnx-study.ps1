@@ -221,8 +221,33 @@ try {
         if ($archive.Entries.Count -ne ($plan.Count * 2)) {
             throw "Local ZIP count validation failed; original directories remain."
         }
-        foreach ($entry in $archive.Entries) {
-            if ($entry.Length -le 0) { throw "Local ZIP contains an empty entry." }
+        $digests = @{}
+        foreach ($trial in $trials) {
+            $name = "run-" + ([int]$trial.run).ToString("000") + "-r" + $trial.offered_rate_per_second
+            $digests["$name/result.json"] = [string]$trial.local_result_sha256
+            $digests["$name/protected-application.log"] = [string]$trial.local_protected_log_sha256
+        }
+        $hasher = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            foreach ($entry in $archive.Entries) {
+                $name = $entry.FullName.Replace([char]92, '/')
+                if ($entry.Length -le 0 -or -not $digests.ContainsKey($name)) {
+                    throw "Unknown/empty ZIP evidence entry: $name"
+                }
+                $stream = $entry.Open()
+                try {
+                    $zipSha = [System.BitConverter]::ToString(
+                        $hasher.ComputeHash($stream)
+                    ).Replace("-", "")
+                } finally {
+                    $stream.Dispose()
+                }
+                if ($zipSha -cne $digests[$name]) {
+                    throw "Local ZIP SHA-256 mismatch: $name; retain original folders."
+                }
+            }
+        } finally {
+            $hasher.Dispose()
         }
     } finally { $archive.Dispose() }
     if (-not $KeepLocalDetails) {
