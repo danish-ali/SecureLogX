@@ -57,6 +57,53 @@ default. If the local ZIP is deleted, the SHA-256 pointers remain as
 provenance but do not restore the original files. Archive ZIPs
 elsewhere if long-term forensic retention is required.
 
+## Recover the existing study after an aggregation error
+
+The first steady-rate runner could finish real ONNX work and then fail
+at `Measure-Object -Property fail_closed`: the trial rows were
+ordered dictionaries, not directly consumable by that aggregation.
+The corrected runner now uses typed PSObjects and projected numeric
+group metrics.
+
+If the local detailed run files already exist and the only failure
+was *after* real ONNX measurement, do **not** blindly rerun the
+benchmark. First retrieve the fix and recover the most recently
+modified local steady-rate study folder:
+
+```powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+
+powershell -ExecutionPolicy Bypass `
+  -File .\scripts\run-steady-onnx-study.ps1 `
+  -RecoverLatest `
+  -Rates "5,6,7" -Repetitions 2 -DurationSeconds 60 `
+  -CallerMode platform -MaxOutstanding 32 `
+  -MemorySampleMillis 5000 -MaskingDeadlineMillis 2000 `
+  -CpuThreads 4 -WindowBatchLimit 4 -MaskingQueueCapacity 64 `
+  -RandomSeed 20261017 -UseExampleOrganizationRules `
+  -CommitResults -PushResults
+```
+
+`-RecoverLatest` **never runs Maven or ONNX**. It reconstructs the
+seeded plan from the supplied settings, checks original local
+`result.json` and `protected-application.log` pairs, rechecks
+synthetic known-secret rejection, record counts, model execution,
+sequence integrity, and verifies the newly produced ZIP against
+original SHA-256 hashes before publishing a compact JSON.
+If only some trials exist, it publishes an explicitly
+`PARTIAL_VERIFIED` report, not a fictional completed study.
+The original source commit SHA was not preserved inside the old
+raw trial JSON, so recovery keeps it null rather than using the
+new aggregation-script commit as a fabricated experiment SHA.
+
+A new study run after pulling the fix will report
+`queue_wait.max_millis_measured_only` distinctly from
+`max_millis_including_warmup` and will include
+`benign_version_preserved` as a **functional acceptance gate**.
+A recovered older trial cannot retroactively gain measurements
+or acceptance gates absent from its original evidence.
+
 ## Run the 5/6/7-per-second pilot
 
 Run from a JDK 21+ development environment with the validated
