@@ -150,7 +150,7 @@ try {
             throw "Physical log count mismatch in run $ordinal."
         }
 
-        $trials.Add([ordered]@{
+        $trials.Add([pscustomobject]@{
             run=$ordinal; repetition=[int]$item.repetition
             offered_rate_per_second=$rate; mode=$CallerMode
             events=$expected; normal_masked=[int]$result.successful_masked_events
@@ -192,14 +192,44 @@ try {
 
     $groups = @(
         foreach ($rate in ($rateValues | Sort-Object)) {
-            $g = @($trials.ToArray() | Where-Object { $_.offered_rate_per_second -eq $rate })
-            [ordered]@{
+            $g = @($trials.ToArray() | Where-Object {
+                $_.offered_rate_per_second -eq $rate
+            })
+            if ($g.Count -eq 0) {
+                [pscustomobject]@{
+                    rate_per_second=[int]$rate; trials=0
+                    functional_passes=0; fail_closed_total=0
+                    min_normal_masked_per_second=$null
+                    worst_p99_millis=$null
+                    worst_queue_wait_avg_millis=$null
+                }
+                continue
+            }
+            $failures = 0
+            foreach ($trial in $g) {
+                $failures += [int]$trial.fail_closed
+            }
+            $normalRates = @($g | ForEach-Object {
+                [double]$_.normal_masked_per_second
+            })
+            $p99Values = @($g | ForEach-Object {
+                [double]$_.caller_p99_ms
+            })
+            $queueWaits = @($g | ForEach-Object {
+                [double]$_.queue_wait_avg_ms
+            })
+            [pscustomobject]@{
                 rate_per_second=[int]$rate; trials=$g.Count
-                functional_passes=@($g | Where-Object { $_.functional_passed }).Count
-                fail_closed_total=[int](($g | Measure-Object -Property fail_closed -Sum).Sum)
-                min_normal_masked_per_second=[math]::Round(($g | Measure-Object -Property normal_masked_per_second -Minimum).Minimum,3)
-                worst_p99_millis=[math]::Round(($g | Measure-Object -Property caller_p99_ms -Maximum).Maximum,3)
-                worst_queue_wait_avg_millis=[math]::Round(($g | Measure-Object -Property queue_wait_avg_ms -Maximum).Maximum,3)
+                functional_passes=@($g | Where-Object {
+                    $_.functional_passed
+                }).Count
+                fail_closed_total=$failures
+                min_normal_masked_per_second=[math]::Round(
+                    [double]($normalRates | Measure-Object -Minimum).Minimum, 3)
+                worst_p99_millis=[math]::Round(
+                    [double]($p99Values | Measure-Object -Maximum).Maximum, 3)
+                worst_queue_wait_avg_millis=[math]::Round(
+                    [double]($queueWaits | Measure-Object -Maximum).Maximum, 3)
             }
         }
     )
