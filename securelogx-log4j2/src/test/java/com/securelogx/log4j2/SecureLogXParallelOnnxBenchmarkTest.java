@@ -46,6 +46,20 @@ class SecureLogXParallelOnnxBenchmarkTest {
     }
 
     @Test
+    void recordsBenignVersionOvermaskAsFunctionalRegressionNotRawLeak() {
+        String overmasked = validAllSuccessOutput().replace(
+                "service version=1.2.3.4",
+                "service version=[MASKED]"
+        );
+        var validation = SecureLogXParallelOnnxBenchmark
+                .validateProtectedOutput(overmasked, 12);
+        assertEquals(12, validation.successCount());
+        assertEquals(0, validation.failClosedCount());
+        assertEquals(0, validation.benignControlSuccessCount());
+        assertFalse(validation.benignVersionPreserved());
+    }
+
+    @Test
     void rejectsDuplicateMissingAndLeakingProtectedRecords() {
         String valid = validAllSuccessOutput();
         assertThrows(IllegalStateException.class,
