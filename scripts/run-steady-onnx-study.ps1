@@ -15,6 +15,8 @@ param(
     # Rebuild a compact report from already finished local results;
     # never reruns Maven or ONNX when recovering.
     [switch]$RecoverLatest,
+    # Existing parent STUDY directory with run-001-r5 etc. Never runs ONNX.
+    [string]$RecoverFromPath,
     [switch]$CommitResults,
     [switch]$PushResults
 )
@@ -46,7 +48,7 @@ if (@($rateValues | Select-Object -Unique).Count -ne $rateValues.Count) {
 }
 # Archival-only recovery must work even if model files have been moved
 # since the original run: no native session or Maven process is started.
-if (-not $RecoverLatest) {
+if (-not $recoveryMode) {
 foreach ($modelArtifact in @(
     (Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\model.onnx"),
     (Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\tokenizer.json")
@@ -62,34 +64,78 @@ if ($UseExampleOrganizationRules -and -not (Test-Path -LiteralPath (Join-Path $r
 }
 
 $localRoot = Join-Path $root "reports\parallel-onnx\.local-steady-runs"
-if ($RecoverLatest) {
-    $candidates = @(Get-ChildItem -LiteralPath $localRoot -Directory -ErrorAction Stop |
-        Where-Object { $_.Name -match '^\d{8}T\d{6}Z-steady-[A-Za-z0-9]+$' } |
-        Sort-Object LastWriteTimeUtc -Descending)
-    if ($candidates.Count -lt 1) {
-        throw "No existing local steady-rate study can be recovered."
+$recoveryMode = $RecoverLatest -or
+    -not [string]::IsNullOrWhiteSpace($RecoverFromPath)
+if ($RecoverLatest -and
+        -not [string]::IsNullOrWhiteSpace($RecoverFromPath)) {
+    throw "Use either -RecoverLatest or -RecoverFromPath, not both."
+}
+$detailDir = $null
+if (-not [string]::IsNullOrWhiteSpace($RecoverFromPath)) {
+    $detailDir = (Resolve-Path -LiteralPath $RecoverFromPath -ErrorAction Stop).Path
+    if (-not (Test-Path -LiteralPath $detailDir -PathType Container)) {
+        throw "Recovery path is not a directory: $detailDir"
     }
-    $studyId = $candidates[0].Name
-    Write-Host "RECOVERY ONLY: $studyId. No Maven or ONNX execution."
+    if ((Split-Path -Leaf $detailDir) -match '^run-[0-9]+-r[0-9]+$') {
+        $detailDir = Split-Path -Parent $detailDir
+    }
+    Write-Host "Explicit recovery directory: $detailDir"
+} elseif ($recoveryMode) {
+    if (-not (Test-Path -LiteralPath $localRoot -PathType Container)) {
+        throw "Local study root not found: $localRoot. Use -RecoverFromPath with the original study folder."
+    }
+    $allDirectories = @(
+        Get-ChildItem -LiteralPath $localRoot -Directory -Force -ErrorAction Stop
+    )
+    # Recover by actual benchmark results rather than a fragile study-id
+    # regex. Name/timestamp formats changed between script revisions.
+    $candidates = @(
+        foreach ($directory in $allDirectories) {
+            $trialResults = @(
+                Get-ChildItem -LiteralPath $directory.FullName -Filter "result.json" -File -Recurse -Force -ErrorAction SilentlyContinue
+            )
+            if ($trialResults.Count -gt 0) {
+                $directory
+            }
+        }
+    )
+    if ($candidates.Count -lt 1) {
+        $names = ($allDirectories | Select-Object -ExpandProperty Name) -join ", "
+        throw ("No result.json files found under {0}. Local subfolders: {1}. " +
+            "Find local files with: Get-ChildItem 'D:\workspace\SecureLogX\reports' " +
+            "-Filter result.json -File -Recurse -Force | Select-Object -ExpandProperty FullName. " +
+            "Then pass the parent STUDY folder using -RecoverFromPath.") -f $localRoot, $names
+    }
+    $latest = @($candidates | Sort-Object LastWriteTimeUtc -Descending)[0]
+    $detailDir = $latest.FullName
+    Write-Host "Found existing study containing result.json: $detailDir"
 } else {
     $studyId = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssZ") +
         "-steady-" + [guid]::NewGuid().ToString("N").Substring(0,12)
+    $detailDir = Join-Path $localRoot $studyId
 }
-$detailDir = Join-Path $localRoot $studyId
+$studyId = Split-Path -Leaf $detailDir
+if ($studyId -cnotmatch '^[A-Za-z0-9_.-]+$') {
+    throw "Recovery study directory name contains unsupported characters."
+}
 $publishedRelative = "reports/parallel-onnx/steady/study-$studyId.json"
 $publishedPath = Join-Path $root $publishedRelative
 if (Test-Path -LiteralPath $publishedPath) {
-    throw "Compact study file already exists; refuse overwrite."
+    throw "Compact report already exists; refusing overwrite: $publishedPath"
 }
-if (-not $RecoverLatest) {
+if (-not $recoveryMode) {
     if (Test-Path -LiteralPath $detailDir) {
-        throw "Steady study detail directory already exists."
+        throw "Study folder already exists; refusing overwrite: $detailDir"
     }
     New-Item -ItemType Directory -Path $detailDir -Force | Out-Null
 } elseif (-not (Test-Path -LiteralPath $detailDir -PathType Container)) {
-    throw "Recovery detail directory missing."
+    throw "Selected existing study folder is missing: $detailDir"
 }
+New-Item -ItemType Directory -Path $localRoot -Force | Out-Null
 New-Item -ItemType Directory -Path (Split-Path $publishedPath -Parent) -Force | Out-Null
+if ($recoveryMode) {
+    Write-Host "RECOVERY ONLY: validating local results. No Maven or ONNX execution."
+}
 
 $rng = [System.Random]::new($RandomSeed)
 $plan = [System.Collections.Generic.List[object]]::new()
@@ -108,7 +154,7 @@ $oldJavaOptions = [Environment]::GetEnvironmentVariable("JAVA_TOOL_OPTIONS","Pro
 $trials = [System.Collections.Generic.List[object]]::new()
 Push-Location $root
 try {
-    if (-not $RecoverLatest) {
+    if (-not $recoveryMode) {
         Write-Host "Testing and compiling once for a rate-controlled real ONNX study."
         & mvn "-pl" "securelogx-log4j2" "-am" "clean" "test"
         if ($LASTEXITCODE -ne 0) { throw "Maven test reactor failed." }
@@ -140,7 +186,7 @@ try {
         $runDir = Join-Path $detailDir ("run-" + $ordinal.ToString("000") + "-r$rate")
         $resultPath = Join-Path $runDir "result.json"
         $logPath = Join-Path $runDir "protected-application.log"
-        if ($RecoverLatest) {
+        if ($recoveryMode) {
             if (-not (Test-Path -LiteralPath $resultPath) -and
                     -not (Test-Path -LiteralPath $logPath)) {
                 Write-Host "Unexecuted trial $ordinal at $rate/s; keeping summary partial."
@@ -300,9 +346,9 @@ try {
         schema_version=2; kind="compact-real-onnx-steady-arrival-study"
         study_id=$studyId; created_at_utc=[DateTime]::UtcNow.ToString("o")
         # Old raw reports did not capture the Git SHA, do not invent it.
-        source_commit_sha=$(if ($RecoverLatest) { $null } else { $sourceSha })
+        source_commit_sha=$(if ($recoveryMode) { $null } else { $sourceSha })
         aggregation_commit_sha=$sourceSha
-        recovery_from_existing_local_evidence=[bool]$RecoverLatest
+        recovery_from_existing_local_evidence=[bool]$recoveryMode
         status=$(if ($completeStudy) { "COMPLETE_VERIFIED" } else { "PARTIAL_VERIFIED" })
         expected_trials=$plan.Count
         validated_trials=$trials.Count
