@@ -295,6 +295,8 @@ try {
             peak_masking_queue=[int]$result.bounded_executor_measured_only.peak_queued_requests_including_warmup
             deadline_rejections=[int]$result.bounded_executor_measured_only.deadline_exceeded_requests
             overload_rejections=[int]$result.bounded_executor_measured_only.overload_rejected_requests
+            configured_model_sha256=[string]$result.configured_model_sha256
+            configured_tokenizer_sha256=[string]$result.configured_tokenizer_sha256
             native_onnx_calls=[int]$result.real_inference_measured_only.onnx_inference_calls
             native_windows=[int]$result.real_inference_measured_only.ml_inference_windows
             physical_order_inversions=[int]$result.protected_sequence_audit.physical_order_inversions
@@ -355,6 +357,16 @@ try {
     )
 
     $completeStudy = ($trials.Count -eq $plan.Count)
+    if (-not $recoveryMode -and $trials.Count -gt 0) {
+        $firstModelHash = $trials[0].configured_model_sha256
+        $firstTokenizerHash = $trials[0].configured_tokenizer_sha256
+        foreach ($trial in $trials) {
+            if ($trial.configured_model_sha256 -cne $firstModelHash -or
+                    $trial.configured_tokenizer_sha256 -cne $firstTokenizerHash) {
+                throw "ONNX model/tokenizer hashes changed during one A/B study."
+            }
+        }
+    }
     if ($trials.Count -eq 0) {
         throw "No local complete benchmark records were recovered."
     }
@@ -369,6 +381,12 @@ try {
         expected_trials=$plan.Count
         validated_trials=$trials.Count
         synthetic_only=$true
+        configured_model_sha256=$(if ($trials.Count -gt 0) {
+            $trials[0].configured_model_sha256
+        } else { $null })
+        configured_tokenizer_sha256=$(if ($trials.Count -gt 0) {
+            $trials[0].configured_tokenizer_sha256
+        } else { $null })
         rate_plan=@($plan.ToArray()); random_seed=$RandomSeed
         repetitions=$Repetitions; duration_seconds=$DurationSeconds
         caller_mode=$CallerMode; max_outstanding=$MaxOutstanding
