@@ -34,6 +34,18 @@ class SecureLogXSteadyArrivalOnnxBenchmarkTest {
     }
 
     @Test
+    void rejectsLateLoadGenerationEvenIfMaskingMightFinish() {
+        assertTrue(SecureLogXSteadyArrivalOnnxBenchmark
+                .meetsRateFidelity(5, 4.9, 50.0));
+        assertFalse(SecureLogXSteadyArrivalOnnxBenchmark
+                .meetsRateFidelity(5, 4.7, 50.0));
+        assertFalse(SecureLogXSteadyArrivalOnnxBenchmark
+                .meetsRateFidelity(5, 5.1, 205.0));
+        assertFalse(SecureLogXSteadyArrivalOnnxBenchmark
+                .meetsRateFidelity(0, 1, 0));
+    }
+
+    @Test
     void queueWaitHistogramIsMeasuredOnlyAndExcludesWarmupDeltas() {
         MaskingQueueWaitStats before = new MaskingQueueWaitStats(
                 4, 10_000_000L, 5_000_000L,
