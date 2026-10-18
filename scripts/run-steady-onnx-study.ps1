@@ -127,6 +127,7 @@ try {
             [int]$result.offered_rate_per_second -ne $rate -or
             [int]$result.planned_events -ne $expected -or
             [int]$result.completed_callers -ne $expected -or
+            [double]$result.observed_dispatched_rate_per_second -le 0 -or
             ([int]$result.successful_masked_events + [int]$result.fail_closed_events) -ne $expected -or
             [int]$result.total_protected_records -ne ($expected + [int]$result.warmup_events) -or
             $result.protected_sequence_audit.unique_ingress_ids -ne $true -or
@@ -151,7 +152,9 @@ try {
             fail_closed=[int]$result.fail_closed_events
             fail_closed_reasons=$result.fail_closed_reason_counts
             security_passed=$true; functional_passed=[bool]$result.functional_passed
-            actual_log_completion_rate=[double]$result.actual_offered_rate_per_second
+            observed_dispatch_rate=[double]$result.observed_dispatched_rate_per_second
+            protected_completion_rate=[double]$result.protected_completions_per_second
+            producer_dispatch_lag_p95_ms=[double]$result.producer_dispatch_lag_millis.p95
             normal_masked_per_second=[double]$result.normal_masked_events_per_second
             caller_p95_ms=[double]$result.caller_latency_millis.p95
             caller_p99_ms=[double]$result.caller_latency_millis.p99
