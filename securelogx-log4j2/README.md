@@ -845,33 +845,73 @@ no deadline failures. Full results:
 - `reports/parallel-onnx/studies/20261017T235150Z-low-caller-seed20261017-54d99978b774/`
 - `reports/parallel-onnx/comparisons/2026-10-17-low-concurrency-1-2-4-8-findings.json`
 
-**Next boundary characterization:** Keep the same actual
-ONNX worker/CPU/window/queue/deadline configuration and
-explore 8, 9, 10, 12 callers, using the same randomized
-paired execution order:
-
-```powershell
-cd D:\workspace\SecureLogX
-git pull origin chatgpt/hybrid-detection-pipeline
-powershell -ExecutionPolicy Bypass `
-  -File .\scripts\run-low-concurrency-onnx-study.ps1 `
-  -Callers "8,9,10,12" `
-  -Repetitions 2 `
-  -Events 200 `
-  -MaskingDeadlineMillis 2000 `
-  -CpuThreads 4 `
-  -WindowBatchLimit 4 `
-  -MaskingQueueCapacity 64 `
-  -RandomSeed 20261018 `
-  -UseExampleOrganizationRules `
-  -CommitResults `
-  -PushResults
-```
+**Follow-up completed:** The earlier 8/9/10/12-caller trial
+and the four-repetition 8/10/11/12-caller study are complete.
+The latter produced **32/32 synthetic confidentiality/sequence
+passes but only 15/32 strict functional passes**, including
+failures at eight callers. Results varied by run order and
+execution conditions. Use the compact comparison in
+`reports/parallel-onnx/comparisons/2026-10-18-32-run-repeated-8-10-11-12-findings.json`
+instead of rerunning synchronized bursts for a supposed
+absolute concurrency limit.
 
 These are short synthetic burst tests only. A larger multi-hour
 soak with steady arrivals, in-flight native-memory monitoring,
 and realistic workload variation remains required before any
 claim of production concurrency/SLO readiness.
+
+---
+
+## Current: fixed-rate real-ONNX logging and compact evidence
+
+The **new production-capacity characterization** is controlled
+open-loop synthetic logging at fixed offered rates of 5, 6 and
+7 requests/second. It measures real queued ONNX inference under
+steady arrivals, not synchronized waves. It preserves the existing
+single native inference worker and unchanged masking safety rules.
+It also records payload-free *actual native queue waiting time*
+histograms, producer dispatch jitter, caller p95/p99/max, measured
+normal masking rate, fail-closed reasons, GC and periodically
+sampled process working set.
+
+```powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 `
+  -Rates "5,6,7" -Repetitions 2 -DurationSeconds 60 `
+  -CallerMode platform -MaxOutstanding 32 `
+  -MemorySampleMillis 5000 -MaskingDeadlineMillis 2000 `
+  -CpuThreads 4 -WindowBatchLimit 4 -MaskingQueueCapacity 64 `
+  -RandomSeed 20261017 -UseExampleOrganizationRules `
+  -CommitResults -PushResults
+```
+
+**No more four-file-per-run Git commits.** This runner publishes
+**one compact JSON per study** under
+`reports/parallel-onnx/steady/`, with grouped metrics,
+source revision, pass/fail status and SHA-256 provenance.
+All individual detailed JSON and synthetic protected logs are
+retained **locally as one Git-ignored ZIP per study** at
+`reports/parallel-onnx/.local-steady-runs/`. Raw logs are
+not pushed. The ZIP is validated entry-by-entry before the
+temporary extracted directories are deleted.
+
+To simplify existing history, 344 redundant previous
+per-run files/receipts were removed from the **current Git
+tree**. Their exact source contents remain retrievable
+from reachable historical commits. The catalog
+`reports/parallel-onnx/README.md` links each consolidated
+finding to its original audit commit. Do not rewrite Git
+history to erase these commits.
+
+**State:** Java implementation, queue-wait instrumentation,
+unit tests and the Windows study runner are committed.
+The new steady-rate ONNX pilot still requires **local
+Maven and actual model execution** before metrics or
+functional acceptance can be claimed. Observed RSS
+maxima are sampled peaks, not guaranteed instantaneous
+native-memory peaks, and a 60-second run is not a soak
+or a production service-level validation.
 
 ---
 
