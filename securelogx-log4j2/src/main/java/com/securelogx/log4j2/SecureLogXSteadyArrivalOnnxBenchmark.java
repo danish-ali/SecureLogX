@@ -424,6 +424,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                             lateCallers)
                     .put("masking_deadline_millis",
                             effective.getMaskingDeadlineMillis())
+                    .put("configured_model_sha256",
+                            effective.getModelSha256())
+                    .put("configured_tokenizer_sha256",
+                            effective.getTokenizerSha256())
                     .put("max_configured_cpu_threads",
                             effective.getMaxCpuThreads())
                     .put("max_inference_windows_per_batch",
