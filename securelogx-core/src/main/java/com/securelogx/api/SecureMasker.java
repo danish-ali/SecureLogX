@@ -173,6 +173,14 @@ public final class SecureMasker implements AutoCloseable {
     }
 
     /**
+     * Queue-start wait histogram from the bounded inference worker.
+     * Aggregate timing only, without request payloads.
+     */
+    public MaskingQueueWaitStats getMaskingQueueWaitStats() {
+        return maskingRuntime.queueWaitStats();
+    }
+
+    /**
      * Returns only aggregate rule-proposal metadata; never raw log values.
      * Opt-in telemetry is in-memory and scoped to this masker instance.
      */
