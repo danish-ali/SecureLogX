@@ -44,6 +44,9 @@ $rateValues = @(
 if (@($rateValues | Select-Object -Unique).Count -ne $rateValues.Count) {
     throw "Rates must be distinct."
 }
+# Archival-only recovery must work even if model files have been moved
+# since the original run: no native session or Maven process is started.
+if (-not $RecoverLatest) {
 foreach ($modelArtifact in @(
     (Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\model.onnx"),
     (Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\tokenizer.json")
@@ -54,6 +57,8 @@ foreach ($modelArtifact in @(
 }
 if ($UseExampleOrganizationRules -and -not (Test-Path -LiteralPath (Join-Path $root "examples\organization-rules.example.json"))) {
     throw "Synthetic organization policy not found."
+}
+
 }
 
 $localRoot = Join-Path $root "reports\parallel-onnx\.local-steady-runs"
