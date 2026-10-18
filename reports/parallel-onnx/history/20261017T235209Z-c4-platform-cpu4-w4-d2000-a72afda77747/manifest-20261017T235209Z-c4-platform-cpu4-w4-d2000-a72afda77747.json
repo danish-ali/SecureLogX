@@ -1,0 +1,35 @@
+﻿{
+    "schema_version":  1,
+    "run_id":  "20261017T235209Z-c4-platform-cpu4-w4-d2000-a72afda77747",
+    "source_commit_sha":  "7d741ffed5145bfdbbedd167dcacf59e96cf1ec8",
+    "created_at_utc":  "2026-10-17T23:52:43.9240544Z",
+    "evidence_type":  "real_onnx_synthetic_concurrency_load",
+    "cpu_threads":  4,
+    "max_windows_per_batch":  4,
+    "deadline_millis":  2000,
+    "masking_queue_capacity":  64,
+    "caller_threads":  4,
+    "caller_mode":  "platform",
+    "events":  200,
+    "security_passed":  true,
+    "functional_passed":  true,
+    "synthetic_fixture_safety_check":  "passed",
+    "raw_user_data_present":  false,
+    "files":  [
+                  {
+                      "filename":  "result-20261017T235209Z-c4-platform-cpu4-w4-d2000-a72afda77747.json",
+                      "bytes":  6952,
+                      "sha256":  "584B822D9FD9C6EB78C957A52113C61C1FE17C6AECB754149C24A0D0C939539C"
+                  },
+                  {
+                      "filename":  "protected-application-20261017T235209Z-c4-platform-cpu4-w4-d2000-a72afda77747.log",
+                      "bytes":  139131,
+                      "sha256":  "D86D8390A3DCEA31005932FB9D9EE33B650E12C5BF6533B73EEEA74701D40517"
+                  },
+                  {
+                      "filename":  "reconstructed-application-20261017T235209Z-c4-platform-cpu4-w4-d2000-a72afda77747.log",
+                      "bytes":  139131,
+                      "sha256":  "225CBE25B2B3EF9F403AAD140C0800BF84F078A1C2C96034B952B29575998727"
+                  }
+              ]
+}
