@@ -74,8 +74,9 @@ Full 5/6/7 steady-rate study      COMPLETE_VERIFIED: 6/6 synthetic security;
                                    5/s 2/2 functional, 6/s 1/2, 7/s 0/2
 Measured-only queue max + benign IMPLEMENTED; local Maven validation PENDING
 Pre-queue deterministic split     EXPERIMENTAL OPT-IN; OFF by default
-Pre-queue parity + quality gate   MODEL-FREE TESTS ADDED; local Maven/real ONNX and
-                                   locked high-risk corpus parity PENDING
+Pre-queue parity + quality gate   EXTRA MODEL-FREE SAFETY REGRESSIONS ADDED;
+                                   same-source A/B + local ZIP verifier READY
+                                   local Maven and locked high-risk corpus OPEN
 Multi-hour steady-state soak      OPEN
 Spring starter / Maven release    BLOCKED until representative sustained gate
 ```
@@ -5419,6 +5420,75 @@ may reduce queue delay without making whole events model-free
 or significantly increasing sustainable throughput. These
 changes are not equivalent to an H2 learned reviewer or a
 general regex-only bypass, neither of which has been approved.
+
+---
+
+### 2026-10-22 — Harden experimental pre-queue merge and publish strict A/B verification
+
+**Status: COMMITTED; NEW REGRESSIONS/COMPARATORS REQUIRE LOCAL EXECUTION.
+EXPERIMENTAL FLAG REMAINS OFF BY DEFAULT.**
+
+**Existing feature:** The development branch already contained the
+opt-in `PreQueueDeterministicRouter`, `SecureMasker` integration,
+model-free parity tests, payload-free routing counters and
+`run-steady-onnx-study.ps1 -EnablePreQueueRouting`.
+No separate second ONNX worker or duplicate rules engine was created.
+The experimental flow only routes fields already classed
+`requiresMl=false` by the immutable hybrid policy to deterministic
+`maskWithoutMl` on the caller side; uncertain inputs still enter
+the same bounded native worker. All data remains held until the
+whole event has a complete protected result.
+
+**This change:** Hardened `Plan.merge` against inconsistent worker
+outcomes: a result claiming `failClosed=false` while reporting
+`MASKING_DISABLED`, `PROCESSING_FAILURE`, `DEADLINE_EXCEEDED`
+or `OVERLOAD_REJECTED` now fails the **entire** log event closed.
+A separate close-state check discards even a fully deterministic
+pre-queue result when concurrent masker shutdown has begun.
+Added a model-free regression showing that no original value
+survives malformed worker outcomes. Does not change frozen
+default routing or model behavior.
+
+**Reproducible performance comparison:** The new
+`scripts/compare-steady-prequeue-ab.ps1` refuses A/B comparisons
+whose source commit SHA, tokenizer/model SHA-256, synthetic
+organization-rules fingerprint, caller type, seeded rate plan,
+timing, capacity or deadline differ. It exposes *normally
+masked* throughput rather than counting fail-closed responses
+as successful ML masking. It separately compares per-rate
+functional passes, deadline-relevant p99/max, worker queue
+wait, native ONNX calls/windows and candidate deterministic
+fields. The comparison creates no raw-log artifact.
+
+**Protected-output comparison:** The new
+`scripts/verify-prequeue-output-parity.ps1` opens the **locally
+ignored** detailed ZIP from each complete study, validates
+the original log entry SHA-256, and compares sanitization by
+synthetic `bench-N`/`warmup-N` IDs after removing only
+run-specific sequence/instance identifiers and routing
+telemetry. It never prints fixture payloads. A paired trial
+with a fail-closed outcome is explicitly **ineligible** for
+exact output parity, not counted as equivalent. This checks
+synthetic output only, not all edge cases or the frozen
+6,463-record H1+C1-S corpus.
+
+**Correct experiment protocol:** Run the two 5/6 events/s
+steady studies on the **same source revision**, with the same
+model/tokenizer, example organization rules, duration, seed,
+worker, batch/window cap and 2s deadline. Do not commit/push
+the OFF run before the ON run: a Git report commit would
+change the recorded source revision. Compare the two compact
+JSON reports and their original local ZIP files, and *then*
+publish only the OFF, ON, and compact A/B scorecard JSONs.
+See `reports/parallel-onnx/README.md` for the exact commands.
+
+**Release gate unchanged:** Opt-in routing may be evaluated on
+synthetic workloads. The frozen high-risk recall, negative
+controls, mixed field-boundary reconstruction attacks, and
+sustained/soak evaluation must still pass before considering a
+default change, Spring starter, or Maven release. No results of
+those new studies are claimed by this commit; Windows/ONNX
+execution remains outside this repository-side change.
 
 ---
 
