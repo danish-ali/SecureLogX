@@ -120,8 +120,19 @@ public final class PreQueueDeterministicRouter {
                     failure = MaskReasonCode.PROCESSING_FAILURE;
                     break;
                 }
+                // A malformed or inconsistent worker result must not
+                // release a raw field. In particular MASKING_DISABLED
+                // is not a successful sanitized outcome even when a
+                // caller incorrectly supplies failClosed=false.
+                MaskReasonCode reason = output.reasonCode();
+                if (!output.failClosed()
+                        && reason != MaskReasonCode.ML_RESOLVED
+                        && reason != MaskReasonCode.DETERMINISTIC_RESOLVED) {
+                    failure = MaskReasonCode.PROCESSING_FAILURE;
+                    break;
+                }
                 if (output.failClosed() && failure == null) {
-                    failure = output.reasonCode();
+                    failure = reason;
                 }
                 merged[unresolvedIndices.get(i)] = output;
             }
