@@ -201,6 +201,14 @@ public final class SecureMasker implements AutoCloseable {
                                     )
                             );
                     uniqueResults = plan.merge(unresolved);
+                    // A concurrent context shutdown may begin while
+                    // deterministic fields are being resolved outside the
+                    // native worker. Never release them after close is seen.
+                    if (closed.get()) {
+                        uniqueResults = plan.failClosed(
+                                MaskReasonCode.OVERLOAD_REJECTED
+                        );
+                    }
                     if (uniqueResults.stream().anyMatch(
                             MaskedResult::failClosed)) {
                         preQueueFailClosedEvents.increment();
