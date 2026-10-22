@@ -152,33 +152,53 @@ git pull origin chatgpt/hybrid-detection-pipeline
 mvn -pl securelogx-log4j2 -am clean test
 ```
 
-For an apples-to-apples real-ONNX pilot, run the same seeded
-5/6-event/s synthetic study twice without modifying settings,
-model, native worker, queue, deadline, or policy. Run the baseline
-first:
+For a controlled 5/6-events-per-second A/B pilot, the **same code
+revision**, model/tokenizer SHA-256s, approved organization policy hash,
+fixed workload seed, queue, worker, and deadline must be used.
+**Do not use -CommitResults / -PushResults between the baseline and
+experimental run** because the first result commit would change the
+source revision of the second.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 `
-  -Rates "5,6" -Repetitions 2 -DurationSeconds 60 `
-  -CallerMode platform -MaxOutstanding 32 `
-  -MaskingDeadlineMillis 2000 -CpuThreads 4 `
-  -WindowBatchLimit 4 -MaskingQueueCapacity 64 `
-  -MemorySampleMillis 5000 -RandomSeed 20261018 `
-  -UseExampleOrganizationRules -CommitResults -PushResults
-```
+Run the following in **one PowerShell session** (all scripts use
+the same current repository source HEAD):
 
-Run the identical experiment with only the feature flag enabled:
+~~~powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+mvn -pl securelogx-log4j2 -am clean test
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 `
-  -Rates "5,6" -Repetitions 2 -DurationSeconds 60 `
-  -CallerMode platform -MaxOutstanding 32 `
-  -MaskingDeadlineMillis 2000 -CpuThreads 4 `
-  -WindowBatchLimit 4 -MaskingQueueCapacity 64 `
-  -MemorySampleMillis 5000 -RandomSeed 20261018 `
-  -UseExampleOrganizationRules -EnablePreQueueRouting `
-  -CommitResults -PushResults
-```
+# Baseline without pre-queue routing:
+powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 -Rates "5,6" -Repetitions 2 -DurationSeconds 60 -CallerMode platform -MaxOutstanding 32 -MaskingDeadlineMillis 2000 -CpuThreads 4 -WindowBatchLimit 4 -MaskingQueueCapacity 64 -MemorySampleMillis 5000 -RandomSeed 20261018 -UseExampleOrganizationRules
+$offStudy = @(Get-ChildItem .\reports\parallel-onnx\steady -Filter 'study-*.json' -File | Sort-Object LastWriteTimeUtc -Descending)[0]
+
+# Experiment with ONLY the pre-queue flag different:
+powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 -Rates "5,6" -Repetitions 2 -DurationSeconds 60 -CallerMode platform -MaxOutstanding 32 -MaskingDeadlineMillis 2000 -CpuThreads 4 -WindowBatchLimit 4 -MaskingQueueCapacity 64 -MemorySampleMillis 5000 -RandomSeed 20261018 -UseExampleOrganizationRules -EnablePreQueueRouting
+$onStudy = @(Get-ChildItem .\reports\parallel-onnx\steady -Filter 'study-*.json' -File | Sort-Object LastWriteTimeUtc -Descending)[0]
+
+$off = Get-Content $offStudy.FullName -Raw | ConvertFrom-Json
+$on = Get-Content $onStudy.FullName -Raw | ConvertFrom-Json
+$offZip = ".\reports\parallel-onnx\.local-steady-runs\detail-$($off.study_id).zip"
+$onZip = ".\reports\parallel-onnx\.local-steady-runs\detail-$($on.study_id).zip"
+$comparison = ".\reports\parallel-onnx\steady\comparison-$($off.study_id)-vs-$($on.study_id).json"
+
+powershell -ExecutionPolicy Bypass -File .\scripts\compare-steady-prequeue-ab.ps1 -BaselineStudy $offStudy.FullName -PreQueueStudy $onStudy.FullName -OutputPath $comparison
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-prequeue-output-parity.ps1 -BaselineStudy $offStudy.FullName -PreQueueStudy $onStudy.FullName -BaselineDetailZip $offZip -PreQueueDetailZip $onZip
+
+# Only after reviewing results: publish the two compact studies and A/B JSON.
+git add -- $offStudy.FullName $onStudy.FullName $comparison
+git commit -m "Archive matched synthetic pre-queue OFF/ON real ONNX study"
+git push origin chatgpt/hybrid-detection-pipeline
+~~~
+
+The offline metrics comparator rejects mismatched source SHA,
+model/tokenizer fingerprint, synthetic organization rules SHA,
+seed, or workload configuration. The ZIP parity verifier
+rehashes the original local protected logs, compares normalized
+synthetic fields by event ID, and **never prints log payloads**.
+Failed functional trials are excluded from exact-output parity,
+not misreported as equivalent. Even complete synthetic parity
+does **not** prove parity on the locked 6,463-case high-risk
+corpus; that release gate remains open.
 
 Each entire study produces **one compact Git JSON**, with detailed
 synthetic outputs retained only in local, Git-ignored ZIP archives.
