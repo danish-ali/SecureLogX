@@ -381,6 +381,10 @@ try {
         expected_trials=$plan.Count
         validated_trials=$trials.Count
         synthetic_only=$true
+        synthetic_organization_rules_enabled=[bool]$UseExampleOrganizationRules
+        synthetic_organization_rules_sha256=$(if ($UseExampleOrganizationRules -and -not $recoveryMode) {
+            (Get-FileHash -LiteralPath (Join-Path $root "examples\organization-rules.example.json") -Algorithm SHA256).Hash
+        } else { $null })
         configured_model_sha256=$(if ($trials.Count -gt 0) {
             $trials[0].configured_model_sha256
         } else { $null })
