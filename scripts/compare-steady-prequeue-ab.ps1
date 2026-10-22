@@ -3,49 +3,45 @@ param(
     [Parameter(Mandatory=$true)][string]$PreQueueStudy,
     [string]$OutputPath
 )
-
 $ErrorActionPreference = "Stop"
 
-function Read-Study([string]$name) {
-    $resolved = (Resolve-Path -LiteralPath $name -ErrorAction Stop).Path
-    $doc = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json
-    if ($doc.kind -cne "compact-real-onnx-steady-arrival-study" -or
-        $doc.status -cne "COMPLETE_VERIFIED" -or
-        $doc.security_validated_all_runs -ne $true -or
-        [int]$doc.validated_trials -ne [int]$doc.expected_trials -or
-        @($doc.trials).Count -ne [int]$doc.expected_trials) {
-        throw "Not a complete, synthetic-security-validated steady ONNX study: $resolved"
-    }
-    return $doc
+function Require([bool]$ok, [string]$message) {
+    if (-not $ok) { throw $message }
 }
-function Require([bool]$condition, [string]$message) {
-    if (-not $condition) { throw $message }
+function Read-Study([string]$path) {
+    $file = (Resolve-Path -LiteralPath $path -ErrorAction Stop).Path
+    $study = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+    Require ($study.kind -ceq "compact-real-onnx-steady-arrival-study") "Not a steady-ONNX study: $file."
+    Require ($study.status -ceq "COMPLETE_VERIFIED" -and
+        $study.security_validated_all_runs -eq $true -and
+        [int]$study.validated_trials -eq [int]$study.expected_trials -and
+        @($study.trials).Count -eq [int]$study.expected_trials) "Study lacks complete synthetic validation: $file."
+    return $study
 }
-function Sum-Field([object[]]$rows, [string]$field) {
-    $sum = 0.0
-    foreach ($item in $rows) {
-        if ($null -eq $item.$field) { throw "Missing trial metric: $field" }
-        $sum += [double]$item.$field
+function Sum-Field([object[]]$items, [string]$field) {
+    $total = 0.0
+    foreach ($item in $items) {
+        Require ($null -ne $item.$field) "Missing numeric metric $field."
+        $total += [double]$item.$field
     }
-    return $sum
+    return $total
 }
-function Max-Field([object[]]$rows, [string]$field) {
-    $found = $false
-    $max = [double]::NegativeInfinity
-    foreach ($item in $rows) {
-        if ($null -eq $item.$field) { throw "Missing trial metric: $field" }
-        $max = [math]::Max($max, [double]$item.$field)
-        $found = $true
+function Max-Field([object[]]$items, [string]$field) {
+    Require ($items.Count -gt 0) "No rows for $field."
+    $maximum = [double]::NegativeInfinity
+    foreach ($item in $items) {
+        Require ($null -ne $item.$field) "Missing numeric metric $field."
+        $maximum = [math]::Max($maximum, [double]$item.$field)
     }
-    if (-not $found) { throw "Empty trial group" }
-    return $max
+    return $maximum
 }
 
 $off = Read-Study $BaselineStudy
 $on = Read-Study $PreQueueStudy
-Require ([bool]$off.experimental_pre_queue_enabled -eq $false) "Baseline study must use pre-queue OFF."
-Require ([bool]$on.experimental_pre_queue_enabled -eq $true) "Experimental study must use pre-queue ON."
-$keys = @(
+Require ($off.experimental_pre_queue_enabled -eq $false) "Baseline must have pre-queue OFF."
+Require ($on.experimental_pre_queue_enabled -eq $true) "Experimental study must have pre-queue ON."
+
+$identical = @(
     "source_commit_sha", "configured_model_sha256",
     "configured_tokenizer_sha256", "repetitions", "duration_seconds",
     "caller_mode", "max_outstanding", "memory_sample_interval_millis",
@@ -53,362 +49,127 @@ $keys = @(
     "masking_queue_capacity", "random_seed",
     "synthetic_organization_rules_enabled"
 )
-foreach ($key in $keys) {
-    Require ($null -ne $off.$key -and $null -ne $on.$key) "Missing $key; comparison requires original complete studies."
-    Require ([string]$off.$key -ceq [string]$on.$key) "Cannot compare studies with different $key."
+foreach ($key in $identical) {
+    Require ($null -ne $off.$key -and $null -ne $on.$key) "Missing source/configuration field $key."
+    Require ([string]$off.$key -ceq [string]$on.$key) "OFF/ON configuration differs in $key."
 }
-Require ([string]$off.configured_model_sha256 -match '^[A-Fa-f0-9]{64}$') "Missing usable model SHA-256."
-Require ([string]$off.configured_tokenizer_sha256 -match '^[A-Fa-f0-9]{64}
+Require ([string]$off.source_commit_sha -cmatch '^[0-9a-f]{40}$') "Source commit SHA is missing/invalid."
+Require ([string]$off.configured_model_sha256 -match '^[a-f0-9]{64}$') "Model SHA-256 is missing/invalid."
+Require ([string]$off.configured_tokenizer_sha256 -match '^[a-f0-9]{64}$') "Tokenizer SHA-256 is missing/invalid."
+if ($off.synthetic_organization_rules_enabled -eq $true) {
+    Require ([string]$off.synthetic_organization_rules_sha256 -match '^[a-f0-9]{64}$') "Synthetic organization rules hash missing."
+    Require ([string]$off.synthetic_organization_rules_sha256 -ceq
+        [string]$on.synthetic_organization_rules_sha256) "Synthetic organization rules differ."
+}
 
 $offPlan = @($off.rate_plan)
 $onPlan = @($on.rate_plan)
-Require ($offPlan.Count -eq $onPlan.Count) "Mismatched rate-plan lengths."
-for ($i=0; $i -lt $offPlan.Count; $i++) {
-    Require ([int]$offPlan[$i].rate -eq [int]$onPlan[$i].rate -and
-        [int]$offPlan[$i].repetition -eq [int]$onPlan[$i].repetition) "Mismatched run plan at trial $($i + 1)."
-}
+Require ($offPlan.Count -gt 0 -and $offPlan.Count -eq $onPlan.Count) "OFF/ON plans differ."
 $offTrials = @($off.trials)
 $onTrials = @($on.trials)
+Require ($offTrials.Count -eq $onTrials.Count) "OFF/ON trial counts differ."
+for ($i=0; $i -lt $offPlan.Count; $i++) {
+    Require ([int]$offPlan[$i].rate -eq [int]$onPlan[$i].rate -and
+        [int]$offPlan[$i].repetition -eq [int]$onPlan[$i].repetition) "Trial plan mismatch at index $i."
+}
 for ($i=0; $i -lt $offTrials.Count; $i++) {
-    $a=$offTrials[$i]; $b=$onTrials[$i]
+    $a = $offTrials[$i]
+    $b = $onTrials[$i]
+    Require ($a.security_passed -eq $true -and $b.security_passed -eq $true) "Synthetic security check failed in trial $($i + 1)."
     Require ([int]$a.run -eq [int]$b.run -and
         [int]$a.repetition -eq [int]$b.repetition -and
         [int]$a.offered_rate_per_second -eq [int]$b.offered_rate_per_second -and
-        [int]$a.events -eq [int]$b.events) "Trial $($i + 1) identity and expected synthetic load differ."
-    Require ($a.security_passed -eq $true -and $b.security_passed -eq $true) "Trial $($i+1) failed synthetic confidentiality/sequence acceptance."
-    Require ($a.pre_queue_enabled -eq $false -and $b.pre_queue_enabled -eq $true) "Trial $($i+1) does not match OFF/ON routing status."
-    Require ([string]$a.configured_model_sha256 -ceq [string]$off.configured_model_sha256 -and
-        [string]$b.configured_model_sha256 -ceq [string]$on.configured_model_sha256 -and
-        [string]$a.configured_tokenizer_sha256 -ceq [string]$off.configured_tokenizer_sha256 -and
-        [string]$b.configured_tokenizer_sha256 -ceq [string]$on.configured_tokenizer_sha256) "Inconsistent model/tokenizer hash within trial $($i+1)."
+        [int]$a.events -eq [int]$b.events) "Workload mismatch in trial $($i + 1)."
+    Require ($a.pre_queue_enabled -eq $false -and
+        $b.pre_queue_enabled -eq $true) "Unexpected routing flag in trial $($i + 1)."
+    foreach ($item in @($a,$b)) {
+        Require ([string]$item.configured_model_sha256 -ceq
+            [string]$off.configured_model_sha256 -and
+            [string]$item.configured_tokenizer_sha256 -ceq
+            [string]$off.configured_tokenizer_sha256) "Model fingerprint changed within trial $($i + 1)."
+        Require (([int]$item.normal_masked + [int]$item.fail_closed) -eq
+            [int]$item.events) "Normal masking plus fail-closed is incomplete in trial $($i + 1)."
+    }
 }
 
 $rates = @($offPlan | ForEach-Object { [int]$_.rate } | Sort-Object -Unique)
 $rows = [System.Collections.Generic.List[object]]::new()
 foreach ($rate in $rates) {
-    $a = @($offTrials | Where-Object { $_.offered_rate_per_second -eq $rate })
-    $b = @($onTrials | Where-Object { $_.offered_rate_per_second -eq $rate })
-    Require ($a.Count -eq [int]$off.repetitions -and $b.Count -eq $a.Count) "Missing repeated trials at rate $rate/s."
-    $baselineNormal = Sum-Field $a "normal_masked"
-    $enabledNormal = Sum-Field $b "normal_masked"
-    $baselineTotal = Sum-Field $a "events"
-    $enabledTotal = Sum-Field $b "events"
-    Require ($baselineTotal -eq $enabledTotal) "Mismatched offered events at rate $rate/s."
-    $baselineFail = Sum-Field $a "fail_closed"
-    $enabledFail = Sum-Field $b "fail_closed"
-    $baselineFunctional = @($a | Where-Object { $_.functional_passed -eq $true }).Count
-    $enabledFunctional = @($b | Where-Object { $_.functional_passed -eq $true }).Count
+    $base = @($offTrials | Where-Object { $_.offered_rate_per_second -eq $rate })
+    $experiment = @($onTrials | Where-Object { $_.offered_rate_per_second -eq $rate })
+    Require ($base.Count -gt 0 -and
+        $base.Count -eq [int]$off.repetitions -and
+        $experiment.Count -eq $base.Count) "Missing repeated trial for rate $rate."
 
-    $rows.Add([pscustomobject]@{
-        rate_per_second = $rate
-        trials_per_mode = $a.Count
-        offered_events_per_mode = [int]$baselineTotal
-        baseline_success_count = [int]$baselineNormal
-        enabled_success_count = [int]$enabledNormal
-        baseline_fail_closed = [int]$baselineFail
-        enabled_fail_closed = [int]$enabledFail
-        baseline_functional_passes = $baselineFunctional
-        enabled_functional_passes = $enabledFunctional
+    $row = [pscustomobject]@{
+        offered_rate_per_second = [int]$rate
+        repetitions = $base.Count
+        baseline_normal_masked = [int](Sum-Field $base "normal_masked")
+        experimental_normal_masked = [int](Sum-Field $experiment "normal_masked")
+        baseline_fail_closed = [int](Sum-Field $base "fail_closed")
+        experimental_fail_closed = [int](Sum-Field $experiment "fail_closed")
+        baseline_functional_passes = @($base | Where-Object { $_.functional_passed }).Count
+        experimental_functional_passes = @($experiment | Where-Object { $_.functional_passed }).Count
         baseline_mean_normal_masked_per_second = [math]::Round(
-            (Sum-Field $a "normal_masked_per_second") / $a.Count, 3)
-        enabled_mean_normal_masked_per_second = [math]::Round(
-            (Sum-Field $b "normal_masked_per_second") / $b.Count, 3)
-        baseline_worst_p99_ms = [math]::Round((Max-Field $a "caller_p99_ms"), 3)
-        enabled_worst_p99_ms = [math]::Round((Max-Field $b "caller_p99_ms"), 3)
-        baseline_worst_max_latency_ms = [math]::Round((Max-Field $a "caller_max_ms"), 3)
-        enabled_worst_max_latency_ms = [math]::Round((Max-Field $b "caller_max_ms"), 3)
-        baseline_mean_queue_wait_ms = [math]::Round(
-            (Sum-Field $a "queue_wait_avg_ms") / $a.Count, 3)
-        enabled_mean_queue_wait_ms = [math]::Round(
-            (Sum-Field $b "queue_wait_avg_ms") / $b.Count, 3)
-        baseline_onnx_calls = [int](Sum-Field $a "native_onnx_calls")
-        enabled_onnx_calls = [int](Sum-Field $b "native_onnx_calls")
-        baseline_onnx_windows = [int](Sum-Field $a "native_windows")
-        enabled_onnx_windows = [int](Sum-Field $b "native_windows")
-        pre_queue_deterministic_fields = [int](Sum-Field $b "pre_queue_deterministic_fields")
-        pre_queue_escalated_fields = [int](Sum-Field $b "pre_queue_escalated_fields")
-        safe_fixture_checks_reported_both = $true
-        exact_output_parity_validated = $false
-        frozen_high_risk_recall_validated = $false
-    })
+            (Sum-Field $base "normal_masked_per_second") / $base.Count,3)
+        experimental_mean_normal_masked_per_second = [math]::Round(
+            (Sum-Field $experiment "normal_masked_per_second") / $experiment.Count,3)
+        baseline_worst_p99_millis = [math]::Round(
+            (Max-Field $base "caller_p99_ms"), 3)
+        experimental_worst_p99_millis = [math]::Round(
+            (Max-Field $experiment "caller_p99_ms"), 3)
+        baseline_max_caller_latency_millis = [math]::Round(
+            (Max-Field $base "caller_max_ms"), 3)
+        experimental_max_caller_latency_millis = [math]::Round(
+            (Max-Field $experiment "caller_max_ms"), 3)
+        baseline_mean_queue_wait_millis = [math]::Round(
+            (Sum-Field $base "queue_wait_avg_ms") / $base.Count,3)
+        experimental_mean_queue_wait_millis = [math]::Round(
+            (Sum-Field $experiment "queue_wait_avg_ms") / $experiment.Count,3)
+        baseline_native_onnx_calls = [int](Sum-Field $base "native_onnx_calls")
+        experimental_native_onnx_calls = [int](Sum-Field $experiment "native_onnx_calls")
+        baseline_native_windows = [int](Sum-Field $base "native_windows")
+        experimental_native_windows = [int](Sum-Field $experiment "native_windows")
+        experimental_prequeue_deterministic_fields = [int](
+            Sum-Field $experiment "pre_queue_deterministic_fields")
+        experimental_prequeue_escalated_fields = [int](
+            Sum-Field $experiment "pre_queue_escalated_fields")
+        synthetic_security_checks_reported = $true
+        protected_payload_parity_proved = $false
+        frozen_high_risk_corpus_parity_proved = $false
+    }
+    $rows.Add($row)
 }
 
-$comparison = [ordered]@{
+$scorecard = [ordered]@{
     schema_version = 1
-    experiment = "steady-onnx-prequeue-deterministic-opt-in-ab"
+    experiment = "steady-onnx-prequeue-optin-ab"
     baseline_study_id = $off.study_id
-    pre_queue_study_id = $on.study_id
-    same_code_revision = $true
+    experimental_study_id = $on.study_id
     source_commit_sha = $off.source_commit_sha
-    same_model_and_tokenizer_hash = $true
     configured_model_sha256 = $off.configured_model_sha256
     configured_tokenizer_sha256 = $off.configured_tokenizer_sha256
     synthetic_organization_rules_sha256 = $off.synthetic_organization_rules_sha256
-    comparable_workloads = $true
-    rows = @($rows.ToArray())
-    assessment = "SYNTHETIC_METRIC_COMPARISON_ONLY"
-    release_gate = "OPEN: requires protected-output bitwise/semantic parity on local ZIP fixtures and locked high-risk corpus recall plus longer soak; never enable production from aggregate benchmark metrics alone."
+    assessment = "SYNTHETIC_METRICS_ONLY"
+    release_gate = "OPEN: exact protected output from local ZIP and locked high-risk recall require separate validation; production default stays off."
+    comparison = @($rows.ToArray())
 }
-Write-Host "Pre-queue real ONNX A/B comparison (same source, model, seed and workload)"
-foreach ($row in $rows) {
-    Write-Host ("rate={0}/s normalMasked off/on={1}/{2}, failClosed off/on={3}/{4}, ONNX calls off/on={5}/{6}, mean queueMs off/on={7}/{8}" -f
-        $row.rate_per_second, $row.baseline_success_count,
-        $row.enabled_success_count,
-        $row.baseline_fail_closed,
-        $row.enabled_fail_closed,
-        $row.baseline_onnx_calls,
-        $row.enabled_onnx_calls,
-        $row.baseline_mean_queue_wait_ms,
-        $row.enabled_mean_queue_wait_ms)
+Write-Host "Compared paired synthetic steady-ONNX OFF/ON studies with the same source/model/policy/configuration."
+foreach ($r in $rows) {
+    Write-Host ("rate={0}/s normal off/on={1}/{2}, fail-closed off/on={3}/{4}, native calls off/on={5}/{6}, average queue wait off/on={7}/{8}ms" -f
+        $r.offered_rate_per_second,$r.baseline_normal_masked,
+        $r.experimental_normal_masked,
+        $r.baseline_fail_closed,$r.experimental_fail_closed,
+        $r.baseline_native_onnx_calls,$r.experimental_native_onnx_calls,
+        $r.baseline_mean_queue_wait_millis,$r.experimental_mean_queue_wait_millis)
 }
-Write-Host "Release gate remains OPEN; this comparison does not audit exact protected output or locked high-risk recall."
+Write-Host "Synthetic metrics alone cannot certify output or high-risk recall parity."
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
-    $destination = [System.IO.Path]::GetFullPath($OutputPath)
-    if (Test-Path -LiteralPath $destination) {
-        throw "Refusing to overwrite an existing A/B scorecard: $destination"
-    }
-    $parent = Split-Path -Path $destination -Parent
-    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
-        throw "A/B scorecard parent folder missing: $parent"
-    }
-    $comparison | ConvertTo-Json -Depth 12 |
-        Set-Content -LiteralPath $destination -Encoding UTF8
-    Write-Host "Wrote compact A/B scorecard to: $destination"
-}
-) "Missing usable tokenizer SHA-256."
-if ($off.synthetic_organization_rules_enabled -eq $true) {
-    Require ([string]$off.synthetic_organization_rules_sha256 -match '^[A-Fa-f0-9]{64}
-
-$offPlan = @($off.rate_plan)
-$onPlan = @($on.rate_plan)
-Require ($offPlan.Count -eq $onPlan.Count) "Mismatched rate-plan lengths."
-for ($i=0; $i -lt $offPlan.Count; $i++) {
-    Require ([int]$offPlan[$i].rate -eq [int]$onPlan[$i].rate -and
-        [int]$offPlan[$i].repetition -eq [int]$onPlan[$i].repetition) "Mismatched run plan at trial $($i + 1)."
-}
-$offTrials = @($off.trials)
-$onTrials = @($on.trials)
-for ($i=0; $i -lt $offTrials.Count; $i++) {
-    $a=$offTrials[$i]; $b=$onTrials[$i]
-    Require ([int]$a.run -eq [int]$b.run -and
-        [int]$a.repetition -eq [int]$b.repetition -and
-        [int]$a.offered_rate_per_second -eq [int]$b.offered_rate_per_second -and
-        [int]$a.events -eq [int]$b.events) "Trial $($i + 1) identity and expected synthetic load differ."
-    Require ($a.security_passed -eq $true -and $b.security_passed -eq $true) "Trial $($i+1) failed synthetic confidentiality/sequence acceptance."
-    Require ($a.pre_queue_enabled -eq $false -and $b.pre_queue_enabled -eq $true) "Trial $($i+1) does not match OFF/ON routing status."
-    Require ([string]$a.configured_model_sha256 -ceq [string]$off.configured_model_sha256 -and
-        [string]$b.configured_model_sha256 -ceq [string]$on.configured_model_sha256 -and
-        [string]$a.configured_tokenizer_sha256 -ceq [string]$off.configured_tokenizer_sha256 -and
-        [string]$b.configured_tokenizer_sha256 -ceq [string]$on.configured_tokenizer_sha256) "Inconsistent model/tokenizer hash within trial $($i+1)."
-}
-
-$rates = @($offPlan | ForEach-Object { [int]$_.rate } | Sort-Object -Unique)
-$rows = [System.Collections.Generic.List[object]]::new()
-foreach ($rate in $rates) {
-    $a = @($offTrials | Where-Object { $_.offered_rate_per_second -eq $rate })
-    $b = @($onTrials | Where-Object { $_.offered_rate_per_second -eq $rate })
-    Require ($a.Count -eq [int]$off.repetitions -and $b.Count -eq $a.Count) "Missing repeated trials at rate $rate/s."
-    $baselineNormal = Sum-Field $a "normal_masked"
-    $enabledNormal = Sum-Field $b "normal_masked"
-    $baselineTotal = Sum-Field $a "events"
-    $enabledTotal = Sum-Field $b "events"
-    Require ($baselineTotal -eq $enabledTotal) "Mismatched offered events at rate $rate/s."
-    $baselineFail = Sum-Field $a "fail_closed"
-    $enabledFail = Sum-Field $b "fail_closed"
-    $baselineFunctional = @($a | Where-Object { $_.functional_passed -eq $true }).Count
-    $enabledFunctional = @($b | Where-Object { $_.functional_passed -eq $true }).Count
-
-    $rows.Add([pscustomobject]@{
-        rate_per_second = $rate
-        trials_per_mode = $a.Count
-        offered_events_per_mode = [int]$baselineTotal
-        baseline_success_count = [int]$baselineNormal
-        enabled_success_count = [int]$enabledNormal
-        baseline_fail_closed = [int]$baselineFail
-        enabled_fail_closed = [int]$enabledFail
-        baseline_functional_passes = $baselineFunctional
-        enabled_functional_passes = $enabledFunctional
-        baseline_mean_normal_masked_per_second = [math]::Round(
-            (Sum-Field $a "normal_masked_per_second") / $a.Count, 3)
-        enabled_mean_normal_masked_per_second = [math]::Round(
-            (Sum-Field $b "normal_masked_per_second") / $b.Count, 3)
-        baseline_worst_p99_ms = [math]::Round((Max-Field $a "caller_p99_ms"), 3)
-        enabled_worst_p99_ms = [math]::Round((Max-Field $b "caller_p99_ms"), 3)
-        baseline_worst_max_latency_ms = [math]::Round((Max-Field $a "caller_max_ms"), 3)
-        enabled_worst_max_latency_ms = [math]::Round((Max-Field $b "caller_max_ms"), 3)
-        baseline_mean_queue_wait_ms = [math]::Round(
-            (Sum-Field $a "queue_wait_avg_ms") / $a.Count, 3)
-        enabled_mean_queue_wait_ms = [math]::Round(
-            (Sum-Field $b "queue_wait_avg_ms") / $b.Count, 3)
-        baseline_onnx_calls = [int](Sum-Field $a "native_onnx_calls")
-        enabled_onnx_calls = [int](Sum-Field $b "native_onnx_calls")
-        baseline_onnx_windows = [int](Sum-Field $a "native_windows")
-        enabled_onnx_windows = [int](Sum-Field $b "native_windows")
-        pre_queue_deterministic_fields = [int](Sum-Field $b "pre_queue_deterministic_fields")
-        pre_queue_escalated_fields = [int](Sum-Field $b "pre_queue_escalated_fields")
-        safe_fixture_checks_reported_both = $true
-        exact_output_parity_validated = $false
-        frozen_high_risk_recall_validated = $false
-    })
-}
-
-$comparison = [ordered]@{
-    schema_version = 1
-    experiment = "steady-onnx-prequeue-deterministic-opt-in-ab"
-    baseline_study_id = $off.study_id
-    pre_queue_study_id = $on.study_id
-    same_code_revision = $true
-    source_commit_sha = $off.source_commit_sha
-    same_model_and_tokenizer_hash = $true
-    configured_model_sha256 = $off.configured_model_sha256
-    configured_tokenizer_sha256 = $off.configured_tokenizer_sha256
-    comparable_workloads = $true
-    rows = @($rows.ToArray())
-    assessment = "SYNTHETIC_METRIC_COMPARISON_ONLY"
-    release_gate = "OPEN: requires protected-output bitwise/semantic parity on local ZIP fixtures and locked high-risk corpus recall plus longer soak; never enable production from aggregate benchmark metrics alone."
-}
-Write-Host "Pre-queue real ONNX A/B comparison (same source, model, seed and workload)"
-foreach ($row in $rows) {
-    Write-Host ("rate={0}/s normalMasked off/on={1}/{2}, failClosed off/on={3}/{4}, ONNX calls off/on={5}/{6}, mean queueMs off/on={7}/{8}" -f
-        $row.rate_per_second, $row.baseline_success_count,
-        $row.enabled_success_count,
-        $row.baseline_fail_closed,
-        $row.enabled_fail_closed,
-        $row.baseline_onnx_calls,
-        $row.enabled_onnx_calls,
-        $row.baseline_mean_queue_wait_ms,
-        $row.enabled_mean_queue_wait_ms)
-}
-Write-Host "Release gate remains OPEN; this comparison does not audit exact protected output or locked high-risk recall."
-if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
-    $destination = [System.IO.Path]::GetFullPath($OutputPath)
-    if (Test-Path -LiteralPath $destination) {
-        throw "Refusing to overwrite an existing A/B scorecard: $destination"
-    }
-    $parent = Split-Path -Path $destination -Parent
-    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
-        throw "A/B scorecard parent folder missing: $parent"
-    }
-    $comparison | ConvertTo-Json -Depth 12 |
-        Set-Content -LiteralPath $destination -Encoding UTF8
-    Write-Host "Wrote compact A/B scorecard to: $destination"
-}
-) "Missing synthetic rules SHA-256."
-    Require ([string]$off.synthetic_organization_rules_sha256 -ceq
-        [string]$on.synthetic_organization_rules_sha256) "Organization rules content differs across OFF/ON studies."
-}
-
-$offPlan = @($off.rate_plan)
-$onPlan = @($on.rate_plan)
-Require ($offPlan.Count -eq $onPlan.Count) "Mismatched rate-plan lengths."
-for ($i=0; $i -lt $offPlan.Count; $i++) {
-    Require ([int]$offPlan[$i].rate -eq [int]$onPlan[$i].rate -and
-        [int]$offPlan[$i].repetition -eq [int]$onPlan[$i].repetition) "Mismatched run plan at trial $($i + 1)."
-}
-$offTrials = @($off.trials)
-$onTrials = @($on.trials)
-for ($i=0; $i -lt $offTrials.Count; $i++) {
-    $a=$offTrials[$i]; $b=$onTrials[$i]
-    Require ([int]$a.run -eq [int]$b.run -and
-        [int]$a.repetition -eq [int]$b.repetition -and
-        [int]$a.offered_rate_per_second -eq [int]$b.offered_rate_per_second -and
-        [int]$a.events -eq [int]$b.events) "Trial $($i + 1) identity and expected synthetic load differ."
-    Require ($a.security_passed -eq $true -and $b.security_passed -eq $true) "Trial $($i+1) failed synthetic confidentiality/sequence acceptance."
-    Require ($a.pre_queue_enabled -eq $false -and $b.pre_queue_enabled -eq $true) "Trial $($i+1) does not match OFF/ON routing status."
-    Require ([string]$a.configured_model_sha256 -ceq [string]$off.configured_model_sha256 -and
-        [string]$b.configured_model_sha256 -ceq [string]$on.configured_model_sha256 -and
-        [string]$a.configured_tokenizer_sha256 -ceq [string]$off.configured_tokenizer_sha256 -and
-        [string]$b.configured_tokenizer_sha256 -ceq [string]$on.configured_tokenizer_sha256) "Inconsistent model/tokenizer hash within trial $($i+1)."
-}
-
-$rates = @($offPlan | ForEach-Object { [int]$_.rate } | Sort-Object -Unique)
-$rows = [System.Collections.Generic.List[object]]::new()
-foreach ($rate in $rates) {
-    $a = @($offTrials | Where-Object { $_.offered_rate_per_second -eq $rate })
-    $b = @($onTrials | Where-Object { $_.offered_rate_per_second -eq $rate })
-    Require ($a.Count -eq [int]$off.repetitions -and $b.Count -eq $a.Count) "Missing repeated trials at rate $rate/s."
-    $baselineNormal = Sum-Field $a "normal_masked"
-    $enabledNormal = Sum-Field $b "normal_masked"
-    $baselineTotal = Sum-Field $a "events"
-    $enabledTotal = Sum-Field $b "events"
-    Require ($baselineTotal -eq $enabledTotal) "Mismatched offered events at rate $rate/s."
-    $baselineFail = Sum-Field $a "fail_closed"
-    $enabledFail = Sum-Field $b "fail_closed"
-    $baselineFunctional = @($a | Where-Object { $_.functional_passed -eq $true }).Count
-    $enabledFunctional = @($b | Where-Object { $_.functional_passed -eq $true }).Count
-
-    $rows.Add([pscustomobject]@{
-        rate_per_second = $rate
-        trials_per_mode = $a.Count
-        offered_events_per_mode = [int]$baselineTotal
-        baseline_success_count = [int]$baselineNormal
-        enabled_success_count = [int]$enabledNormal
-        baseline_fail_closed = [int]$baselineFail
-        enabled_fail_closed = [int]$enabledFail
-        baseline_functional_passes = $baselineFunctional
-        enabled_functional_passes = $enabledFunctional
-        baseline_mean_normal_masked_per_second = [math]::Round(
-            (Sum-Field $a "normal_masked_per_second") / $a.Count, 3)
-        enabled_mean_normal_masked_per_second = [math]::Round(
-            (Sum-Field $b "normal_masked_per_second") / $b.Count, 3)
-        baseline_worst_p99_ms = [math]::Round((Max-Field $a "caller_p99_ms"), 3)
-        enabled_worst_p99_ms = [math]::Round((Max-Field $b "caller_p99_ms"), 3)
-        baseline_worst_max_latency_ms = [math]::Round((Max-Field $a "caller_max_ms"), 3)
-        enabled_worst_max_latency_ms = [math]::Round((Max-Field $b "caller_max_ms"), 3)
-        baseline_mean_queue_wait_ms = [math]::Round(
-            (Sum-Field $a "queue_wait_avg_ms") / $a.Count, 3)
-        enabled_mean_queue_wait_ms = [math]::Round(
-            (Sum-Field $b "queue_wait_avg_ms") / $b.Count, 3)
-        baseline_onnx_calls = [int](Sum-Field $a "native_onnx_calls")
-        enabled_onnx_calls = [int](Sum-Field $b "native_onnx_calls")
-        baseline_onnx_windows = [int](Sum-Field $a "native_windows")
-        enabled_onnx_windows = [int](Sum-Field $b "native_windows")
-        pre_queue_deterministic_fields = [int](Sum-Field $b "pre_queue_deterministic_fields")
-        pre_queue_escalated_fields = [int](Sum-Field $b "pre_queue_escalated_fields")
-        safe_fixture_checks_reported_both = $true
-        exact_output_parity_validated = $false
-        frozen_high_risk_recall_validated = $false
-    })
-}
-
-$comparison = [ordered]@{
-    schema_version = 1
-    experiment = "steady-onnx-prequeue-deterministic-opt-in-ab"
-    baseline_study_id = $off.study_id
-    pre_queue_study_id = $on.study_id
-    same_code_revision = $true
-    source_commit_sha = $off.source_commit_sha
-    same_model_and_tokenizer_hash = $true
-    configured_model_sha256 = $off.configured_model_sha256
-    configured_tokenizer_sha256 = $off.configured_tokenizer_sha256
-    comparable_workloads = $true
-    rows = @($rows.ToArray())
-    assessment = "SYNTHETIC_METRIC_COMPARISON_ONLY"
-    release_gate = "OPEN: requires protected-output bitwise/semantic parity on local ZIP fixtures and locked high-risk corpus recall plus longer soak; never enable production from aggregate benchmark metrics alone."
-}
-Write-Host "Pre-queue real ONNX A/B comparison (same source, model, seed and workload)"
-foreach ($row in $rows) {
-    Write-Host ("rate={0}/s normalMasked off/on={1}/{2}, failClosed off/on={3}/{4}, ONNX calls off/on={5}/{6}, mean queueMs off/on={7}/{8}" -f
-        $row.rate_per_second, $row.baseline_success_count,
-        $row.enabled_success_count,
-        $row.baseline_fail_closed,
-        $row.enabled_fail_closed,
-        $row.baseline_onnx_calls,
-        $row.enabled_onnx_calls,
-        $row.baseline_mean_queue_wait_ms,
-        $row.enabled_mean_queue_wait_ms)
-}
-Write-Host "Release gate remains OPEN; this comparison does not audit exact protected output or locked high-risk recall."
-if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
-    $destination = [System.IO.Path]::GetFullPath($OutputPath)
-    if (Test-Path -LiteralPath $destination) {
-        throw "Refusing to overwrite an existing A/B scorecard: $destination"
-    }
-    $parent = Split-Path -Path $destination -Parent
-    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
-        throw "A/B scorecard parent folder missing: $parent"
-    }
-    $comparison | ConvertTo-Json -Depth 12 |
-        Set-Content -LiteralPath $destination -Encoding UTF8
-    Write-Host "Wrote compact A/B scorecard to: $destination"
+    $outFile = [System.IO.Path]::GetFullPath($OutputPath)
+    Require (-not (Test-Path -LiteralPath $outFile)) "Refusing to overwrite existing scorecard."
+    $parent = Split-Path -Path $outFile -Parent
+    Require (Test-Path -LiteralPath $parent -PathType Container) "Scorecard parent directory missing."
+    $scorecard | ConvertTo-Json -Depth 12 |
+        Set-Content -LiteralPath $outFile -Encoding UTF8
+    Write-Host "Wrote compact scorecard: $outFile"
 }
