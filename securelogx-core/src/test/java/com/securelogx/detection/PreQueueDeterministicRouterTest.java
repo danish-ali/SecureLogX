@@ -175,6 +175,38 @@ class PreQueueDeterministicRouterTest {
     }
 
     @Test
+    void inconsistentWorkerSuccessNeverReleasesUnsanitizedField()
+            throws Exception {
+        var plan = approvedRouter().route(List.of(
+                event("eventId=bench-12", 1),
+                event("name=Jane Doe", 2),
+                event("customerReference=CUST-834729", 3)
+        ));
+        var unknown = plan.unresolvedFields().get(0);
+        for (MaskReasonCode unsafeReason : List.of(
+                MaskReasonCode.MASKING_DISABLED,
+                MaskReasonCode.PROCESSING_FAILURE,
+                MaskReasonCode.DEADLINE_EXCEEDED,
+                MaskReasonCode.OVERLOAD_REJECTED
+        )) {
+            var malformed = new MaskedResult(
+                    unknown.getMessage(), false, false, unsafeReason,
+                    unknown.getSequenceNumber(), unknown.getInstanceId()
+            );
+            var results = plan.merge(List.of(malformed));
+            assertEquals(3, results.size());
+            assertTrue(results.stream().allMatch(MaskedResult::failClosed));
+            assertTrue(results.stream().allMatch(x ->
+                    x.reasonCode() == MaskReasonCode.PROCESSING_FAILURE));
+            for (var result : results) {
+                assertFalse(result.maskedText().contains("Jane"));
+                assertFalse(result.maskedText().contains("CUST-834729"));
+                assertFalse(result.maskedText().contains("bench-12"));
+            }
+        }
+    }
+
+    @Test
     void incorrectMlOrderingCannotReleaseAnyDeterministicAllowOrMask()
             throws Exception {
         var plan = approvedRouter().route(List.of(
