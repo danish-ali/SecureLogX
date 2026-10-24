@@ -162,7 +162,14 @@ foreach ($r in $rows) {
         $r.baseline_fail_closed,$r.experimental_fail_closed,
         $r.baseline_native_onnx_calls,$r.experimental_native_onnx_calls,
         $r.baseline_mean_queue_wait_millis,$r.experimental_mean_queue_wait_millis)
+    Write-Host ("  pre-queue ON: deterministic candidates={0}, escalated fields={1}; ONNX windows off/on={2}/{3}; worst p99 off/on={4}/{5}ms; functional pass counts off/on={6}/{7}" -f
+        $r.experimental_prequeue_deterministic_fields,
+        $r.experimental_prequeue_escalated_fields,
+        $r.baseline_native_windows, $r.experimental_native_windows,
+        $r.baseline_worst_p99_millis, $r.experimental_worst_p99_millis,
+        $r.baseline_functional_passes, $r.experimental_functional_passes)
 }
+Write-Host "Note: native ONNX calls are checkpoint-completed; calls canceled before recording are not captured. Deterministic candidate fields are NOT equivalent to successfully emitted whole events."
 Write-Host "Synthetic metrics alone cannot certify output or high-risk recall parity."
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     $outFile = [System.IO.Path]::GetFullPath($OutputPath)
