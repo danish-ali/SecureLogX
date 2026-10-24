@@ -74,9 +74,9 @@ Full 5/6/7 steady-rate study      COMPLETE_VERIFIED: 6/6 synthetic security;
                                    5/s 2/2 functional, 6/s 1/2, 7/s 0/2
 Measured-only queue max + benign IMPLEMENTED; local Maven validation PENDING
 Pre-queue deterministic split     EXPERIMENTAL OPT-IN; OFF by default
-Pre-queue parity + quality gate   EXTRA MODEL-FREE SAFETY REGRESSIONS ADDED;
-                                   same-source A/B + local ZIP verifier READY
-                                   local Maven and locked high-risk corpus OPEN
+Pre-queue parity + quality gate   73/73 model-free reactor tests pass (user run);
+                                   5/6 per-second A/B: 0/4 functional per mode
+                                   locked high-risk corpus / ZIP parity OPEN
 Multi-hour steady-state soak      OPEN
 Spring starter / Maven release    BLOCKED until representative sustained gate
 ```
@@ -5489,6 +5489,103 @@ sustained/soak evaluation must still pass before considering a
 default change, Spring starter, or Maven release. No results of
 those new studies are claimed by this commit; Windows/ONNX
 execution remains outside this repository-side change.
+
+---
+
+### 2026-10-24 — Measured pre-queue OFF/ON real-ONNX regression
+
+**RESULT: NO FUNCTIONAL PERFORMANCE IMPROVEMENT; KEEP OPT-IN ROUTING OFF.**
+This comparison was supplied from a completed same-source, same-model,
+same-policy, randomized-order steady-rate A/B study on Windows.
+The OFF/ON compact `compare-steady-prequeue-ab.ps1` command
+accepted identical source, model/tokenizer, organization-rules
+fingerprint, timing, capacity and workload settings, according
+to the user's terminal output. The original detailed local
+ZIPs and complete compact JSON trials were **not uploaded with
+this analysis**, so their counters and payload parity have not
+been independently reverified here.
+
+**Benchmark:** 5 and 6 events/s, 2×60-second repetitions per
+configuration, one native ONNX worker, masking deadline 2,000ms,
+4 CPU inference threads, 4 windows per ONNX batch, bounded
+queue 64, at most 32 application callers, synthetic rules enabled.
+
+| Workload | Pre-queue | Normal/total | Fail-closed | Mean queue wait | Recorded native calls |
+|---|---|---:|---:|---:|---:|
+| 5/s | OFF | 457/600 | 143 | 1164.284 ms | 477 |
+| 5/s | ON | 364/600 | 236 | 1703.754 ms | 364 |
+| 6/s | OFF | 293/720 | 427 | 1783.371 ms | 293 |
+| 6/s | ON | 222/720 | 498 | 1790.413 ms | 222 |
+
+**Pooled result:** Normal masking dropped from 750/1320
+(56.82%) OFF to 586/1320 (44.39%) ON: 164 fewer
+normal events and 164 more fail-closed outputs, 570 versus
+734. All eight individual 60-second trials (4 OFF, 4 ON)
+completed and were synthetic-security-validated, but **zero
+of four trials in either mode** met strict functional acceptance.
+The user-reported local reactor additionally passed **38 core
+and 35 Log4j2 tests** before the ON run.
+
+**Do not misread native ONNX call counts.** In
+`ONNXDynamicInferenceEngine.processBatchChunk`,
+`onnxInferenceCalls++` executes only **after**
+`session.run` and `control.checkpoint`, not at
+native-call entry. A canceled or expired task may have
+entered ONNX without increasing this counter. Differences
+in recorded calls therefore cannot establish equivalent
+per-event work or causally prove deterministic bypass.
+The queue wait average includes tasks that actually
+start, not necessarily jobs canceled before starting.
+Likewise `PreQueueRoutingStats.deterministicFieldsResolved`
+counts candidate fields before the whole-event outcome:
+an otherwise successfully bypassed field is discarded
+if an unrelated unresolved field fails closed.
+
+**Potential overhead source:** In ON mode the caller
+executes `PreQueueDeterministicRouter.route` and
+`HybridMaskingPipeline.scan` on short fields. All
+unresolved fields are later rescanned inside
+`ONNXDynamicInferenceEngine.processBatchChunk`.
+This duplicated deterministic scan work is observable
+in source code and may contribute CPU cost, but these
+aggregate results alone do **not** prove it caused
+the performance regression. The pronounced elevated
+5/s mean queue wait with ON (1703.754 versus
+1164.284ms) and nearly unchanged ~1.78s 6/s
+queue waits suggest saturation and/or transient
+host conditions. Do not conclude a capacity threshold
+from two repetitions.
+
+**Follow-up order:**
+1. Read `pre_queue_deterministic_fields`,
+   `pre_queue_escalated_fields`, native windows,
+   per-rate p99 and worker-start/timeout metrics already
+   recorded in the locally retained compact JSONs.
+   `compare-steady-prequeue-ab.ps1` now prints
+   these counters without new benchmark execution.
+2. Retain the synthetic OFF/ON ZIPs and compact
+   scorecard; do not commit another individual-run
+   artifact. The same-source exact protected-output
+   comparison remains open for all-normal paired
+   trials; no functional all-normal trial occurred here.
+3. Instrument request lifecycle (offered, admitted,
+   worker started, canceled before start, native
+   started/completed/canceled) before using `onnxInferenceCalls`
+   as an estimate of avoided workload. Consider a
+   short pilot at a demonstrably unsaturated offered
+   rate to validate exact output parity, not to
+   manufacture a 2-second throughput SLO.
+4. Analyze 384-token multi-window long records and
+   native-worker head-of-line blocking before
+   optimizing caller concurrency. Evaluate eliminating
+   a duplicate scan only with identical-policy semantic
+   parity, no regression in high-risk recall, and
+   unchanged whole-event fail-closed semantics.
+5. **No production opt-in enablement, deadline increase,
+   second ONNX worker, per-field partial release or
+   Maven/Spring release** based on this comparison.
+   The frozen 6,463-record high-risk corpus and
+   longer steady-state soak remain release gates.
 
 ---
 
