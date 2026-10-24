@@ -101,6 +101,10 @@ foreach ($rate in $rates) {
         $base.Count -eq [int]$off.repetitions -and
         $experiment.Count -eq $base.Count) "Missing repeated trial for rate $rate."
 
+    $preQueueDeterministic = [int](Sum-Field $experiment "pre_queue_deterministic_fields")
+    $preQueueEscalated = [int](Sum-Field $experiment "pre_queue_escalated_fields")
+    $preQueueObserved = $preQueueDeterministic + $preQueueEscalated
+    Require ($preQueueObserved -gt 0) "No pre-queue field-routing observations at rate $rate."
     $row = [pscustomobject]@{
         offered_rate_per_second = [int]$rate
         repetitions = $base.Count
@@ -130,10 +134,12 @@ foreach ($rate in $rates) {
         experimental_native_onnx_calls = [int](Sum-Field $experiment "native_onnx_calls")
         baseline_native_windows = [int](Sum-Field $base "native_windows")
         experimental_native_windows = [int](Sum-Field $experiment "native_windows")
-        experimental_prequeue_deterministic_fields = [int](
-            Sum-Field $experiment "pre_queue_deterministic_fields")
-        experimental_prequeue_escalated_fields = [int](
-            Sum-Field $experiment "pre_queue_escalated_fields")
+        experimental_prequeue_deterministic_fields = $preQueueDeterministic
+        experimental_prequeue_escalated_fields = $preQueueEscalated
+        experimental_prequeue_candidate_field_share_percent = [math]::Round(
+            100.0 * $preQueueDeterministic / $preQueueObserved, 2)
+        experimental_prequeue_escalated_field_share_percent = [math]::Round(
+            100.0 * $preQueueEscalated / $preQueueObserved, 2)
         synthetic_security_checks_reported = $true
         protected_payload_parity_proved = $false
         frozen_high_risk_corpus_parity_proved = $false
@@ -168,6 +174,9 @@ foreach ($r in $rows) {
         $r.baseline_native_windows, $r.experimental_native_windows,
         $r.baseline_worst_p99_millis, $r.experimental_worst_p99_millis,
         $r.baseline_functional_passes, $r.experimental_functional_passes)
+    Write-Host ("  pre-queue routing share: {0}% deterministic candidate fields, {1}% escalated fields; this does not measure completely queue-bypassed events" -f
+        $r.experimental_prequeue_candidate_field_share_percent,
+        $r.experimental_prequeue_escalated_field_share_percent)
 }
 Write-Host "Note: native ONNX calls are checkpoint-completed; calls canceled before recording are not captured. Deterministic candidate fields are NOT equivalent to successfully emitted whole events."
 Write-Host "Synthetic metrics alone cannot certify output or high-risk recall parity."
