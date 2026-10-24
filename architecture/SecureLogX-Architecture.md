@@ -5589,6 +5589,69 @@ from two repetitions.
 
 ---
 
+### 2026-10-24 — Confirmed pre-queue routing candidate coverage
+
+A subsequent local execution of
+`scripts/compare-steady-prequeue-ab.ps1` disclosed actual
+pre-queue field-candidate counts for the October 24 paired
+OFF/ON studies. These are **whole-field routing candidates**,
+not confirmed successfully emitted events or queue-bypassed
+events.
+
+| Offered rate (2 repetitions) | Resolved deterministic field candidates | ML-escalated fields | Deterministic candidate share | Escalated share |
+|---|---:|---:|---:|---:|
+| 5/s | 480 | 2,640 | 15.38% | 84.62% |
+| 6/s | 540 | 3,204 | 14.42% | 85.58% |
+| Combined | 1,020 | 5,844 | 14.86% | 85.14% |
+
+Corresponding recorded completed/checkpointed ONNX windows
+were OFF/ON **2,023/1,476** at 5/s and **1,120/817**
+at 6/s; native completed-call counts were **477/364**
+and **293/222**, respectively. P99 (worst of two
+repetitions) was 2083.796/2070.478 ms at 5/s and
+2093.572/2084.901 ms at 6/s, all exceeding the 2,000
+ms latency requirement; all functional trial passes
+were 0/2 for both conditions at each rate.
+
+**Interpretation:** Only 14.86% of observed fields
+qualified for early deterministic handling, while
+85.14% still escalated. Because the
+`SecureMasker.maskAllWithOrigins` path submits
+all unresolved fields as one bounded executor request
+per log-event masking operation, bypassing some fields
+does not remove the event's queue request when any
+unresolved field remains. The current aggregate
+field counts **cannot** determine how many events
+escaped the worker *entirely*. Nor do lower completed
+ONNX call/window counts establish lower native
+work per offered log event: the ON mode also had
+more deadline-expired events, and counters increment
+after checkpoints, excluding some canceled work.
+
+**Decision:** Keep experimental pre-queue routing
+disabled by default. No evidence yet supports
+expanding deterministic ALLOW rules or reducing
+high-risk recall requirements. Before further
+throughput tuning, instrument **event-level**
+full-queue bypass counts, caller pre-queue scan
+time, repeated worker scan time, native attempted/
+completed/canceled calls and inference window
+distribution (including long-record windows).
+Then isolate/remedy duplicate rescans or long-record
+head-of-line blocking behind opt-in flags and
+differential privacy/ordering tests. Preserve one
+native worker, same 2s deadline, whole-event
+fail-closed behavior, per-organization policy
+isolation and raw-payload ban.
+
+The `scripts/compare-steady-prequeue-ab.ps1` scorecard
+now reports deterministic/escalation **field shares**
+explicitly, without claiming those fields translate
+to complete queue bypasses or successfully
+emitted events.
+
+---
+
 ## 20. How to Update This Document
 
 For every material architecture change, update the relevant section **and** append a new entry to the change log containing:
