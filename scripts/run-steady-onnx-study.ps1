@@ -283,6 +283,55 @@ try {
             queue_wait_buckets=$result.queue_wait.mutually_exclusive_bucket_counts
             queue_wait_upper_bounds_ms=$result.queue_wait.upper_bounds_millis
             worker_started=[int]$result.queue_wait.worker_started_requests
+            # Phase 1 fields are nullable for genuine older archived studies.
+            phase_one_complete_events_bypassed=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.complete_events_bypassed_worker
+            } else { $null })
+            phase_one_mixed_events=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.mixed_events_submitted_to_worker
+            } else { $null })
+            phase_one_all_escalated_events=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.all_escalated_events_submitted_to_worker
+            } else { $null })
+            phase_one_caller_routing_nanos=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.caller_routing_nanos
+            } else { $null })
+            phase_one_worker_started=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.worker_started
+            } else { $null })
+            phase_one_worker_finished=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.worker_finished
+            } else { $null })
+            phase_one_deadline_removed_before_start=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.deadline_removed_before_start
+            } else { $null })
+            phase_one_worker_scans=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.worker_deterministic_scans
+            } else { $null })
+            phase_one_worker_scan_nanos=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.worker_deterministic_scan_nanos
+            } else { $null })
+            phase_one_native_attempted=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.native_run_attempted
+            } else { $null })
+            phase_one_native_completed=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.native_run_completed
+            } else { $null })
+            phase_one_native_failed_or_canceled=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.native_run_failed_or_canceled
+            } else { $null })
+            phase_one_native_windows_attempted=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.native_windows_attempted
+            } else { $null })
+            phase_one_single_window_fields=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.single_window_fields
+            } else { $null })
+            phase_one_two_to_four_window_fields=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.two_to_four_window_fields
+            } else { $null })
+            phase_one_five_plus_window_fields=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.five_plus_window_fields
+            } else { $null })
             pre_queue_enabled=$(if ($null -ne $result.pre_queue_routing_measured_only) {
                 [bool]$result.pre_queue_routing_measured_only.enabled
             } else { $null })
