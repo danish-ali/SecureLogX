@@ -180,6 +180,21 @@ per-field maximum-window gauge includes warmup. See
 `architecture/SecureLogX-Architecture.md` for definitions
 and remaining high-risk recall and soak gates.
 
+**Compact stage-time diagnostics:** New study summaries additionally retain
+`inference_stage_total_millis_measured_only` per trial, copied from the
+existing Java `real_inference_measured_only.stage_total_millis` measurements.
+These are *cumulative milliseconds* for deterministic processing,
+tokenization, window assembly, tensor preparation, ONNX native execution,
+decoding, and final resolution/masking. The
+`onnx_windowed_native_run_subset` is already part of `onnx_native_run`;
+never add both durations. Successful native-run timings do not account
+for time spent in failed or canceled native calls, so interpret them alongside
+Phase 1 `native_run_attempted` / `completed` / `failed_or_canceled` counts.
+Stage totals are not caller latency percentiles or additive with queue-wait
+samples. Historical trial JSON lacking these fields retains `null` rather
+than reconstructed timing. This reporting change does not affect the
+single native session, routing policy, worker admission, or log payloads.
+
 ## Experimental pre-queue routing A/B gate (off by default)
 
 A source-level implementation now supports the **explicit experimental**
