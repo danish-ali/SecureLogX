@@ -10,6 +10,7 @@ import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.detection.OrganizationRuleRegistry;
 import com.securelogx.detection.HybridRuntimeStats;
 import com.securelogx.detection.InferenceStageStats;
+import com.securelogx.detection.NativeInferenceDiagnostics;
 import com.securelogx.model.LogEvent;
 import com.securelogx.ner.TokenizerEngine;
 import com.securelogx.ner.TokenizedInput;
@@ -18,6 +19,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 
 
 public class ONNXDynamicInferenceEngine {
@@ -57,6 +60,19 @@ public class ONNXDynamicInferenceEngine {
     private long windowedOnnxInferenceCalls = 0;
     private long maxWindowedInferenceWindowsPerCallObserved = 0;
     private long truncatedFailClosedItems = 0;
+
+    // Phase 1: scalar counters only; never store text, tokens, labels or spans.
+    // Counts include canceled attempts that legacy completed-call stats miss.
+    private final LongAdder workerScanCount = new LongAdder();
+    private final LongAdder workerScanNanos = new LongAdder();
+    private final LongAdder nativeRunAttempted = new LongAdder();
+    private final LongAdder nativeRunCompleted = new LongAdder();
+    private final LongAdder nativeRunFailedOrCanceled = new LongAdder();
+    private final LongAdder nativeWindowsAttempted = new LongAdder();
+    private final LongAdder singleWindowFields = new LongAdder();
+    private final LongAdder twoToFourWindowFields = new LongAdder();
+    private final LongAdder fivePlusWindowFields = new LongAdder();
+    private final AtomicLong maxWindowsPerField = new AtomicLong();
 
     // Accumulated successful-stage wall times (monotonic clock). The masking
     // worker is single-threaded, so no additional executor/caching is added.
@@ -383,8 +399,14 @@ public class ONNXDynamicInferenceEngine {
             for (int i = 0; i < batch.size(); i++) {
                 control.checkpoint();
                 LogEvent event = batch.get(i);
-                DeterministicScanResult scan =
-                        hybridMaskingPipeline.scan(event.getMessage());
+                long singleScanStart = System.nanoTime();
+                DeterministicScanResult scan;
+                try {
+                    scan = hybridMaskingPipeline.scan(event.getMessage());
+                } finally {
+                    workerScanCount.increment();
+                    workerScanNanos.add(System.nanoTime() - singleScanStart);
+                }
                 scans.add(scan);
                 if ("approved-organization-rule".equals(
                         scan.gateReason()
@@ -491,7 +513,16 @@ public class ONNXDynamicInferenceEngine {
                     continue;
                 }
 
-                if (windows.size() > 1) {
+                int windowCount = windows.size();
+                if (windowCount == 1) {
+                    singleWindowFields.increment();
+                } else if (windowCount <= 4) {
+                    twoToFourWindowFields.increment();
+                } else {
+                    fivePlusWindowFields.increment();
+                }
+                maxWindowsPerField.accumulateAndGet(windowCount, Math::max);
+                if (windowCount > 1) {
                     windowedOriginalIndices.add(originalIndex);
                 }
 
@@ -620,8 +651,17 @@ public class ONNXDynamicInferenceEngine {
                         tensorPreparationNanos += System.nanoTime()
                                 - tensorPreparationStart;
                         long nativeRunStart = System.nanoTime();
-                        try (OrtSession.Result result =
-                                     session.run(inputs, runOptions)) {
+                        nativeRunAttempted.increment();
+                        nativeWindowsAttempted.add(inferenceBatchSize);
+                        OrtSession.Result nativeResult;
+                        try {
+                            nativeResult = session.run(inputs, runOptions);
+                            nativeRunCompleted.increment();
+                        } catch (Exception nativeFailure) {
+                            nativeRunFailedOrCanceled.increment();
+                            throw nativeFailure;
+                        }
+                        try (OrtSession.Result result = nativeResult) {
                             long runNanos = System.nanoTime()
                                     - nativeRunStart;
                             nativeOnnxRunNanos += runNanos;
@@ -1100,6 +1140,21 @@ public class ONNXDynamicInferenceEngine {
                 windowedNativeOnnxRunNanos,
                 decodingNanos,
                 resolutionAndMaskingNanos
+        );
+    }
+
+    public NativeInferenceDiagnostics getNativeInferenceDiagnostics() {
+        return new NativeInferenceDiagnostics(
+                workerScanCount.sum(),
+                workerScanNanos.sum(),
+                nativeRunAttempted.sum(),
+                nativeRunCompleted.sum(),
+                nativeRunFailedOrCanceled.sum(),
+                nativeWindowsAttempted.sum(),
+                singleWindowFields.sum(),
+                twoToFourWindowFields.sum(),
+                fivePlusWindowFields.sum(),
+                maxWindowsPerField.get()
         );
     }
 
