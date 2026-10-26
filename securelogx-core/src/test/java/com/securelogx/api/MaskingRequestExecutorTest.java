@@ -116,6 +116,12 @@ class MaskingRequestExecutorTest {
                     "Post-window queue maximum must include second request");
             assertTrue(waited.maxWaitMillis()
                     >= executor.maxMeasuredQueueWaitMillis());
+            MaskingLifecycleDiagnostics lifecycle =
+                    executor.lifecycleDiagnostics();
+            assertEquals(2L, lifecycle.workerStarted());
+            assertEquals(2L, lifecycle.workerFinished());
+            assertEquals(0L, lifecycle.deadlineRemovedBeforeStart());
+            assertEquals(0L, lifecycle.interruptedRemovedBeforeStart());
         }
     }
 
@@ -154,6 +160,11 @@ class MaskingRequestExecutorTest {
             MaskingRuntimeStats stats = executor.stats();
             assertEquals(1L, stats.deadlineExceededRequests());
             assertEquals(0L, stats.executionFailureRequests());
+            MaskingLifecycleDiagnostics lifecycle =
+                    executor.lifecycleDiagnostics();
+            assertEquals(1L, lifecycle.workerStarted());
+            assertEquals(1L, lifecycle.workerFinished());
+            assertEquals(0L, lifecycle.deadlineRemovedBeforeStart());
         }
     }
 
