@@ -18,6 +18,8 @@ class SecureLogXInferenceDiagnosticsTest {
                         context, "dev"
                 ).isEmpty()
         );
+        assertTrue(SecureLogXInferenceDiagnostics.phaseOneStats(
+                context, "dev").isEmpty());
         assertEquals(existing, SecureMaskerRegistry.ownedMaskerCount());
     }
 
@@ -27,5 +29,8 @@ class SecureLogXInferenceDiagnosticsTest {
                 IllegalArgumentException.class,
                 () -> SecureLogXInferenceDiagnostics.snapshot(null, "dev")
         );
+        assertThrows(IllegalArgumentException.class,
+                () -> SecureLogXInferenceDiagnostics.phaseOneStats(
+                        null, "dev"));
     }
 }
