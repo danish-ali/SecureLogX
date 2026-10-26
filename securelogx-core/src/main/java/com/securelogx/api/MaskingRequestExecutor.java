@@ -65,6 +65,10 @@ final class MaskingRequestExecutor implements AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean();
     private final AtomicInteger peakActiveRequests = new AtomicInteger();
     private final AtomicInteger peakQueuedRequests = new AtomicInteger();
+    private final LongAdder workerStarted = new LongAdder();
+    private final LongAdder workerFinished = new LongAdder();
+    private final LongAdder deadlineRemovedBeforeStart = new LongAdder();
+    private final LongAdder interruptedRemovedBeforeStart = new LongAdder();
     private final LongAdder queueWaitStarts = new LongAdder();
     private final LongAdder queueWaitNanos = new LongAdder();
     private final AtomicLong maxQueueWaitNanos = new AtomicLong();
@@ -148,6 +152,7 @@ final class MaskingRequestExecutor implements AutoCloseable {
         final long submittedAtNanos = System.nanoTime();
         FutureTask<List<MaskedResult>> task =
                 new FutureTask<>(() -> {
+                    workerStarted.increment();
                     recordQueueWait(
                             submittedAtNanos,
                             Math.max(0L,
@@ -162,6 +167,7 @@ final class MaskingRequestExecutor implements AutoCloseable {
                         control.checkpoint();
                         return operation.execute(control);
                     } finally {
+                        workerFinished.increment();
                         workerThread.set(null);
                         finished.countDown();
                         liveRequests.remove(control);
@@ -226,6 +232,7 @@ final class MaskingRequestExecutor implements AutoCloseable {
 
             boolean removedBeforeStart = executor.remove(task);
             if (removedBeforeStart) {
+                deadlineRemovedBeforeStart.increment();
                 task.cancel(false);
                 liveRequests.remove(control);
                 finished.countDown();
@@ -250,6 +257,7 @@ final class MaskingRequestExecutor implements AutoCloseable {
 
             boolean removedBeforeStart = executor.remove(task);
             if (removedBeforeStart) {
+                interruptedRemovedBeforeStart.increment();
                 task.cancel(false);
                 liveRequests.remove(control);
                 finished.countDown();
@@ -313,6 +321,15 @@ final class MaskingRequestExecutor implements AutoCloseable {
         return failClosed(
                 events,
                 MaskReasonCode.PROCESSING_FAILURE
+        );
+    }
+
+    MaskingLifecycleDiagnostics lifecycleDiagnostics() {
+        return new MaskingLifecycleDiagnostics(
+                workerStarted.sum(),
+                workerFinished.sum(),
+                deadlineRemovedBeforeStart.sum(),
+                interruptedRemovedBeforeStart.sum()
         );
     }
 
