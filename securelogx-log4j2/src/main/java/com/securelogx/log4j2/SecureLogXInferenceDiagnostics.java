@@ -100,6 +100,26 @@ public final class SecureLogXInferenceDiagnostics {
         );
     }
 
+    /**
+     * Observation-only Phase 1: caller routing, queue lifecycle and actual
+     * native run attempts, without retaining payloads or initializing ONNX.
+     */
+    public static Optional<PhaseOneSnapshot> phaseOneStats(
+            LoggerContext context, String environment
+    ) {
+        if (context == null) {
+            throw new IllegalArgumentException("LoggerContext is required");
+        }
+        return SecureMaskerRegistry.phaseOneSnapshot(context, environment);
+    }
+
+    public record PhaseOneSnapshot(
+            com.securelogx.api.PreQueueRoutingStats preQueue,
+            com.securelogx.api.MaskingLifecycleDiagnostics lifecycle,
+            com.securelogx.detection.NativeInferenceDiagnostics nativeInference
+    ) {
+    }
+
     public record Snapshot(
             HybridRuntimeStats routing,
             InferenceStageStats stages
