@@ -261,6 +261,29 @@ final class SecureMaskerRegistry {
         return java.util.Optional.empty();
     }
 
+    static java.util.Optional<SecureLogXInferenceDiagnostics.PhaseOneSnapshot>
+    phaseOneSnapshot(LoggerContext context, String environment) {
+        synchronized (LOCK) {
+            Map<String, MaskerHandle> byEnvironment =
+                    MASKERS_BY_CONTEXT.get(context);
+            if (byEnvironment != null) {
+                MaskerHandle handle =
+                        byEnvironment.get(normalize(environment));
+                if (handle != null
+                        && handle.closeable() instanceof SecureMasker masker) {
+                    return java.util.Optional.of(
+                            new SecureLogXInferenceDiagnostics.PhaseOneSnapshot(
+                                    masker.getPreQueueRoutingStats(),
+                                    masker.getMaskingLifecycleDiagnostics(),
+                                    masker.getNativeInferenceDiagnostics()
+                            )
+                    );
+                }
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
     static MlRoutingTelemetry.Snapshot mlTelemetrySnapshot(
             LoggerContext context,
             String environment
