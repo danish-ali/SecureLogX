@@ -305,6 +305,9 @@ try {
             phase_one_deadline_removed_before_start=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
                 [long]$result.phase_one_diagnostics_measured_only.deadline_removed_before_start
             } else { $null })
+            phase_one_interrupted_removed_before_start=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.interrupted_removed_before_start
+            } else { $null })
             phase_one_worker_scans=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
                 [long]$result.phase_one_diagnostics_measured_only.worker_deterministic_scans
             } else { $null })
@@ -331,6 +334,9 @@ try {
             } else { $null })
             phase_one_five_plus_window_fields=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
                 [long]$result.phase_one_diagnostics_measured_only.five_plus_window_fields
+            } else { $null })
+            phase_one_max_windows_per_field_including_warmup=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
+                [long]$result.phase_one_diagnostics_measured_only.max_windows_per_field_including_warmup
             } else { $null })
             pre_queue_enabled=$(if ($null -ne $result.pre_queue_routing_measured_only) {
                 [bool]$result.pre_queue_routing_measured_only.enabled
