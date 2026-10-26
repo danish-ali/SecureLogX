@@ -131,6 +131,55 @@ SecureLogX clones or backups rather than treating a console-only
 pass as a completed archived study. Git cannot restore ignored
 local ZIPs or benchmark outputs that were never committed.
 
+## Phase 1 bottleneck diagnostics — observation only (October 26, 2026)
+
+The latest Java/Log4j2 branch adds **payload-free per-masker counters**
+without changing ONNX routing, queue capacity, the one-worker native
+session, the 2,000-ms deadline, logging destinations or fail-closed
+behavior. `SecureLogXInferenceDiagnostics.phaseOneStats(context, "dev")`
+returns an empty Optional for an uninitialized context and never
+loads the model to service a diagnostic request.
+
+One compact study trial includes
+`phase_one_complete_events_bypassed`,
+`phase_one_mixed_events`, `phase_one_all_escalated_events`,
+`phase_one_caller_routing_nanos`,
+`phase_one_deadline_removed_before_start`,
+`phase_one_worker_started`/`finished`,
+`phase_one_worker_scans`/`scan_nanos`,
+`phase_one_native_attempted`/`completed`/
+`failed_or_canceled`, `phase_one_native_windows_attempted`
+and 1/2–4/5+ per-field window counters. The protected log and
+full timeline remain in a **local ignored ZIP** and are never
+included in those counters. Existing earlier studies have
+null Phase 1 metrics, not backfilled guesses.
+
+Run model-free tests first, then the **unchanged pre-queue-OFF**
+steady profile at 3/s and 5/s (60 seconds, one trial per rate):
+
+~~~powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+mvn -pl securelogx-log4j2 -am clean test
+powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 `
+  -Rates "3,5" -Repetitions 1 -DurationSeconds 60 `
+  -CallerMode platform -MaxOutstanding 32 `
+  -MaskingDeadlineMillis 2000 -CpuThreads 4 `
+  -WindowBatchLimit 4 -MaskingQueueCapacity 64 `
+  -MemorySampleMillis 5000 -RandomSeed 20261026 `
+  -UseExampleOrganizationRules
+~~~
+
+Do not add `-EnablePreQueueRouting` to this initial run.
+Inspect native **attempted** versus **completed** calls,
+worker start vs confirmed pre-start cancellation, and
+the distribution of inference windows. A completed-call
+reduction does not alone establish a native work reduction.
+Queue wait samples exclude requests that never start; the
+per-field maximum-window gauge includes warmup. See
+`architecture/SecureLogX-Architecture.md` for definitions
+and remaining high-risk recall and soak gates.
+
 ## Experimental pre-queue routing A/B gate (off by default)
 
 A source-level implementation now supports the **explicit experimental**
