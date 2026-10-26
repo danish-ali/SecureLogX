@@ -5,6 +5,7 @@ import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.detection.PreQueueDeterministicRouter;
 import com.securelogx.detection.HybridRuntimeStats;
 import com.securelogx.detection.InferenceStageStats;
+import com.securelogx.detection.NativeInferenceDiagnostics;
 import com.securelogx.model.LogEvent;
 import com.securelogx.model.LogLevel;
 import com.securelogx.model.MaskingFieldOrigin;
@@ -41,6 +42,10 @@ public final class SecureMasker implements AutoCloseable {
     private final LongAdder preQueueBypassed = new LongAdder();
     private final LongAdder preQueueEscalated = new LongAdder();
     private final LongAdder preQueueFailClosedEvents = new LongAdder();
+    private final LongAdder preQueueEntireEventBypasses = new LongAdder();
+    private final LongAdder preQueueMixedEvents = new LongAdder();
+    private final LongAdder preQueueAllEscalatedEvents = new LongAdder();
+    private final LongAdder preQueueCallerRoutingNanos = new LongAdder();
 
     public SecureMasker() throws Exception {
         this(System.getenv().getOrDefault("SECURELOGX_ENV", "dev"));
@@ -186,8 +191,22 @@ public final class SecureMasker implements AutoCloseable {
                             events, MaskReasonCode.OVERLOAD_REJECTED
                     );
                 } else {
-                    PreQueueDeterministicRouter.Plan plan =
-                            preQueueRouter.route(events);
+                    long routeStartedAt = System.nanoTime();
+                    PreQueueDeterministicRouter.Plan plan;
+                    try {
+                        plan = preQueueRouter.route(events);
+                    } finally {
+                        preQueueCallerRoutingNanos.add(
+                                System.nanoTime() - routeStartedAt
+                        );
+                    }
+                    if (plan.unresolvedFields().isEmpty()) {
+                        preQueueEntireEventBypasses.increment();
+                    } else if (plan.deterministicFields() > 0) {
+                        preQueueMixedEvents.increment();
+                    } else {
+                        preQueueAllEscalatedEvents.increment();
+                    }
                     preQueueBypassed.add(plan.deterministicFields());
                     preQueueEscalated.add(plan.unresolvedFields().size());
                     List<MaskedResult> unresolved = plan.unresolvedFields()
@@ -245,8 +264,20 @@ public final class SecureMasker implements AutoCloseable {
                 preQueueEnabled,
                 preQueueBypassed.sum(),
                 preQueueEscalated.sum(),
-                preQueueFailClosedEvents.sum()
+                preQueueFailClosedEvents.sum(),
+                preQueueEntireEventBypasses.sum(),
+                preQueueMixedEvents.sum(),
+                preQueueAllEscalatedEvents.sum(),
+                preQueueCallerRoutingNanos.sum()
         );
+    }
+
+    public MaskingLifecycleDiagnostics getMaskingLifecycleDiagnostics() {
+        return maskingRuntime.lifecycleDiagnostics();
+    }
+
+    public NativeInferenceDiagnostics getNativeInferenceDiagnostics() {
+        return engine.getNativeInferenceDiagnostics();
     }
 
     public MaskingRuntimeStats getRuntimeStats() {
