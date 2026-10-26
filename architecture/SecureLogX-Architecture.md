@@ -73,6 +73,8 @@ Steady real-ONNX 5 events/s       USER-REPORTED single run 300/300 normal,
 Full 5/6/7 steady-rate study      COMPLETE_VERIFIED: 6/6 synthetic security;
                                    5/s 2/2 functional, 6/s 1/2, 7/s 0/2
 Measured-only queue max + benign IMPLEMENTED; local Maven validation PENDING
+Phase 1 worker/ONNX diagnostics   OBSERVATIONAL IMPLEMENTED; local Java tests
+                                   and real-ONNX measurement PENDING
 Pre-queue deterministic split     EXPERIMENTAL OPT-IN; OFF by default
 Pre-queue parity + quality gate   73/73 model-free reactor tests pass (user run);
                                    5/6 per-second A/B: 0/4 functional per mode
@@ -5649,6 +5651,93 @@ now reports deterministic/escalation **field shares**
 explicitly, without claiming those fields translate
 to complete queue bypasses or successfully
 emitted events.
+
+---
+
+### 2026-10-26 — Phase 1 bottleneck instrumentation (observational only)
+
+**Status:** SOURCE AND MODEL-FREE REGRESSION TESTS COMMITTED;
+LOCAL MAVEN/ONNX EXECUTION PENDING. No change to masking
+policy, deadline, native worker count, model, model artifact,
+queue capacity, or whole-event fail-closed handling.
+
+**New bounded, payload-free diagnostics** on the existing
+`SecureMasker` / Log4j2 context lifecycle:
+
+- `PreQueueRoutingStats` now separates **complete
+  worker-bypassing requests**, mixed deterministic/ML
+  requests, entirely ML-escalated requests and monotonic
+  caller-side routing nanoseconds. Existing field-candidate
+  counters are retained and are not treated as successful
+  event delivery. Only the experimental ON path performs
+  caller-side pre-queue scanning; default OFF stays unchanged.
+- `MaskingLifecycleDiagnostics` counts bounded-worker
+  starts/finishes and tasks conclusively removed from the
+  pending queue **before start** because of deadline or
+  interruption. A race with a worker claiming a task is
+  not guessed as a confirmed pre-start removal. Existing
+  queue-start histograms and deadline/rejection counters
+  remain authoritative for their respective stages.
+- `NativeInferenceDiagnostics` counts worker-side
+  deterministic scans and scan elapsed nanoseconds,
+  `session.run` entries, successful returns, exceptions
+  including cancellation-related native failures,
+  attempted inference windows, and number of ML-routed
+  fields with 1, 2–4 or 5+ tokenizer windows. Its maximum
+  windows per field is a **lifetime gauge including warmup**
+  (not a sum or period-local maximum). The native call
+  attempt increments **immediately before** `session.run`;
+  this distinguishes an attempted call from legacy
+  `onnxInferenceCalls`, whose increment is after the
+  later cancellation checkpoint.
+- `SecureLogXInferenceDiagnostics.phaseOneStats`
+  exposes scalar snapshots on the already initialized
+  context-owned masker and never instantiates a new
+  native session. Post-warmup deltas are written under
+  `phase_one_diagnostics_measured_only` in the existing
+  real-ONNX steady result, then flattened to one compact
+  study row per run. Detailed protected logs remain in
+  the existing ignored verified local ZIP.
+
+**Known interpretive limitations:** Caller routing
+nanoseconds include deterministic masking and plan
+construction, not exclusively scanner time. Worker
+scan timing excludes canceled queue tasks that never
+start; per-field window distributions count work
+that reached the tokenization/window stage, not
+all offered log events. Native `failed_or_canceled`
+counts exceptions thrown by `session.run`; a
+successful native return may still be discarded
+at a subsequent cancellation checkpoint.
+Whole-event queue-bypass counters are only active
+with the experimental pre-queue flag; OFF events
+all use the existing worker by design. The
+remaining 2-second timeout is unchanged.
+
+**First diagnostic study after local tests pass:**
+
+```powershell
+cd D:\workspace\SecureLogX
+git pull origin chatgpt/hybrid-detection-pipeline
+mvn -pl securelogx-log4j2 -am clean test
+powershell -ExecutionPolicy Bypass -File .\scripts\run-steady-onnx-study.ps1 `
+  -Rates "3,5" -Repetitions 1 -DurationSeconds 60 `
+  -CallerMode platform -MaxOutstanding 32 `
+  -MaskingDeadlineMillis 2000 -CpuThreads 4 `
+  -WindowBatchLimit 4 -MaskingQueueCapacity 64 `
+  -MemorySampleMillis 5000 -RandomSeed 20261026 `
+  -UseExampleOrganizationRules
+```
+
+Keep pre-queue **OFF**. Before another ON trial,
+review complete-worker-bypass and queue admission
+counts, native attempted/completed/failure counts,
+native attempted windows, 5+ window fields, scan
+time and p95/p99 with normal-masked events/s.
+Do not publish raw log ZIPs, assume 3/s SLO
+success, or enable default routing until
+the frozen 6,463-case high-risk corpus and
+longer soak are validated.
 
 ---
 
