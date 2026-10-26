@@ -131,6 +131,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     SecureLogXInferenceDiagnostics.preQueueRoutingStats(
                             context, "dev"
                     ).orElseThrow();
+            SecureLogXInferenceDiagnostics.PhaseOneSnapshot phaseOneBefore =
+                    SecureLogXInferenceDiagnostics.phaseOneStats(
+                            context, "dev"
+                    ).orElseThrow();
             if (!SecureLogXInferenceDiagnostics.beginQueueWaitWindow(
                     context, "dev")) {
                 throw new IllegalStateException(
@@ -281,6 +285,10 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     ).orElseThrow();
             com.securelogx.api.PreQueueRoutingStats preQueueAfter =
                     SecureLogXInferenceDiagnostics.preQueueRoutingStats(
+                            context, "dev"
+                    ).orElseThrow();
+            SecureLogXInferenceDiagnostics.PhaseOneSnapshot phaseOneAfter =
+                    SecureLogXInferenceDiagnostics.phaseOneStats(
                             context, "dev"
                     ).orElseThrow();
             double measuredMaxQueueWaitMillis =
@@ -470,6 +478,8 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                                     .put("whole_event_fail_closed",
                                             preQueueAfter.wholeEventFailClosed()
                                                     - preQueueBefore.wholeEventFailClosed()))
+                    .put("phase_one_diagnostics_measured_only",
+                            phaseOneDelta(phaseOneBefore, phaseOneAfter))
                     .put("queue_wait",
                             queueWaitDelta(
                                     waitsBefore, waitsAfter,
@@ -582,6 +592,54 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                     remaining, TimeUnit.MILLISECONDS.toNanos(5)
             ));
         }
+    }
+
+    static JSONObject phaseOneDelta(
+            SecureLogXInferenceDiagnostics.PhaseOneSnapshot before,
+            SecureLogXInferenceDiagnostics.PhaseOneSnapshot after
+    ) {
+        var p0 = before.preQueue();
+        var p1 = after.preQueue();
+        var lifecycle = after.lifecycle().minus(before.lifecycle());
+        var nativeStats = after.nativeInference().minus(before.nativeInference());
+        return new JSONObject()
+                .put("pre_queue_enabled", p1.enabled())
+                .put("complete_events_bypassed_worker",
+                        p1.completeEventsBypassedWorker()
+                                - p0.completeEventsBypassedWorker())
+                .put("mixed_events_submitted_to_worker",
+                        p1.mixedEventsSubmittedToWorker()
+                                - p0.mixedEventsSubmittedToWorker())
+                .put("all_escalated_events_submitted_to_worker",
+                        p1.allEscalatedEventsSubmittedToWorker()
+                                - p0.allEscalatedEventsSubmittedToWorker())
+                .put("caller_routing_nanos",
+                        p1.callerRoutingNanos() - p0.callerRoutingNanos())
+                .put("worker_started", lifecycle.workerStarted())
+                .put("worker_finished", lifecycle.workerFinished())
+                .put("deadline_removed_before_start",
+                        lifecycle.deadlineRemovedBeforeStart())
+                .put("interrupted_removed_before_start",
+                        lifecycle.interruptedRemovedBeforeStart())
+                .put("worker_deterministic_scans",
+                        nativeStats.workerDeterministicScans())
+                .put("worker_deterministic_scan_nanos",
+                        nativeStats.workerDeterministicScanNanos())
+                .put("native_run_attempted",
+                        nativeStats.nativeRunAttempted())
+                .put("native_run_completed",
+                        nativeStats.nativeRunCompleted())
+                .put("native_run_failed_or_canceled",
+                        nativeStats.nativeRunFailedOrCanceled())
+                .put("native_windows_attempted",
+                        nativeStats.nativeWindowsAttempted())
+                .put("single_window_fields", nativeStats.singleWindowFields())
+                .put("two_to_four_window_fields",
+                        nativeStats.twoToFourWindowFields())
+                .put("five_plus_window_fields",
+                        nativeStats.fivePlusWindowFields())
+                .put("max_windows_per_field_including_warmup",
+                        nativeStats.maxWindowsPerFieldObserved());
     }
 
     static JSONObject queueWaitDelta(
