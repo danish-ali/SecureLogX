@@ -60,14 +60,32 @@ $archive = [System.IO.Compression.ZipFile]::OpenRead(
     (Resolve-Path -LiteralPath $DetailZip).Path
 )
 try {
+    # On Windows, ZipFile.CreateFromDirectory may retain backslashes in
+    # entry names. The study writer normalizes these before hashing, so
+    # use the same normalization here rather than GetEntry("/" path).
+    $expectedCount = 2 * @($study.trials).Count
+    if ($archive.Entries.Count -ne $expectedCount) {
+        throw "ZIP entry count differs from committed study manifest."
+    }
+    $entryMap = @{}
+    foreach ($entry in $archive.Entries) {
+        $normalizedName = $entry.FullName.Replace([char]92, '/')
+        if ($normalizedName.StartsWith("/") -or
+                $normalizedName.Contains("../") -or
+                $normalizedName.Contains("//") -or
+                $entryMap.ContainsKey($normalizedName)) {
+            throw "Unsafe or duplicate ZIP entry path."
+        }
+        $entryMap[$normalizedName] = $entry
+    }
     $rows = @(
         foreach ($trial in $study.trials) {
             $runName = "run-" + ([int]$trial.run).ToString("000") +
                 "-r" + [int]$trial.offered_rate_per_second
             $resultName = "$runName/result.json"
             $logName = "$runName/protected-application.log"
-            $resultEntry = $archive.GetEntry($resultName)
-            $logEntry = $archive.GetEntry($logName)
+            $resultEntry = $entryMap[$resultName]
+            $logEntry = $entryMap[$logName]
             if ($null -eq $resultEntry -or $null -eq $logEntry) {
                 throw "Missing result or protected-log evidence for $runName."
             }
