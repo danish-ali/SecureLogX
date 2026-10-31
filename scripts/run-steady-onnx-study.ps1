@@ -13,6 +13,7 @@ param(
     [switch]$UseExampleOrganizationRules,
     # Synthetic A/B experiment only; the production default stays false.
     [switch]$EnablePreQueueRouting,
+    [switch]$EnablePreQueueScanReuse,
     [switch]$KeepLocalDetails,
     # Rebuild a compact report from already finished local results;
     # never reruns Maven or ONNX when recovering.
@@ -29,10 +30,15 @@ if (($DurationSeconds * 1000) -lt (2 * $MemorySampleMillis)) {
 if ($PushResults -and -not $CommitResults) {
     throw "-PushResults requires -CommitResults."
 }
+if ($EnablePreQueueScanReuse -and -not $EnablePreQueueRouting) {
+    throw "-EnablePreQueueScanReuse requires -EnablePreQueueRouting."
+}
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $branchName = (& git -C $root branch --show-current).Trim()
-if ($LASTEXITCODE -ne 0 -or $branchName -ne "chatgpt/hybrid-detection-pipeline") {
-    throw "Require branch chatgpt/hybrid-detection-pipeline."
+if ($LASTEXITCODE -ne 0 -or $branchName -notin @(
+        "chatgpt/hybrid-detection-pipeline",
+        "chatgpt/phase2-request-scoped-scan-reuse")) {
+    throw "Require a known SecureLogX benchmarking branch."
 }
 $sourceSha = (& git -C $root rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw "Failed to capture source SHA." }
@@ -172,7 +178,8 @@ try {
         "-Dsecurelogx.runtime.maskingQueueCapacity=$MaskingQueueCapacity",
         "-Dsecurelogx.runtime.maskingDeadlineMillis=$MaskingDeadlineMillis",
         "-Dsecurelogx.adaptive.mlRoutingTelemetryEnabled=false",
-        "-Dsecurelogx.experimental.preQueueDeterministicRoutingEnabled=$($EnablePreQueueRouting.IsPresent.ToString().ToLowerInvariant())"
+        "-Dsecurelogx.experimental.preQueueDeterministicRoutingEnabled=$($EnablePreQueueRouting.IsPresent.ToString().ToLowerInvariant())",
+        "-Dsecurelogx.experimental.preQueueScanReuseEnabled=$($EnablePreQueueScanReuse.IsPresent.ToString().ToLowerInvariant())"
     )
     if ($UseExampleOrganizationRules) {
         $javaOptions += @(
@@ -314,6 +321,10 @@ try {
             phase_one_worker_scan_nanos=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
                 [long]$result.phase_one_diagnostics_measured_only.worker_deterministic_scan_nanos
             } else { $null })
+            phase_two_worker_scans_reused=$(if ($null -ne $result.phase_one_diagnostics_measured_only -and
+                    $null -ne $result.phase_one_diagnostics_measured_only.worker_deterministic_scans_reused) {
+                [long]$result.phase_one_diagnostics_measured_only.worker_deterministic_scans_reused
+            } else { $null })
             phase_one_native_attempted=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
                 [long]$result.phase_one_diagnostics_measured_only.native_run_attempted
             } else { $null })
@@ -454,6 +465,11 @@ try {
         } else {
             $EnablePreQueueRouting.IsPresent
         })
+        experimental_pre_queue_scan_reuse_enabled=$(if ($recoveryMode) {
+            $null
+        } else {
+            $EnablePreQueueScanReuse.IsPresent
+        })
         memory_sample_interval_millis=$MemorySampleMillis
         deadline_millis=$MaskingDeadlineMillis; cpu_threads=$CpuThreads
         max_windows_per_batch=$WindowBatchLimit
@@ -523,7 +539,7 @@ try {
         & git -C $root commit --only -m "Archive compact steady ONNX study $studyId" -- $publishedRelative
         if ($LASTEXITCODE -ne 0) { throw "Git commit failed; compact report remains local." }
         if ($PushResults) {
-            & git -C $root push origin "HEAD:refs/heads/chatgpt/hybrid-detection-pipeline"
+            & git -C $root push origin "HEAD:refs/heads/$branchName"
             if ($LASTEXITCODE -ne 0) {
                 throw "Git push failed; retry just git push, not a repeat of the benchmark."
             }
