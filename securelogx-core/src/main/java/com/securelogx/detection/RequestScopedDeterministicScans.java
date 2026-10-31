@@ -2,7 +2,6 @@ package com.securelogx.detection;
 
 import com.securelogx.model.LogEvent;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
