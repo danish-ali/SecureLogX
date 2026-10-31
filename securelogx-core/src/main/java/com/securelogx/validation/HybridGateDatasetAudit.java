@@ -510,7 +510,9 @@ public final class HybridGateDatasetAudit {
             return;
         }
 
-        String raw = text.substring(evidence.start(), evidence.end());
+        // This report may be inspected or shared during a failed safety
+        // audit. Keep only non-payload metadata; never serialize matched
+        // source characters, even into a locally ignored JSON report.
         samples.add(
                 source
                         + "#"
@@ -523,9 +525,7 @@ public final class HybridGateDatasetAudit {
                         + evidence.start()
                         + ","
                         + evidence.end()
-                        + ") raw="
-                        + raw
-                        + " reason="
+                        + ") raw=[REDACTED] reason="
                         + evidence.reason()
         );
     }
