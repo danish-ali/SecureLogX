@@ -131,6 +131,19 @@ try {
             $ineligible++
             continue
         }
+        # The feature must actually remove caller-duplicated worker scans.
+        # A lower count without the matching reuse counter is not sufficient.
+        Check ([long]$aa.phase_two_worker_scans_reused -eq 0) (
+            "Baseline unexpectedly reused deterministic scans."
+        )
+        Check ([long]$bb.phase_two_worker_scans_reused -gt 0) (
+            "Optimized study did not reuse any deterministic scans."
+        )
+        Check (([long]$aa.phase_one_worker_scans -
+                [long]$bb.phase_one_worker_scans) -eq
+                    [long]$bb.phase_two_worker_scans_reused) (
+            "Worker scan reduction differs from explicit reuse count."
+        )
         $runName = "run-" + ([int]$aa.run).ToString("000") +
             "-r" + $aa.offered_rate_per_second
         $entryPath = "$runName/protected-application.log"
