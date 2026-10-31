@@ -64,3 +64,45 @@ The parity verifier cryptographically checks the original local protected-log en
 - Locked **6,463-record** high-risk corpus and negative controls rechecked on both configurations under identical policy/model, not inferred from synthetic parity.
 - Native attempted/completed/failure, windows, queue/admission and memory metrics reviewed for each run, not just averages.
 - If the safety gate passes but latency improvement is negligible, keep the feature OFF and move to Phase 3 short/long workload interference testing.
+
+
+## Recommended staged validation entry point
+
+After pulling the Phase 2 branch, the safer wrapper is
+scripts/run-phase2-validation.ps1. It refuses to run on the wrong
+branch or a dirty tracked working tree. It never uploads the ignored
+local protected-output ZIPs or merges a pull request.
+
+~~~powershell
+cd D:\workspace\SecureLogX
+git fetch origin
+git switch chatgpt/phase2-request-scoped-scan-reuse
+git pull --ff-only origin chatgpt/phase2-request-scoped-scan-reuse
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-phase2-validation.ps1 -Stage Tests
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-phase2-validation.ps1 -Stage Onnx
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-phase2-validation.ps1 -Stage Corpus -NerRoot "..\SecureLogX-NER"
+~~~
+
+Use -Stage All to perform all three sequentially on the same source
+revision. Reuse is enabled **only inside the matched synthetic
+benchmark's optimized study**; runtime defaults remain OFF.
+
+The corpus stage writes **two local ignored numeric reports**:
+
+- HybridGateDatasetAudit: existing gold-span / deterministic bypass /
+  overmask / ALLOW safety checks, expected exactly 6,463 labeled cases.
+- Phase2LockedScanReuseAudit: new request-scoped handoff check over
+  those same 6,463 records, using the synthetic approved organization
+  policy. Verifies exact deterministic scan/result parity, event/policy
+  identity, deterministic-only output parity and required worker
+  fallback for caller-ineligible fields; includes dataset SHA-256s.
+
+**Limitations:** the Phase 2 corpus audit does not invoke the ONNX model,
+calculate ML recall, or compare complete masked outputs on the full
+corpus. Dataset hashes are emitted for review but are not compared
+against a separately pinned independent manifest. These two checks
+must not be mislabeled as a full 6,463-record real ONNX privacy
+regression. The real-ONNX A/B stage compares synthetic application-log
+fixtures only. An additional corpus-wide real-model redaction parity
+and quality gate remains OPEN before release.
