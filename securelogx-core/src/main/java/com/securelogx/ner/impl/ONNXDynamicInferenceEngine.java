@@ -5,6 +5,7 @@ import ai.onnxruntime.*;
 import com.securelogx.api.MaskedResult;
 import com.securelogx.api.MaskReasonCode;
 import com.securelogx.detection.DeterministicScanResult;
+import com.securelogx.detection.RequestScopedDeterministicScans;
 import com.securelogx.detection.HybridMaskingPipeline;
 import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.detection.OrganizationRuleRegistry;
@@ -65,6 +66,7 @@ public class ONNXDynamicInferenceEngine {
     // Counts include canceled attempts that legacy completed-call stats miss.
     private final LongAdder workerScanCount = new LongAdder();
     private final LongAdder workerScanNanos = new LongAdder();
+    private final LongAdder workerReusedScanCount = new LongAdder();
     private final LongAdder nativeRunAttempted = new LongAdder();
     private final LongAdder nativeRunCompleted = new LongAdder();
     private final LongAdder nativeRunFailedOrCanceled = new LongAdder();
@@ -358,7 +360,24 @@ public class ONNXDynamicInferenceEngine {
             List<LogEvent> batch,
             MaskingExecutionControl control
     ) {
+        return maskBatch(tokenizer, batch, control, null);
+    }
+
+    /**
+     * Optional experimental reuse of caller scans, bound to this exact
+     * policy object and the original ordered request. Null keeps the
+     * existing worker scan path identical.
+     */
+    public List<MaskedResult> maskBatch(
+            TokenizerEngine tokenizer,
+            List<LogEvent> batch,
+            MaskingExecutionControl control,
+            RequestScopedDeterministicScans reusableScans
+    ) {
         Objects.requireNonNull(control, "control");
+        if (reusableScans != null) {
+            reusableScans.validate(hybridMaskingPipeline, batch);
+        }
         long batchStartTime = System.currentTimeMillis();
         List<MaskedResult> allResults = new ArrayList<>();
 
@@ -372,7 +391,9 @@ public class ONNXDynamicInferenceEngine {
                             tokenizer,
                             subBatch,
                             batchStartTime,
-                            control
+                            control,
+                            reusableScans,
+                            i
                     )
             );
         }
@@ -384,7 +405,9 @@ public class ONNXDynamicInferenceEngine {
             TokenizerEngine tokenizer,
             List<LogEvent> batch,
             long overallStartTime,
-            MaskingExecutionControl control
+            MaskingExecutionControl control,
+            RequestScopedDeterministicScans reusableScans,
+            int requestOffset
     ) {
         MaskedResult[] orderedOutput =
                 new MaskedResult[batch.size()];
@@ -399,13 +422,24 @@ public class ONNXDynamicInferenceEngine {
             for (int i = 0; i < batch.size(); i++) {
                 control.checkpoint();
                 LogEvent event = batch.get(i);
-                long singleScanStart = System.nanoTime();
                 DeterministicScanResult scan;
-                try {
-                    scan = hybridMaskingPipeline.scan(event.getMessage());
-                } finally {
-                    workerScanCount.increment();
-                    workerScanNanos.add(System.nanoTime() - singleScanStart);
+                var supplied = reusableScans == null
+                        ? java.util.Optional.<DeterministicScanResult>empty()
+                        : reusableScans.scanFor(
+                                hybridMaskingPipeline, event,
+                                requestOffset + i);
+                if (supplied.isPresent()) {
+                    // Same request, event and policy: do not scan twice.
+                    scan = supplied.get();
+                    workerReusedScanCount.increment();
+                } else {
+                    long singleScanStart = System.nanoTime();
+                    try {
+                        scan = hybridMaskingPipeline.scan(event.getMessage());
+                    } finally {
+                        workerScanCount.increment();
+                        workerScanNanos.add(System.nanoTime() - singleScanStart);
+                    }
                 }
                 scans.add(scan);
                 if ("approved-organization-rule".equals(
@@ -1154,7 +1188,8 @@ public class ONNXDynamicInferenceEngine {
                 singleWindowFields.sum(),
                 twoToFourWindowFields.sum(),
                 fivePlusWindowFields.sum(),
-                maxWindowsPerField.get()
+                maxWindowsPerField.get(),
+                workerReusedScanCount.sum()
         );
     }
 
