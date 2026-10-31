@@ -106,3 +106,56 @@ must not be mislabeled as a full 6,463-record real ONNX privacy
 regression. The real-ONNX A/B stage compares synthetic application-log
 fixtures only. An additional corpus-wide real-model redaction parity
 and quality gate remains OPEN before release.
+
+
+## 31 October 2026: one locked-corpus gold-span mismatch (BLOCKING)
+
+The local operator reported the single failure of the pre-existing
+`HybridGateDatasetAudit`:
+
+- `standard_dev`, zero-based record index **2027**.
+- `BANK_ACCOUNT_NUMBER` deterministic MASK evidence at UTF-16/codepoint
+  digit offsets **[490, 499)** (ASCII value, length 9).
+- Total counts across 6,463 cases: **zero bypass uncovered gold**,
+  **one deterministic overmask**, **zero ALLOW/gold conflicts**.
+
+Repository-level inspection of
+`danish-ali/SecureLogX-NER/data/split/dev.jsonl` at the publicly
+committed `main` ref confirms the record contains an explicitly named
+`Bank Account Number: [nine digits]` field at precisely those offsets
+but **no matching gold span**. Another `BANK_ACCOUNT_NUMBER` label is
+present at an unrelated span, **[129, 147)**. The record is labeled
+`source=gretel_finance_pii`, `review_status=auto_converted`. The
+entire public 2,994-record standard-dev file contains only one instance
+of the exact keyed-bank-account detector regex, and its value is
+unlabeled. No account number or other raw corpus text is reproduced here.
+
+The native deterministic detector's GitHub blob SHA
+`0afd19bf5de94c1e87ee507fbe5d115d85dc2142` is identical on the
+Phase 2 feature branch and the `chatgpt/hybrid-detection-pipeline`
+base branch. This audit invokes the scanner directly, **not** the
+request-scoped reuse path. Findings indicate a **probable missing
+gold annotation**, rather than any demonstrated new Phase 2
+detection behavior.
+
+**DO NOT** loosen the zero-overmask gate, suppress the bank-account
+MASK rule, or edit frozen corpus labels without dataset-owner review.
+Next actions:
+
+1. Verify the developer's local NER record has identical source and
+   span offsets; compare source hashes before patching frozen data.
+2. Inspect the authoritative annotation provenance; review adding
+   `[490,499,"BANK_ACCOUNT_NUMBER"]` to the correct canonical source
+   of truth, then intentionally regenerate/version derived splits and
+   any affected training/evaluation assets. Alternatively document
+   and correct the detector only if the original semantic annotation
+   proves the field is not a bank-account number.
+3. Rerun the strict gold-span audit (all three failure counts zero),
+   independent request-scoped scan parity, real ONNX synthetic A/B,
+   and full locked high-risk model output/recall checks as separate
+   release gates.
+
+**Limitation:** the local dataset checksum was not available through
+the GitHub connection; source matching is strongly indicated by
+the exact record index, span offsets, field type and case count,
+but was not cryptographically established. This PR remains blocked.
