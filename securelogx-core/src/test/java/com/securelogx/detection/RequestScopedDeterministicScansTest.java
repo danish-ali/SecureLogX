@@ -27,7 +27,7 @@ class RequestScopedDeterministicScansTest {
     void mlEscalatedFieldsReuseExactCallerEvidenceWithoutRescanning() {
         HybridMaskingPipeline policy = new HybridMaskingPipeline();
         var router = new PreQueueDeterministicRouter(policy);
-        var direct = field("releaseVersion=1.2.3.4", 1);
+        var direct = field("status=ok phase=accepted", 1);
         var ambiguous = field("name=Jane Doe action=login", 2);
         var unknown = field("unknownKey=123-45-6789", 3);
 
@@ -117,7 +117,7 @@ class RequestScopedDeterministicScansTest {
     @Test
     void malformedNonMlReuseIsRejectedRatherThanWeakeningPolicy() {
         var policy = new HybridMaskingPipeline();
-        var safe = field("releaseVersion=1.2.3.4", 1);
+        var safe = field("status=ok phase=accepted", 1);
         var decision = policy.scan(safe.getMessage());
         assertFalse(decision.requiresMl());
         assertThrows(IllegalArgumentException.class,
