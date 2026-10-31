@@ -15,8 +15,18 @@ if ($LASTEXITCODE -ne 0 -or $branch -ne "chatgpt/phase2-request-scoped-scan-reus
 $sha = (& git -C $root rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw "Cannot resolve source SHA." }
 $dirty = @(& git -C $root status --porcelain --untracked-files=no)
-if ($LASTEXITCODE -ne 0 -or $dirty.Count -gt 0) {
-    throw "Commit/stash tracked workspace changes before A/B validation."
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to inspect Git working-tree status."
+}
+# Only the timed real-ONNX A/B study requires a clean source snapshot
+# for comparable, source-fingerprinted performance evidence. Tests and
+# the read-only corpus gate may run with tracked local changes, but their
+# results describe that working tree rather than the published commit.
+if ($dirty.Count -gt 0) {
+    if ($Stage -in @("Onnx","All")) {
+        throw "Matched ONNX A/B requires a clean tracked working tree. Run git status --short to inspect changes; preserve your edits before proceeding."
+    }
+    Write-Warning "Tracked changes detected. $Stage results describe the local working tree, not necessarily commit $sha."
 }
 Write-Host "Phase 2 source: $sha"
 Push-Location $root
