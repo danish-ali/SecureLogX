@@ -98,7 +98,30 @@ try {
         $goldArgs = '"' + $ner + '" "' + $goldPath + '"'
         Write-Host "[CORPUS] Running 6463-case labeled gold-span safety audit..."
         & mvn "-pl" "securelogx-core" "-Dexec.mainClass=com.securelogx.validation.HybridGateDatasetAudit" "-Dexec.args=$goldArgs" "org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
-        if ($LASTEXITCODE -ne 0) { throw "Gold-span bypass audit failed." }
+        if ($LASTEXITCODE -ne 0) {
+            # The source audit may have sensitive values in old
+            # failure_samples. Never print that property or the raw JSON.
+            # Only report fixed-schema aggregate counters.
+            if (Test-Path -LiteralPath $goldPath -PathType Leaf) {
+                $failedGate = Get-Content -LiteralPath $goldPath -Raw |
+                    ConvertFrom-Json
+                Write-Host ("GOLD AUDIT COUNTS: records={0}, uncovered={1}, overmask={2}, allow_conflict={3}" -f
+                    [int]$failedGate.records,
+                    [int]$failedGate.bypass_uncovered_gold,
+                    [int]$failedGate.deterministic_overmask,
+                    [int]$failedGate.allow_gold_conflict)
+                foreach ($source in @($failedGate.by_source.PSObject.Properties | Sort-Object Name)) {
+                    $summary = $source.Value
+                    Write-Host ("DATASET {0}: records={1}, uncovered={2}, overmask={3}, allow_conflict={4}" -f
+                        $source.Name,
+                        [int]$summary.records,
+                        [int]$summary.bypass_uncovered_gold,
+                        [int]$summary.deterministic_overmask,
+                        [int]$summary.allow_gold_conflict)
+                }
+            }
+            throw "Gold-span bypass audit failed. Phase 2 privacy gate remains BLOCKED."
+        }
         $gold = Get-Content -LiteralPath $goldPath -Raw | ConvertFrom-Json
         if ($gold.passed -ne $true -or [int]$gold.records -ne 6463 -or
                 [int]$gold.bypass_uncovered_gold -ne 0 -or
