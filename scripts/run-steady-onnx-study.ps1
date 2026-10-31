@@ -354,6 +354,14 @@ try {
             configured_tokenizer_sha256=[string]$result.configured_tokenizer_sha256
             native_onnx_calls=[int]$result.real_inference_measured_only.onnx_inference_calls
             native_windows=[int]$result.real_inference_measured_only.ml_inference_windows
+            # Preserve numeric stage totals already measured by Java. This
+            # remains null for genuinely older evidence without stage data;
+            # no extra inference, payload capture or native timing is added.
+            inference_stage_total_millis_measured_only=$(if (
+                $null -ne $result.real_inference_measured_only -and
+                $null -ne $result.real_inference_measured_only.stage_total_millis) {
+                $result.real_inference_measured_only.stage_total_millis
+            } else { $null })
             physical_order_inversions=[int]$result.protected_sequence_audit.physical_order_inversions
             rss_peak_sampled_bytes=$result.sampled_peak_working_set_bytes
             private_peak_sampled_bytes=$result.sampled_peak_private_bytes

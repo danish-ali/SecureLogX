@@ -180,6 +180,40 @@ per-field maximum-window gauge includes warmup. See
 `architecture/SecureLogX-Architecture.md` for definitions
 and remaining high-risk recall and soak gates.
 
+**Compact stage-time diagnostics:** New study summaries additionally retain
+`inference_stage_total_millis_measured_only` per trial, copied from the
+existing Java `real_inference_measured_only.stage_total_millis` measurements.
+These are *cumulative milliseconds* for deterministic processing,
+tokenization, window assembly, tensor preparation, ONNX native execution,
+decoding, and final resolution/masking. The
+`onnx_windowed_native_run_subset` is already part of `onnx_native_run`;
+never add both durations. Successful native-run timings do not account
+for time spent in failed or canceled native calls, so interpret them alongside
+Phase 1 `native_run_attempted` / `completed` / `failed_or_canceled` counts.
+Stage totals are not caller latency percentiles or additive with queue-wait
+samples. Historical trial JSON lacking these fields retains `null` rather
+than reconstructed timing. This reporting change does not affect the
+single native session, routing policy, worker admission, or log payloads.
+
+To inspect the **October 26 local ZIP without rerunning ONNX** after
+pulling this branch, use this read-only extractor:
+
+~~~powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\extract-phase-one-stage-timings.ps1 -StudyPath ".\reports\parallel-onnx\steady\study-20261026T231647Z-steady-77daf0044636.json" -DetailZip ".\reports\parallel-onnx\.local-steady-runs\detail-20261026T231647Z-steady-77daf0044636.zip"
+~~~
+
+It checks both original trial-result and protected-log SHA-256 against
+the committed compact manifest, reads only the original result JSON,
+and prints **only whitelisted numeric stage durations and aggregate
+metadata as JSON**. It never emits synthetic protected log content,
+edits the archived study, starts a native model, or uploads the ZIP.
+Use the per-trial stage_total_millis values to compare cumulative
+native ONNX time against other worker-stage totals; the caller queue
+wait is a separate wall-time measure, not additive across concurrent
+calls. Do not infer Phase 2 duplicate-scan savings from a run with
+pre-queue routing disabled, because those events have no caller-side
+pre-scan to duplicate.
+
 ## Experimental pre-queue routing A/B gate (off by default)
 
 A source-level implementation now supports the **explicit experimental**
