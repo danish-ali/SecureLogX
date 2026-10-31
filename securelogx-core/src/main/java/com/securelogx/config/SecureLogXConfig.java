@@ -93,6 +93,17 @@ public class SecureLogXConfig {
         ));
     }
 
+    /**
+     * Independent Phase 2 experiment flag. Only effective when experimental
+     * pre-queue routing is enabled; defaults to false for exact A/B parity.
+     */
+    public boolean isPreQueueScanReuseEnabled() {
+        return Boolean.parseBoolean(runtimeProperty(
+                "securelogx.experimental.preQueueScanReuseEnabled",
+                "false"
+        ));
+    }
+
     public boolean isMlRuleTelemetryEnabled() {
         return Boolean.parseBoolean(
                 runtimeProperty(
