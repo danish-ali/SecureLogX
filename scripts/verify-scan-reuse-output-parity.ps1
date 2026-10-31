@@ -180,8 +180,7 @@ if ($comparedTrials -eq 0) {
     throw "No all-normal matched trial pair; output-parity gate remains OPEN."
 }
 if ($ineligible -gt 0) {
-    Write-Host "PARTIAL synthetic parity only; release gate remains OPEN."
-} else {
-    Write-Host "Phase 2 exact synthetic protected-output parity passed all paired trials."
+    throw "Phase 2 gate INCOMPLETE: $ineligible trial pair(s) had functional failures; exact output parity must cover every planned pair."
 }
+Write-Host "Phase 2 exact synthetic protected-output parity passed all paired trials."
 Write-Host "Locked 6,463-case high-risk recall and extended soak remain OPEN regardless of this synthetic parity check."
