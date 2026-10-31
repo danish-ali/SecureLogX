@@ -625,6 +625,8 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                         nativeStats.workerDeterministicScans())
                 .put("worker_deterministic_scan_nanos",
                         nativeStats.workerDeterministicScanNanos())
+                .put("worker_deterministic_scans_reused",
+                        nativeStats.workerDeterministicScansReused())
                 .put("native_run_attempted",
                         nativeStats.nativeRunAttempted())
                 .put("native_run_completed",
