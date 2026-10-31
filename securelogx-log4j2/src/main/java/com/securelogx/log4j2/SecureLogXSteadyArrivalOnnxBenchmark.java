@@ -432,6 +432,9 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                             lateCallers)
                     .put("masking_deadline_millis",
                             effective.getMaskingDeadlineMillis())
+                    .put("experimental_pre_queue_scan_reuse_enabled",
+                            effective.isPreQueueDeterministicRoutingEnabled()
+                                    && effective.isPreQueueScanReuseEnabled())
                     .put("configured_model_sha256",
                             effective.getModelSha256())
                     .put("configured_tokenizer_sha256",
