@@ -235,6 +235,9 @@ try {
             ((-not $recoveryMode) -and
                 ([bool]$result.pre_queue_routing_measured_only.enabled -ne
                     $EnablePreQueueRouting.IsPresent)) -or
+            ((-not $recoveryMode) -and
+                ([bool]$result.experimental_pre_queue_scan_reuse_enabled -ne
+                    $EnablePreQueueScanReuse.IsPresent)) -or
             [int]$result.masking_queue_capacity -ne $MaskingQueueCapacity -or
             [int]$result.planned_events -ne $expected -or
             [int]$result.completed_callers -ne $expected -or
