@@ -159,3 +159,39 @@ Next actions:
 the GitHub connection; source matching is strongly indicated by
 the exact record index, span offsets, field type and case count,
 but was not cryptographically established. This PR remains blocked.
+
+
+## 1 November 2026: independently executed GitHub corpus validation
+
+A GitHub-hosted cross-repository validation run on the existing Python
+annotation-review branch completed **SUCCESS**:
+https://github.com/danish-ali/SecureLogX-NER/actions/runs/41308569120
+
+- Python `unittest`: **6 passed**.
+- Frozen NER `data/split/dev.jsonl` Git blob
+  `13cd609d67180be2f2306709290cfdc4dcb616bb` preserved unchanged,
+  with a separate, unapproved evaluation candidate generated outside the
+  source checkout. Exactly one record's `entities` list changed by adding
+  proposed `[490,499,"BANK_ACCOUNT_NUMBER"]`. The other two locked input
+  dataset files were identical byte-for-byte.
+- **Original frozen 6,463-case gold safety audit still FAILS as expected**:
+  `bypass_uncovered_gold=0`, `deterministic_overmask=1`,
+  `allow_gold_conflict=0`; failure located at `standard_dev#2027`.
+- **Candidate gold audit PASSED**, 6,463 records:
+  `bypass_uncovered_gold=0`, `deterministic_overmask=0`,
+  `allow_gold_conflict=0`, with one additional development gold span
+  (4,021 instead of 4,020).
+- Independent **Phase 2 model-free request-scoped scan-handoff audit PASSED**
+  on the candidate: 6,463 records; **5,545 caller scans reused** and
+  **918 worker rescans required**; zero unaccounted records.
+- Java `securelogx-core` Maven package/exec audit stages completed
+  successfully on the GitHub-hosted Java 25 runner.
+
+**Limitations:** Candidate labels are still proposed, not approved or
+canonically versioned. These checks do **not** execute ONNX inference and do
+**not** validate full-corpus model recall, full end-to-end protected output,
+latency, queueing, or fail-closed behavior under load. The original legacy
+gold audit remains a recorded failure. Both runtime feature flags remain
+OFF by default. Do not merge Phase 2 until independent real-ONNX A/B,
+security and performance gates have passed, and the dataset correction is
+reviewed and versioned.
