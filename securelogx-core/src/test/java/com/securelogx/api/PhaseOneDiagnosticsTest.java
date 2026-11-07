@@ -36,6 +36,7 @@ class PhaseOneDiagnosticsTest {
         assertEquals(5, delta.nativeWindowsAttempted());
         assertEquals(3, delta.workerDeterministicScans());
         assertEquals(80, delta.workerDeterministicScanNanos());
+        assertEquals(0, delta.workerDeterministicScansReused());
         assertEquals(6, delta.maxWindowsPerFieldObserved(),
                 "Maximum is a lifetime gauge including warmup, not a subtractable counter");
     }

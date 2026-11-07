@@ -38,7 +38,7 @@ Copy-Item $sourceModel $model -Force
 Copy-Item $sourceTokenizer $tokenizer -Force
 Copy-Item $sourceFixture $fixture -Force
 
-Write-Host "[3/4] Compiling SecureLogX Java 21 runtime..."
+Write-Host "[3/4] Compiling SecureLogX Java 25 runtime..."
 & mvn "-pl" "securelogx-core" "-DskipTests" "compile"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

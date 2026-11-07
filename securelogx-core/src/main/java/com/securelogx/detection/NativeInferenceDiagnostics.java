@@ -16,8 +16,29 @@ public record NativeInferenceDiagnostics(
         long singleWindowFields,
         long twoToFourWindowFields,
         long fivePlusWindowFields,
-        long maxWindowsPerFieldObserved
+        long maxWindowsPerFieldObserved,
+        long workerDeterministicScansReused
 ) {
+    /** Backward-compatible constructor for legacy diagnostic snapshots. */
+    public NativeInferenceDiagnostics(
+            long workerDeterministicScans,
+            long workerDeterministicScanNanos,
+            long nativeRunAttempted,
+            long nativeRunCompleted,
+            long nativeRunFailedOrCanceled,
+            long nativeWindowsAttempted,
+            long singleWindowFields,
+            long twoToFourWindowFields,
+            long fivePlusWindowFields,
+            long maxWindowsPerFieldObserved
+    ) {
+        this(workerDeterministicScans, workerDeterministicScanNanos,
+                nativeRunAttempted, nativeRunCompleted,
+                nativeRunFailedOrCanceled, nativeWindowsAttempted,
+                singleWindowFields, twoToFourWindowFields,
+                fivePlusWindowFields, maxWindowsPerFieldObserved, 0L);
+    }
+
     public NativeInferenceDiagnostics minus(NativeInferenceDiagnostics before) {
         return new NativeInferenceDiagnostics(
                 workerDeterministicScans - before.workerDeterministicScans,
@@ -29,7 +50,9 @@ public record NativeInferenceDiagnostics(
                 singleWindowFields - before.singleWindowFields,
                 twoToFourWindowFields - before.twoToFourWindowFields,
                 fivePlusWindowFields - before.fivePlusWindowFields,
-                maxWindowsPerFieldObserved
+                maxWindowsPerFieldObserved,
+                workerDeterministicScansReused
+                        - before.workerDeterministicScansReused
         );
     }
 }

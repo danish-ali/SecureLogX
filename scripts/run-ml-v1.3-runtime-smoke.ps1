@@ -12,17 +12,17 @@ Write-Host "[0/3] Active Maven/JDK:"
 & mvn -version
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "[1/3] Cleaning stale bytecode and compiling SecureLogX for Java 21..."
+Write-Host "[1/3] Cleaning stale bytecode and compiling SecureLogX for Java 25..."
 & mvn "-pl" "securelogx-core" "-DskipTests" "clean" "compile"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "[2/3] Verifying Java 21 class-file version..."
+Write-Host "[2/3] Verifying Java 25 class-file version..."
 $javapOutput = & javap "-verbose" "-classpath" "securelogx-core\\target\\classes" "com.securelogx.validation.MlV13RuntimeSmokeCheck" 2>&1
 if ($LASTEXITCODE -ne 0) { $javapOutput | Write-Host; exit $LASTEXITCODE }
 $majorLine = $javapOutput | Select-String "major version:" | Select-Object -First 1
-if ($null -eq $majorLine -or $majorLine.Line -notmatch "major version:\\s+65") {
+if ($null -eq $majorLine -or $majorLine.Line -notmatch "major version:\\s+69") {
     $javapOutput | Write-Host
-    throw "Smoke-check class was not compiled as Java 21 bytecode (expected major version 65)."
+    throw "Smoke-check class was not compiled as Java 25 bytecode (expected major version 69)."
 }
 Write-Host $majorLine.Line.Trim()
 

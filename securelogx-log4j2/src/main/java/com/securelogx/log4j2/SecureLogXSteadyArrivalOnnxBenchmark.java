@@ -432,6 +432,9 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                             lateCallers)
                     .put("masking_deadline_millis",
                             effective.getMaskingDeadlineMillis())
+                    .put("experimental_pre_queue_scan_reuse_enabled",
+                            effective.isPreQueueDeterministicRoutingEnabled()
+                                    && effective.isPreQueueScanReuseEnabled())
                     .put("configured_model_sha256",
                             effective.getModelSha256())
                     .put("configured_tokenizer_sha256",
@@ -625,6 +628,8 @@ public final class SecureLogXSteadyArrivalOnnxBenchmark {
                         nativeStats.workerDeterministicScans())
                 .put("worker_deterministic_scan_nanos",
                         nativeStats.workerDeterministicScanNanos())
+                .put("worker_deterministic_scans_reused",
+                        nativeStats.workerDeterministicScansReused())
                 .put("native_run_attempted",
                         nativeStats.nativeRunAttempted())
                 .put("native_run_completed",

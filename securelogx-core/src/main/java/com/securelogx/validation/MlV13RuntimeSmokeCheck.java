@@ -119,12 +119,7 @@ public final class MlV13RuntimeSmokeCheck {
                                     + entity.start()
                                     + ","
                                     + entity.end()
-                                    + ") raw="
-                                    + entity.rawText()
-                                    + " expectedMasked="
-                                    + expectedMasked
-                                    + " actualMasked="
-                                    + actualMasked
+                                    + "). Payload omitted."
                     );
                 }
             }
@@ -216,8 +211,7 @@ public final class MlV13RuntimeSmokeCheck {
         int start = formattedOutput.indexOf(marker);
         if (start < 0) {
             throw new IllegalStateException(
-                    "Formatted runtime output does not contain message marker: "
-                            + formattedOutput
+                    "Formatted runtime output does not contain the message marker."
             );
         }
         start += marker.length();
@@ -225,8 +219,7 @@ public final class MlV13RuntimeSmokeCheck {
         int end = formattedOutput.lastIndexOf('"');
         if (end < start) {
             throw new IllegalStateException(
-                    "Formatted runtime output does not terminate message field: "
-                            + formattedOutput
+                    "Formatted runtime output does not terminate the message field."
             );
         }
         return formattedOutput.substring(start, end);
@@ -263,7 +256,7 @@ public final class MlV13RuntimeSmokeCheck {
                 ParallelTokenizer tokenizer,
                 List<LogEvent> events
         ) {
-            return delegate.runBatch(tokenizer::tokenize, events);
+            return delegate.runBatch(tokenizer, events);
         }
 
         @Override

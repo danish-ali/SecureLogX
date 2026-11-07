@@ -18,10 +18,6 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <properties>
-    <maven.compiler.release>21</maven.compiler.release>
-  </properties>
-
   <dependencies>
  <!--   <dependency>
       <groupId>com.securelogx</groupId>
@@ -89,27 +85,9 @@
 
   <build>
     <plugins>
-      <!-- ✅ Maven Compiler Plugin for Java 21 -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.13.0</version>
-        <configuration>
-          <encoding>UTF-8</encoding>
-          <release>21</release>
-     <!--     <annotationProcessorPaths>
-            <path>
-              <groupId>com.securelogx</groupId>
-              <artifactId>securelogx-processor</artifactId>
-              <version>${project.version}</version>
-            </path>
-          </annotationProcessorPaths> -->
-        </configuration>
-      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>3.5.2</version>
       </plugin>
     </plugins>
 

@@ -37,6 +37,7 @@ public final class SecureMasker implements AutoCloseable {
     private final MaskingRequestExecutor maskingRuntime;
     private final AtomicLong sequence = new AtomicLong();
     private final boolean preQueueEnabled;
+    private final boolean preQueueReuseEnabled;
     private final PreQueueDeterministicRouter preQueueRouter;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final LongAdder preQueueBypassed = new LongAdder();
@@ -80,6 +81,8 @@ public final class SecureMasker implements AutoCloseable {
         );
         this.preQueueEnabled =
                 config.isPreQueueDeterministicRoutingEnabled();
+        this.preQueueReuseEnabled = preQueueEnabled
+                && config.isPreQueueScanReuseEnabled();
         this.preQueueRouter = preQueueEnabled
                 ? engine.preQueueDeterministicRouter()
                 : null;
@@ -216,7 +219,10 @@ public final class SecureMasker implements AutoCloseable {
                                     control -> engine.maskBatch(
                                             tokenizer,
                                             plan.unresolvedFields(),
-                                            control
+                                            control,
+                                            preQueueReuseEnabled
+                                                    ? plan.reusableScans()
+                                                    : null
                                     )
                             );
                     uniqueResults = plan.merge(unresolved);

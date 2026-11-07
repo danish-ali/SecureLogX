@@ -5,6 +5,7 @@ import ai.onnxruntime.*;
 import com.securelogx.api.MaskedResult;
 import com.securelogx.api.MaskReasonCode;
 import com.securelogx.detection.DeterministicScanResult;
+import com.securelogx.detection.RequestScopedDeterministicScans;
 import com.securelogx.detection.HybridMaskingPipeline;
 import com.securelogx.detection.MlRoutingTelemetry;
 import com.securelogx.detection.OrganizationRuleRegistry;
@@ -65,6 +66,7 @@ public class ONNXDynamicInferenceEngine {
     // Counts include canceled attempts that legacy completed-call stats miss.
     private final LongAdder workerScanCount = new LongAdder();
     private final LongAdder workerScanNanos = new LongAdder();
+    private final LongAdder workerReusedScanCount = new LongAdder();
     private final LongAdder nativeRunAttempted = new LongAdder();
     private final LongAdder nativeRunCompleted = new LongAdder();
     private final LongAdder nativeRunFailedOrCanceled = new LongAdder();
@@ -117,7 +119,6 @@ public class ONNXDynamicInferenceEngine {
 
         // Check CUDA environment first
         checkCudaEnvironment();
-        addCudaToLibraryPath();
 
         this.env = OrtEnvironment.getEnvironment();
         this.maxInferenceWindowsPerBatch =
@@ -358,7 +359,24 @@ public class ONNXDynamicInferenceEngine {
             List<LogEvent> batch,
             MaskingExecutionControl control
     ) {
+        return maskBatch(tokenizer, batch, control, null);
+    }
+
+    /**
+     * Optional experimental reuse of caller scans, bound to this exact
+     * policy object and the original ordered request. Null keeps the
+     * existing worker scan path identical.
+     */
+    public List<MaskedResult> maskBatch(
+            TokenizerEngine tokenizer,
+            List<LogEvent> batch,
+            MaskingExecutionControl control,
+            RequestScopedDeterministicScans reusableScans
+    ) {
         Objects.requireNonNull(control, "control");
+        if (reusableScans != null) {
+            reusableScans.validate(hybridMaskingPipeline, batch);
+        }
         long batchStartTime = System.currentTimeMillis();
         List<MaskedResult> allResults = new ArrayList<>();
 
@@ -372,7 +390,9 @@ public class ONNXDynamicInferenceEngine {
                             tokenizer,
                             subBatch,
                             batchStartTime,
-                            control
+                            control,
+                            reusableScans,
+                            i
                     )
             );
         }
@@ -384,7 +404,9 @@ public class ONNXDynamicInferenceEngine {
             TokenizerEngine tokenizer,
             List<LogEvent> batch,
             long overallStartTime,
-            MaskingExecutionControl control
+            MaskingExecutionControl control,
+            RequestScopedDeterministicScans reusableScans,
+            int requestOffset
     ) {
         MaskedResult[] orderedOutput =
                 new MaskedResult[batch.size()];
@@ -399,13 +421,24 @@ public class ONNXDynamicInferenceEngine {
             for (int i = 0; i < batch.size(); i++) {
                 control.checkpoint();
                 LogEvent event = batch.get(i);
-                long singleScanStart = System.nanoTime();
                 DeterministicScanResult scan;
-                try {
-                    scan = hybridMaskingPipeline.scan(event.getMessage());
-                } finally {
-                    workerScanCount.increment();
-                    workerScanNanos.add(System.nanoTime() - singleScanStart);
+                var supplied = reusableScans == null
+                        ? java.util.Optional.<DeterministicScanResult>empty()
+                        : reusableScans.scanFor(
+                                hybridMaskingPipeline, event,
+                                requestOffset + i);
+                if (supplied.isPresent()) {
+                    // Same request, event and policy: do not scan twice.
+                    scan = supplied.get();
+                    workerReusedScanCount.increment();
+                } else {
+                    long singleScanStart = System.nanoTime();
+                    try {
+                        scan = hybridMaskingPipeline.scan(event.getMessage());
+                    } finally {
+                        workerScanCount.increment();
+                        workerScanNanos.add(System.nanoTime() - singleScanStart);
+                    }
                 }
                 scans.add(scan);
                 if ("approved-organization-rule".equals(
@@ -1041,36 +1074,6 @@ public class ONNXDynamicInferenceEngine {
         }
     }
 
-    // ... existing methods (addCudaToLibraryPath, checkCudaEnvironment) remain the same ...
-
-    private void addCudaToLibraryPath() {
-        try {
-            String[] cudaPaths = {
-                    "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4\\bin",
-                    "C:\\Program Files\\NVIDIA\\CUDNN\\v9.12\\bin\\12.9"
-            };
-
-            String currentLibPath = System.getProperty("java.library.path");
-            StringBuilder newLibPath = new StringBuilder(currentLibPath);
-
-            for (String cudaPath : cudaPaths) {
-                if (java.nio.file.Files.exists(java.nio.file.Paths.get(cudaPath))) {
-                    newLibPath.append(System.getProperty("path.separator")).append(cudaPath);
-                    System.out.println("[SecureLogX INIT] Added to library path: " + cudaPath);
-                }
-            }
-
-            System.setProperty("java.library.path", newLibPath.toString());
-
-            java.lang.reflect.Field fieldSysPath = ClassLoader.class.getDeclaredField("sys_paths");
-            fieldSysPath.setAccessible(true);
-            fieldSysPath.set(null, null);
-
-        } catch (Exception e) {
-            System.err.println("[SecureLogX INIT] Failed to update library path: " + e.getMessage());
-        }
-    }
-
     private void checkCudaEnvironment() {
         System.out.println("[SecureLogX INIT] === CUDA Environment Check ===");
 
@@ -1154,7 +1157,8 @@ public class ONNXDynamicInferenceEngine {
                 singleWindowFields.sum(),
                 twoToFourWindowFields.sum(),
                 fivePlusWindowFields.sum(),
-                maxWindowsPerField.get()
+                maxWindowsPerField.get(),
+                workerReusedScanCount.sum()
         );
     }
 

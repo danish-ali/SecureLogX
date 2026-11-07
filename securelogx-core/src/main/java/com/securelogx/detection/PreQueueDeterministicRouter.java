@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Experimental, caller-thread deterministic resolution ahead of the
@@ -40,6 +41,8 @@ public final class PreQueueDeterministicRouter {
         MaskedResult[] direct = new MaskedResult[all.size()];
         List<LogEvent> unresolved = new ArrayList<>();
         List<Integer> indices = new ArrayList<>();
+        List<Optional<DeterministicScanResult>> reusable =
+                new ArrayList<>();
 
         for (int i = 0; i < all.size(); i++) {
             LogEvent event = all.get(i);
@@ -52,12 +55,14 @@ public final class PreQueueDeterministicRouter {
                 // native deadline/cancellation semantics.
                 unresolved.add(event);
                 indices.add(i);
+                reusable.add(Optional.empty());
                 continue;
             }
             DeterministicScanResult scan = pipeline.scan(original);
             if (scan.requiresMl()) {
                 unresolved.add(event);
                 indices.add(i);
+                reusable.add(Optional.of(scan));
                 continue;
             }
             // The existing resolver applies MASK evidence and honors
@@ -73,8 +78,11 @@ public final class PreQueueDeterministicRouter {
                     event.getSequenceNumber(), event.getInstanceId()
             );
         }
-        return new Plan(all, List.copyOf(unresolved),
-                List.copyOf(indices), direct);
+        List<LogEvent> workerEvents = List.copyOf(unresolved);
+        return new Plan(all, workerEvents,
+                List.copyOf(indices), direct,
+                new RequestScopedDeterministicScans(
+                        pipeline, workerEvents, reusable));
     }
 
     public static final class Plan {
@@ -82,21 +90,28 @@ public final class PreQueueDeterministicRouter {
         private final List<LogEvent> unresolved;
         private final List<Integer> unresolvedIndices;
         private final MaskedResult[] direct;
+        private final RequestScopedDeterministicScans reusableScans;
 
         private Plan(
                 List<LogEvent> original,
                 List<LogEvent> unresolved,
                 List<Integer> unresolvedIndices,
-                MaskedResult[] direct
+                MaskedResult[] direct,
+                RequestScopedDeterministicScans reusableScans
         ) {
             this.original = original;
             this.unresolved = unresolved;
             this.unresolvedIndices = unresolvedIndices;
             this.direct = direct.clone();
+            this.reusableScans = reusableScans;
         }
 
         public List<LogEvent> unresolvedFields() {
             return unresolved;
+        }
+
+        public RequestScopedDeterministicScans reusableScans() {
+            return reusableScans;
         }
 
         public int deterministicFields() {

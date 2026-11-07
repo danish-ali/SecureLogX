@@ -13,6 +13,7 @@ param(
     [switch]$UseExampleOrganizationRules,
     # Synthetic A/B experiment only; the production default stays false.
     [switch]$EnablePreQueueRouting,
+    [switch]$EnablePreQueueScanReuse,
     [switch]$KeepLocalDetails,
     # Rebuild a compact report from already finished local results;
     # never reruns Maven or ONNX when recovering.
@@ -20,7 +21,8 @@ param(
     # Existing parent STUDY directory with run-001-r5 etc. Never runs ONNX.
     [string]$RecoverFromPath,
     [switch]$CommitResults,
-    [switch]$PushResults
+    [switch]$PushResults,
+    [string]$RepoRoot = ""
 )
 $ErrorActionPreference = "Stop"
 if (($DurationSeconds * 1000) -lt (2 * $MemorySampleMillis)) {
@@ -29,13 +31,37 @@ if (($DurationSeconds * 1000) -lt (2 * $MemorySampleMillis)) {
 if ($PushResults -and -not $CommitResults) {
     throw "-PushResults requires -CommitResults."
 }
-$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$branchName = (& git -C $root branch --show-current).Trim()
-if ($LASTEXITCODE -ne 0 -or $branchName -ne "chatgpt/hybrid-detection-pipeline") {
-    throw "Require branch chatgpt/hybrid-detection-pipeline."
+if ($EnablePreQueueScanReuse -and -not $EnablePreQueueRouting) {
+    throw "-EnablePreQueueScanReuse requires -EnablePreQueueRouting."
 }
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+} else {
+    $root = (Resolve-Path -LiteralPath $RepoRoot).Path
+}
+$knownBranches = @(
+    "chatgpt/hybrid-detection-pipeline",
+    "chatgpt/phase2-request-scoped-scan-reuse"
+)
+$branchName = ([string]((& git -C $root branch --show-current) | Out-String)).Trim()
 $sourceSha = (& git -C $root rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0) { throw "Failed to capture source SHA." }
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceSha)) {
+    throw "Failed to capture source SHA."
+}
+$detached = [string]::IsNullOrWhiteSpace($branchName)
+$onKnownLine = $false
+foreach ($known in $knownBranches) {
+    & git -C $root rev-parse --verify $known 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { continue }
+    & git -C $root merge-base --is-ancestor $sourceSha $known | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $onKnownLine = $true
+        break
+    }
+}
+if (-not $onKnownLine -or (-not $detached -and $branchName -notin $knownBranches)) {
+    throw "Require a known SecureLogX benchmarking branch or a detached worktree on that line."
+}
 $rateValues = @(
     foreach ($raw in $Rates.Split(',')) {
         [int]$value = 0
@@ -57,6 +83,8 @@ if ($RecoverLatest -and
 # Archival-only recovery must work even if model files have been moved
 # since the original run: no native session or Maven process is started.
 if (-not $recoveryMode) {
+. (Join-Path $PSScriptRoot "phase2-input-integrity.ps1")
+Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
 foreach ($modelArtifact in @(
     (Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\model.onnx"),
     (Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\tokenizer.json")
@@ -172,7 +200,8 @@ try {
         "-Dsecurelogx.runtime.maskingQueueCapacity=$MaskingQueueCapacity",
         "-Dsecurelogx.runtime.maskingDeadlineMillis=$MaskingDeadlineMillis",
         "-Dsecurelogx.adaptive.mlRoutingTelemetryEnabled=false",
-        "-Dsecurelogx.experimental.preQueueDeterministicRoutingEnabled=$($EnablePreQueueRouting.IsPresent.ToString().ToLowerInvariant())"
+        "-Dsecurelogx.experimental.preQueueDeterministicRoutingEnabled=$($EnablePreQueueRouting.IsPresent.ToString().ToLowerInvariant())",
+        "-Dsecurelogx.experimental.preQueueScanReuseEnabled=$($EnablePreQueueScanReuse.IsPresent.ToString().ToLowerInvariant())"
     )
     if ($UseExampleOrganizationRules) {
         $javaOptions += @(
@@ -208,6 +237,7 @@ try {
             if ($LASTEXITCODE -ne 0) {
                 throw "Steady run $ordinal failed. Detailed local evidence retained: $detailDir"
             }
+            Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
         }
         if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf) -or -not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
             throw "Missing original result or protected log at run $ordinal."
@@ -228,6 +258,9 @@ try {
             ((-not $recoveryMode) -and
                 ([bool]$result.pre_queue_routing_measured_only.enabled -ne
                     $EnablePreQueueRouting.IsPresent)) -or
+            ((-not $recoveryMode) -and
+                ([bool]$result.experimental_pre_queue_scan_reuse_enabled -ne
+                    $EnablePreQueueScanReuse.IsPresent)) -or
             [int]$result.masking_queue_capacity -ne $MaskingQueueCapacity -or
             [int]$result.planned_events -ne $expected -or
             [int]$result.completed_callers -ne $expected -or
@@ -313,6 +346,10 @@ try {
             } else { $null })
             phase_one_worker_scan_nanos=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
                 [long]$result.phase_one_diagnostics_measured_only.worker_deterministic_scan_nanos
+            } else { $null })
+            phase_two_worker_scans_reused=$(if ($null -ne $result.phase_one_diagnostics_measured_only -and
+                    $null -ne $result.phase_one_diagnostics_measured_only.worker_deterministic_scans_reused) {
+                [long]$result.phase_one_diagnostics_measured_only.worker_deterministic_scans_reused
             } else { $null })
             phase_one_native_attempted=$(if ($null -ne $result.phase_one_diagnostics_measured_only) {
                 [long]$result.phase_one_diagnostics_measured_only.native_run_attempted
@@ -421,6 +458,7 @@ try {
                 throw "ONNX model/tokenizer hashes changed during one A/B study."
             }
         }
+        Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
     }
     if ($trials.Count -eq 0) {
         throw "No local complete benchmark records were recovered."
@@ -453,6 +491,11 @@ try {
             $null
         } else {
             $EnablePreQueueRouting.IsPresent
+        })
+        experimental_pre_queue_scan_reuse_enabled=$(if ($recoveryMode) {
+            $null
+        } else {
+            $EnablePreQueueScanReuse.IsPresent
         })
         memory_sample_interval_millis=$MemorySampleMillis
         deadline_millis=$MaskingDeadlineMillis; cpu_threads=$CpuThreads
@@ -523,7 +566,7 @@ try {
         & git -C $root commit --only -m "Archive compact steady ONNX study $studyId" -- $publishedRelative
         if ($LASTEXITCODE -ne 0) { throw "Git commit failed; compact report remains local." }
         if ($PushResults) {
-            & git -C $root push origin "HEAD:refs/heads/chatgpt/hybrid-detection-pipeline"
+            & git -C $root push origin "HEAD:refs/heads/$branchName"
             if ($LASTEXITCODE -ne 0) {
                 throw "Git push failed; retry just git push, not a repeat of the benchmark."
             }
