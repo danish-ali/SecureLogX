@@ -21,7 +21,8 @@ param(
     # Existing parent STUDY directory with run-001-r5 etc. Never runs ONNX.
     [string]$RecoverFromPath,
     [switch]$CommitResults,
-    [switch]$PushResults
+    [switch]$PushResults,
+    [string]$RepoRoot = ""
 )
 $ErrorActionPreference = "Stop"
 if (($DurationSeconds * 1000) -lt (2 * $MemorySampleMillis)) {
@@ -33,15 +34,34 @@ if ($PushResults -and -not $CommitResults) {
 if ($EnablePreQueueScanReuse -and -not $EnablePreQueueRouting) {
     throw "-EnablePreQueueScanReuse requires -EnablePreQueueRouting."
 }
-$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$branchName = (& git -C $root branch --show-current).Trim()
-if ($LASTEXITCODE -ne 0 -or $branchName -notin @(
-        "chatgpt/hybrid-detection-pipeline",
-        "chatgpt/phase2-request-scoped-scan-reuse")) {
-    throw "Require a known SecureLogX benchmarking branch."
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+} else {
+    $root = (Resolve-Path -LiteralPath $RepoRoot).Path
 }
+$knownBranches = @(
+    "chatgpt/hybrid-detection-pipeline",
+    "chatgpt/phase2-request-scoped-scan-reuse"
+)
+$branchName = ([string]((& git -C $root branch --show-current) | Out-String)).Trim()
 $sourceSha = (& git -C $root rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0) { throw "Failed to capture source SHA." }
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceSha)) {
+    throw "Failed to capture source SHA."
+}
+$detached = [string]::IsNullOrWhiteSpace($branchName)
+$onKnownLine = $false
+foreach ($known in $knownBranches) {
+    & git -C $root rev-parse --verify $known 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { continue }
+    & git -C $root merge-base --is-ancestor $sourceSha $known | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $onKnownLine = $true
+        break
+    }
+}
+if (-not $onKnownLine -or (-not $detached -and $branchName -notin $knownBranches)) {
+    throw "Require a known SecureLogX benchmarking branch or a detached worktree on that line."
+}
 $rateValues = @(
     foreach ($raw in $Rates.Split(',')) {
         [int]$value = 0
@@ -63,6 +83,8 @@ if ($RecoverLatest -and
 # Archival-only recovery must work even if model files have been moved
 # since the original run: no native session or Maven process is started.
 if (-not $recoveryMode) {
+. (Join-Path $PSScriptRoot "phase2-input-integrity.ps1")
+Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
 foreach ($modelArtifact in @(
     (Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\model.onnx"),
     (Join-Path $root "onnx-model\ml-v1.3\bert-base-cased\tokenizer.json")
@@ -215,6 +237,7 @@ try {
             if ($LASTEXITCODE -ne 0) {
                 throw "Steady run $ordinal failed. Detailed local evidence retained: $detailDir"
             }
+            Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
         }
         if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf) -or -not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
             throw "Missing original result or protected log at run $ordinal."
@@ -435,6 +458,7 @@ try {
                 throw "ONNX model/tokenizer hashes changed during one A/B study."
             }
         }
+        Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
     }
     if ($trials.Count -eq 0) {
         throw "No local complete benchmark records were recovered."

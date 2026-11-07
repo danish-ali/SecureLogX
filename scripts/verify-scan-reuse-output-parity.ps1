@@ -172,9 +172,9 @@ try {
     $offZip.Dispose()
     $onZip.Dispose()
 }
-Write-Host ("PHASE 2 SCAN REUSE PARITY RESULT: {0} paired functional trials verified, " +
+Write-Host (("PHASE 2 SCAN REUSE PARITY RESULT: {0} paired functional trials verified, " +
     "{1} synthetic protected records matched, {2} trial pairs " +
-    "not eligible because one/both had functional failures." -f
+    "not eligible because one/both had functional failures.") -f
     $comparedTrials,$comparedRecords,$ineligible)
 if ($comparedTrials -eq 0) {
     throw "No all-normal matched trial pair; output-parity gate remains OPEN."

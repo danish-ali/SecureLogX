@@ -4,29 +4,85 @@
 param(
     [ValidateSet("Tests","Onnx","Corpus","All")]
     [string]$Stage = "All",
-    [string]$NerRoot = "..\SecureLogX-NER"
+    [string]$NerRoot = "..\SecureLogX-NER",
+    # Optional pinned checkout (typically a detached Git worktree).
+    # Preflight, Maven, and fingerprinting use this tree; the harness
+    # scripts may live in a different working copy.
+    [string]$RepoRoot = ""
 )
 $ErrorActionPreference = "Stop"
-$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$branch = (& git -C $root branch --show-current).Trim()
-if ($LASTEXITCODE -ne 0 -or $branch -ne "chatgpt/phase2-request-scoped-scan-reuse") {
-    throw "Switch to chatgpt/phase2-request-scoped-scan-reuse before validation."
+. (Join-Path $PSScriptRoot "phase2-input-integrity.ps1")
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+} else {
+    $root = (Resolve-Path -LiteralPath $RepoRoot).Path
 }
+$requiredBranch = "chatgpt/phase2-request-scoped-scan-reuse"
+$branch = ([string]((& git -C $root branch --show-current) | Out-String)).Trim()
 $sha = (& git -C $root rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0) { throw "Cannot resolve source SHA." }
-$dirty = @(& git -C $root status --porcelain --untracked-files=no)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sha)) {
+    throw "Cannot resolve source SHA."
+}
+$tip = (& git -C $root rev-parse --verify $requiredBranch).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tip)) {
+    throw "Cannot resolve $requiredBranch."
+}
+& git -C $root merge-base --is-ancestor $sha $requiredBranch | Out-Null
+$onPhase2Line = ($LASTEXITCODE -eq 0)
+$detached = [string]::IsNullOrWhiteSpace($branch)
+if (-not $onPhase2Line -or (-not $detached -and $branch -cne $requiredBranch)) {
+    throw "Switch to $requiredBranch, or a detached worktree whose HEAD is on that branch, before validation. branch='$branch' sha=$sha"
+}
+if ($detached) {
+    Write-Host "Phase 2 detached worktree at $sha (on $requiredBranch)"
+}
+
+function ConvertFrom-GitPorcelainPaths {
+    param([string]$Line)
+    if ([string]::IsNullOrWhiteSpace($Line) -or $Line.Length -lt 4) {
+        return @()
+    }
+    $rest = $Line.Substring(3)
+    if ($rest.StartsWith('"') -and $rest.EndsWith('"') -and $rest.Length -ge 2) {
+        $rest = $rest.Substring(1, $rest.Length - 2)
+        $rest = $rest -replace '\\n', "`n" -replace '\\t', "`t" -replace '\\"', '"' -replace '\\\\', '\'
+    }
+    if ($rest -match ' -> ') {
+        return @($rest -split ' -> ', 2)
+    }
+    return @($rest)
+}
+
+function Normalize-Phase2Path {
+    param([string]$Path)
+    $norm = ($Path -replace '\\', '/').Trim()
+    if ($norm.StartsWith('./')) { $norm = $norm.Substring(2) }
+    return $norm
+}
+
+$porcelain = @(& git -C $root -c core.quotepath=false status --porcelain=v1 --untracked-files=all --no-renames)
 if ($LASTEXITCODE -ne 0) {
     throw "Unable to inspect Git working-tree status."
 }
-# Only the timed real-ONNX A/B study requires a clean source snapshot
+$dirtyPaths = @(
+    foreach ($line in $porcelain) {
+        ConvertFrom-GitPorcelainPaths -Line $line
+    }
+) | ForEach-Object { Normalize-Phase2Path $_ } | Where-Object { $_ } | Select-Object -Unique
+$relevantDirty = @($dirtyPaths | Where-Object { -not (Test-Phase2DirtyPathAllowed -Path $_) })
+$ignoredDirty = @($dirtyPaths | Where-Object { Test-Phase2DirtyPathAllowed -Path $_ })
+# Only the timed real-ONNX A/B study requires a clean *source* snapshot
 # for comparable, source-fingerprinted performance evidence. Tests and
 # the read-only corpus gate may run with tracked local changes, but their
 # results describe that working tree rather than the published commit.
-if ($dirty.Count -gt 0) {
+if ($relevantDirty.Count -gt 0) {
+    $listed = $relevantDirty -join '; '
     if ($Stage -in @("Onnx","All")) {
-        throw "Matched ONNX A/B requires a clean tracked working tree. Run git status --short to inspect changes; preserve your edits before proceeding."
+        throw "Matched ONNX A/B requires a clean source tree (tracked and untracked). Blocking paths: $listed"
     }
-    Write-Warning "Tracked changes detected. $Stage results describe the local working tree, not necessarily commit $sha."
+    Write-Warning "Source changes detected ($listed). $Stage results describe the local working tree, not necessarily commit $sha."
+} elseif ($ignoredDirty.Count -gt 0) {
+    Write-Host ("Ignoring non-input artifacts: " + ($ignoredDirty -join '; '))
 }
 Write-Host "Phase 2 source: $sha"
 Push-Location $root
@@ -39,23 +95,34 @@ try {
     }
 
     if ($Stage -in @("Onnx","All")) {
-        $runner = Join-Path $root "scripts\run-steady-onnx-study.ps1"
-        $verify = Join-Path $root "scripts\verify-scan-reuse-output-parity.ps1"
+        Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
+        $runner = Join-Path $PSScriptRoot "run-steady-onnx-study.ps1"
+        $verify = Join-Path $PSScriptRoot "verify-scan-reuse-output-parity.ps1"
         $studyDir = Join-Path $root "reports\parallel-onnx\steady"
         $zipDir = Join-Path $root "reports\parallel-onnx\.local-steady-runs"
+        $phase2 = $script:Phase2ExpectedConfiguration
         $common = @(
-            "-Rates", "3,5", "-Repetitions", "2",
-            "-DurationSeconds", "60", "-CallerMode", "platform",
-            "-MaxOutstanding", "32", "-MaskingDeadlineMillis", "2000",
-            "-CpuThreads", "4", "-WindowBatchLimit", "4",
-            "-MaskingQueueCapacity", "64", "-MemorySampleMillis", "5000",
-            "-RandomSeed", "20261026",
-            "-UseExampleOrganizationRules", "-EnablePreQueueRouting"
+            "-RepoRoot", $root,
+            "-Rates", $phase2.rates_per_second,
+            "-Repetitions", [string]$phase2.repetitions,
+            "-DurationSeconds", [string]$phase2.duration_seconds,
+            "-CallerMode", $phase2.caller_mode,
+            "-MaxOutstanding", [string]$phase2.max_outstanding,
+            "-MaskingDeadlineMillis", [string]$phase2.deadline_millis,
+            "-CpuThreads", [string]$phase2.cpu_threads,
+            "-WindowBatchLimit", [string]$phase2.max_windows_per_batch,
+            "-MaskingQueueCapacity", [string]$phase2.masking_queue_capacity,
+            "-MemorySampleMillis", [string]$phase2.memory_sample_interval_millis,
+            "-RandomSeed", [string]$phase2.random_seed
         )
+        if ($phase2.organization_rules_enabled) { $common += "-UseExampleOrganizationRules" }
+        if ($phase2.pre_queue_routing_enabled) { $common += "-EnablePreQueueRouting" }
 
         Write-Host "[ONNX] Baseline: prequeue ON, reuse OFF"
+        Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
         & powershell -NoProfile -ExecutionPolicy Bypass -File $runner @common
         if ($LASTEXITCODE -ne 0) { throw "Baseline study failed." }
+        Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
         $baseline = @(Get-ChildItem -LiteralPath $studyDir -Filter "study-*.json" -File | Sort-Object LastWriteTimeUtc -Descending)[0]
         $off = Get-Content -LiteralPath $baseline.FullName -Raw | ConvertFrom-Json
         if ($off.source_commit_sha -cne $sha -or
@@ -65,8 +132,10 @@ try {
         }
 
         Write-Host "[ONNX] Optimized: prequeue ON, reuse ON"
+        Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
         & powershell -NoProfile -ExecutionPolicy Bypass -File $runner @common -EnablePreQueueScanReuse
         if ($LASTEXITCODE -ne 0) { throw "Optimized study failed." }
+        Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
         $optimized = @(Get-ChildItem -LiteralPath $studyDir -Filter "study-*.json" -File | Sort-Object LastWriteTimeUtc -Descending)[0]
         $on = Get-Content -LiteralPath $optimized.FullName -Raw | ConvertFrom-Json
         if ($on.study_id -ceq $off.study_id -or $on.source_commit_sha -cne $sha -or
@@ -80,6 +149,7 @@ try {
         Write-Host "[ONNX] Exact synthetic protected-output and scan-count parity"
         & powershell -NoProfile -ExecutionPolicy Bypass -File $verify -BaselineStudy $baseline.FullName -PreQueueStudy $optimized.FullName -BaselineDetailZip $offZip -PreQueueDetailZip $onZip
         if ($LASTEXITCODE -ne 0) { throw "Phase 2 ONNX parity gate failed." }
+        Test-Phase2BenchmarkInputs -RepoRoot $root | Out-Null
         Write-Host "PHASE2 MATCHED SYNTHETIC ONNX PARITY PASSED"
         Write-Host "Baseline: $($baseline.FullName)"
         Write-Host "Optimized: $($optimized.FullName)"

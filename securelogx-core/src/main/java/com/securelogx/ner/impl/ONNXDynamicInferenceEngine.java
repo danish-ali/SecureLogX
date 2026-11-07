@@ -119,7 +119,6 @@ public class ONNXDynamicInferenceEngine {
 
         // Check CUDA environment first
         checkCudaEnvironment();
-        addCudaToLibraryPath();
 
         this.env = OrtEnvironment.getEnvironment();
         this.maxInferenceWindowsPerBatch =
@@ -1072,36 +1071,6 @@ public class ONNXDynamicInferenceEngine {
         } catch (Exception e) {
             System.err.println("[SecureLogX INIT] ❌ GPU warmup failed: " + e.getMessage());
             e.printStackTrace();
-        }
-    }
-
-    // ... existing methods (addCudaToLibraryPath, checkCudaEnvironment) remain the same ...
-
-    private void addCudaToLibraryPath() {
-        try {
-            String[] cudaPaths = {
-                    "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4\\bin",
-                    "C:\\Program Files\\NVIDIA\\CUDNN\\v9.12\\bin\\12.9"
-            };
-
-            String currentLibPath = System.getProperty("java.library.path");
-            StringBuilder newLibPath = new StringBuilder(currentLibPath);
-
-            for (String cudaPath : cudaPaths) {
-                if (java.nio.file.Files.exists(java.nio.file.Paths.get(cudaPath))) {
-                    newLibPath.append(System.getProperty("path.separator")).append(cudaPath);
-                    System.out.println("[SecureLogX INIT] Added to library path: " + cudaPath);
-                }
-            }
-
-            System.setProperty("java.library.path", newLibPath.toString());
-
-            java.lang.reflect.Field fieldSysPath = ClassLoader.class.getDeclaredField("sys_paths");
-            fieldSysPath.setAccessible(true);
-            fieldSysPath.set(null, null);
-
-        } catch (Exception e) {
-            System.err.println("[SecureLogX INIT] Failed to update library path: " + e.getMessage());
         }
     }
 

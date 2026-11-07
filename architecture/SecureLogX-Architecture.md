@@ -2121,7 +2121,7 @@ Do not claim permanent or absolute "zero vulnerabilities."
 
 ### Engineering
 
-- Java 21 baseline,
+- OpenJDK 25 baseline,
 - reproducible build,
 - automated CI,
 - Java/ONNX parity,
@@ -3683,7 +3683,7 @@ VALIDATED
 - branch: `chatgpt/hybrid-detection-pipeline`,
 - build JVM: JDK 25,
 - Maven: 3.9.11,
-- compiler target: Java 21,
+- compiler target: Java 25,
 - `BUILD SUCCESS`,
 - tests: 6 run, 0 failures, 0 errors,
 - configuration-validator test: 1 passed,

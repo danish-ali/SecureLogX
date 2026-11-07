@@ -1,0 +1,49 @@
+{
+  "kind": "securelogx-phase2-benchmark-inputs",
+  "schema_version": 1,
+  "evidence_snapshot": "07a8c5b417ffd3fc1d0b52c1c32dc99c6e13517f",
+  "inputs": [
+    {
+      "name": "onnx-model",
+      "path": "onnx-model/ml-v1.3/bert-base-cased/model.onnx",
+      "sha256": "5953ACD999083FA08C17C537E1D88C38F3C7137BC518022D8F3246C1133997C2"
+    },
+    {
+      "name": "tokenizer",
+      "path": "onnx-model/ml-v1.3/bert-base-cased/tokenizer.json",
+      "sha256": "B30EB8CA04D00E5330BADE5D5E6036BD0CE0AD68F7B96E2E38BFF11942EE30B1"
+    },
+    {
+      "name": "onnx-parity-fixture",
+      "path": "onnx-model/ml-v1.3/bert-base-cased/java-parity-fixture.json",
+      "sha256": "D29EA8F19C0904558B510C2CC30196303655F7ABC5E6BE9C825B36486CA479D4"
+    },
+    {
+      "name": "securelogx-runtime-config",
+      "path": "securelogx-core/src/main/resources/securelogx-dev.properties",
+      "sha256": "BC946E171E3AEABEF755329542D9266BF475F217F5D6FAE0A7FBEA4A827D613A"
+    },
+    {
+      "name": "example-organization-policy",
+      "path": "examples/organization-rules.example.json",
+      "sha256": "63248BA0390CCACD3C3629B4CD6A73B1FE0EDD0A896B916B7FFBC3A9E81A2EC6"
+    }
+  ],
+  "phase2": {
+    "rates_per_second": [3, 5],
+    "repetitions": 2,
+    "duration_seconds": 60,
+    "caller_mode": "platform",
+    "max_outstanding": 32,
+    "deadline_millis": 2000,
+    "cpu_threads": 4,
+    "max_windows_per_batch": 4,
+    "masking_queue_capacity": 64,
+    "memory_sample_interval_millis": 5000,
+    "random_seed": 20261026,
+    "organization_rules_enabled": true,
+    "pre_queue_routing_enabled": true,
+    "scan_reuse_baseline": false,
+    "scan_reuse_optimized": true
+  }
+}
